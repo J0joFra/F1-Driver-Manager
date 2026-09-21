@@ -32,6 +32,15 @@ export function ageDecline(age: number): number {
   return age >= 31 ? (age - 30) * 0.55 : 0;
 }
 
+/** Estrae un nome non ancora in uso; dopo qualche tentativo si arrende e accetta un omonimo. */
+function pickName(rng: Rng, taken?: ReadonlySet<string>): string {
+  let name = `${rng.pick(FIRST_NAMES)} ${rng.pick(LAST_NAMES)}`;
+  for (let i = 0; taken?.has(name) && i < 12; i++) {
+    name = `${rng.pick(FIRST_NAMES)} ${rng.pick(LAST_NAMES)}`;
+  }
+  return name;
+}
+
 let counter = 0;
 function nextId(prefix: string): string {
   counter += 1;
@@ -53,6 +62,8 @@ export interface NewgenOptions {
    * un contatore globale renderebbe i salvataggi non riproducibili fra processi.
    */
   id?: string;
+  /** nomi già in uso nel mondo: due piloti omonimi in griglia confondono e basta */
+  taken?: ReadonlySet<string>;
 }
 
 /**
@@ -78,7 +89,7 @@ export function createNewgen(rng: Rng, opts: NewgenOptions): Driver {
 
   return {
     id: opts.id ?? nextId('d'),
-    name: `${rng.pick(FIRST_NAMES)} ${rng.pick(LAST_NAMES)}`,
+    name: pickName(rng, opts.taken),
     nationality: rng.pick(NATIONALITIES),
     age,
     attrs,
@@ -99,8 +110,13 @@ export function createNewgen(rng: Rng, opts: NewgenOptions): Driver {
 }
 
 /** Crea un pilota già formato, per popolare la griglia al primo anno. */
-export function createVeteran(rng: Rng, potentialAnchor: number, age: number, id?: string): Driver {
-  const d = createNewgen(rng, { potentialAnchor, ageMin: age, ageMax: age, ...(id ? { id } : {}) });
+export function createVeteran(
+  rng: Rng, potentialAnchor: number, age: number, id?: string, taken?: ReadonlySet<string>,
+): Driver {
+  const d = createNewgen(rng, {
+    potentialAnchor, ageMin: age, ageMax: age,
+    ...(id ? { id } : {}), ...(taken ? { taken } : {}),
+  });
   const maturity = clamp((age - 18) / 8, 0, 1);
   for (const k of ATTRIBUTE_KEYS) {
     d.attrs[k] = clamp(d.caps[k] * (0.7 + 0.3 * maturity) + rng.normal() * 2, 30, d.caps[k]);

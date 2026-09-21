@@ -50,7 +50,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 46 test
+npm test                      # 47 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -89,6 +89,30 @@ Quello che questi numeri dicono: il mondo **non si congela** (cinque scuderie di
 
 ---
 
+## Lo stile
+
+L'impaginazione prende spunto da **[OpenFoot Manager](https://github.com/openfootmanager/openfootmanager)**,
+che condivide quasi tutto lo stack (React, TypeScript, Tailwind, Zustand,
+Recharts, lucide-react) e ha risolto bene lo stesso problema: un gestionale
+denso che resta leggibile.
+
+Cosa è stato ripreso, adattato all'orizzontale:
+
+| Elemento | Come |
+|---|---|
+| **Menu laterale per gruppi** | *Carriera* e *Mondo*, etichette in maiuscolo condensato, riducibile a sole icone |
+| **Intestazione a due righe** | titolo grande della schermata, sotto la riga di contesto con data e prossima gara, a destra i comandi |
+| **Schede** | bordo tenue, angoli morbidi, intestazione con titolo condensato |
+| **Palette navy** | fondo `#0A1128`, pannelli `#131B33`, superfici `#1A2340`, verde d'azione e giallo di richiamo |
+| **Tipografia** | Barlow Condensed per i titoli, Inter per il testo |
+| **Icone** | `lucide-react` |
+
+La differenza sta nei vincoli: OpenFoot Manager è un'app desktop con una barra
+laterale da 256 px e un'intestazione da 56 px. Qui il telefono in orizzontale
+lascia 390 px di altezza, quindi il menu sta in 146 px (52 se ridotto) e
+l'intestazione in 42. Il monospace per le cifre è un'aggiunta nostra: in una
+torre dei tempi i numeri devono incolonnarsi.
+
 ## L'interfaccia è orizzontale per costruzione
 
 Un telefono in orizzontale lascia circa **390 px di altezza**. È l'altezza la
@@ -104,8 +128,9 @@ risorsa scarsa, non la larghezza, e questo decide tutto il resto:
 | `padding-left/right: env(safe-area-inset-*)` | in orizzontale la tacca del telefono sta sui lati |
 
 `tools/screenshots.mjs` cattura tutte le schermate a 844×390 e **verifica che la
-pagina non scorra in verticale**: è una regressione facile da introdurre e
-invisibile su desktop.
+pagina non scorra in verticale e che nessun pannello sbordi dal viewport**: sono
+regressioni facili da introdurre e invisibili su desktop — un pannello che
+sfora non fa scorrere nulla, si vede solo tagliato.
 
 ```bash
 npm run build && npm run preview &
@@ -362,7 +387,7 @@ engine/
     tracks.ts       12 circuiti di fantasia, parametrizzati sui valori reali
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              46 test: rng, gara, gara live, allenamento, mondo
+tests/              47 test: rng, gara, gara live, allenamento, mondo
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + controllo che la pagina non scorra
 ```

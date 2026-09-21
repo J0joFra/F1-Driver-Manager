@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Icon } from './icons.js';
+import { RotateCcw } from 'lucide-react';
 
 /**
  * Il gioco si tiene in orizzontale. Su schermi stretti e verticali mostriamo
@@ -30,8 +30,8 @@ export function OrientationGate({ children }: { children: ReactNode }) {
     return (
       <div className="h-full grid place-items-center px-8 text-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="text-muted animate-pulse">
-            <Icon name="rotate" size={46} />
+          <div className="text-accent animate-pulse">
+            <RotateCcw className="w-11 h-11" />
           </div>
           <h1 className="font-display text-2xl font-bold tracking-wide">RUOTA IL TELEFONO</h1>
           <p className="text-sm text-muted max-w-xs leading-relaxed">

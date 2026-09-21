@@ -54,8 +54,10 @@ export function TimingTower({
             return (
               <div
                 key={c.entry.driverId}
-                className={`absolute left-0 right-0 grid grid-cols-[16px_3px_1fr_auto] items-center gap-1.5 px-2 transition-transform duration-500 ${
-                  isPlayer ? 'bg-aurora/20' : ''
+                // Le righe devono essere opache: durante uno scambio due
+                // righe si attraversano, e senza fondo il testo si sovrappone.
+                className={`absolute left-0 right-0 grid grid-cols-[16px_3px_1fr_auto] items-center gap-1.5 px-2 transition-transform duration-200 ${
+                  isPlayer ? 'bg-aurora/25' : 'bg-panel2'
                 }`}
                 style={{ height: ROW, transform: `translateY(${i * ROW + 2}px)` }}
               >

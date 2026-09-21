@@ -61,8 +61,12 @@ export function updateTalentAnchor(world: World): number {
 export function intakeNewgens(world: World, rng: Rng, count: number): void {
   const anchor = updateTalentAnchor(world);
   const base = Object.keys(world.drivers).length;
+  const taken = new Set(Object.values(world.drivers).filter((d) => !d.retired).map((d) => d.name));
   for (let i = 0; i < count; i++) {
-    const d = createNewgen(rng, { potentialAnchor: anchor, id: `d${world.year}x${base + i}` });
+    const d = createNewgen(rng, {
+      potentialAnchor: anchor, id: `d${world.year}x${base + i}`, taken,
+    });
+    taken.add(d.name);
     world.drivers[d.id] = d;
     world.academy.push(d.id);
   }

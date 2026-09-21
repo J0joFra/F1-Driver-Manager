@@ -30,10 +30,27 @@ page.on('pageerror', (e) => errors.push(`PAGEERROR ${e.message}`));
 const shot = (name) => page.screenshot({ path: `${out}/${name}.png` });
 
 async function noVerticalScroll(where) {
-  const overflow = await page.evaluate(
-    () => document.getElementById('root').scrollHeight - window.innerHeight,
-  );
-  if (overflow > 1) throw new Error(`${where}: la pagina scorre di ${overflow}px in verticale`);
+  const problems = await page.evaluate(() => {
+    const root = document.getElementById('root');
+    const found = [];
+    const overflow = root.scrollHeight - window.innerHeight;
+    if (overflow > 1) found.push(`la pagina scorre di ${overflow}px in verticale`);
+    // Un pannello che sborda dal viewport non fa scorrere la pagina (il body
+    // è in overflow hidden): si vede solo tagliato, quindi va cercato a parte.
+    for (const el of root.querySelectorAll('.panel')) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom > window.innerHeight + 1) {
+        found.push(`un pannello sfora di ${Math.round(r.bottom - window.innerHeight)}px in basso`);
+        break;
+      }
+      if (r.right > window.innerWidth + 1) {
+        found.push(`un pannello sfora di ${Math.round(r.right - window.innerWidth)}px a destra`);
+        break;
+      }
+    }
+    return found;
+  });
+  if (problems.length) throw new Error(`${where}: ${problems.join(' · ')}`);
 }
 
 await page.goto('http://localhost:4173/', { waitUntil: 'networkidle' });
@@ -45,18 +62,18 @@ await page.waitForTimeout(300);
 await shot('02-paddock');
 await noVerticalScroll('paddock');
 
-for (const [nav, file] of [
-  ['Allena', '03-allenamento'],
-  ['Pilota', '04-pilota'],
-  ['Soldi', '05-finanze'],
-  ['Team', '06-scuderia'],
-  ['Classif.', '07-classifiche'],
-  ['Storia', '08-storia'],
+for (const [screen, file] of [
+  ['allenamento', '03-allenamento'],
+  ['pilota', '04-pilota'],
+  ['finanze', '05-finanze'],
+  ['scuderia', '06-scuderia'],
+  ['classifiche', '07-classifiche'],
+  ['storia', '08-storia'],
 ]) {
-  await page.click(`nav button:has-text("${nav}")`);
+  await page.click(`[data-testid=nav-${screen}]`);
   await page.waitForTimeout(120);
   await shot(file);
-  await noVerticalScroll(nav);
+  await noVerticalScroll(screen);
 }
 
 // Avanza fino alla prima gara
