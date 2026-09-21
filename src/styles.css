@@ -42,14 +42,16 @@
 }
 
 @layer components {
+  /* Le schede sono l'unità di base dell'interfaccia: bordo tenue, angoli
+     morbidi, intestazione con un titolo condensato in maiuscolo. */
   .panel {
-    @apply bg-panel border border-line rounded-sm;
+    @apply bg-panel2 border border-line rounded-lg shadow-sm;
   }
   .panel-head {
     @apply flex items-center justify-between gap-2 px-3 py-2 border-b border-line;
   }
   .panel-title {
-    @apply font-display text-xs tracking-[0.17em] uppercase text-muted font-semibold;
+    @apply font-display text-sm tracking-[0.12em] uppercase text-ink font-bold;
   }
   .scroll-y {
     @apply overflow-y-auto;

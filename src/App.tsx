@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useGame, seasonWeeks } from './state/useGame.js';
 import { OrientationGate } from './ui/shell/OrientationGate.js';
-import { NavRail } from './ui/shell/NavRail.js';
+import { Sidebar } from './ui/shell/Sidebar.js';
 import { TopBar } from './ui/shell/TopBar.js';
 import { NewGame } from './ui/screens/NewGame.js';
 import { Paddock } from './ui/screens/Paddock.js';
@@ -78,7 +78,7 @@ export function App() {
   return (
     <OrientationGate>
       <div className="h-full flex">
-        <NavRail />
+        <Sidebar />
         <div className="flex-1 min-w-0 flex flex-col relative">
           <TopBar onAdvance={onAdvance} busy={busy} />
           <main className="flex-1 min-h-0 p-2">

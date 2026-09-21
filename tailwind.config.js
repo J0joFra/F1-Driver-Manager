@@ -4,14 +4,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        ground: '#0E1216',
-        panel: '#161B21',
-        panel2: '#1C232B',
-        panel3: '#232B34',
-        line: '#293240',
-        ink: '#E9ECF1',
-        muted: '#8B95A2',
-        dim: '#5B6672',
+        // Famiglia navy: fondo profondo, pannelli e bordi a salire.
+        ground: '#0A1128',
+        panel: '#131B33',
+        panel2: '#1A2340',
+        panel3: '#243054',
+        line: '#243054',
+        ink: '#F1F4F9',
+        muted: '#94A3B8',
+        dim: '#64748B',
+        // Verde d'azione e giallo di richiamo, separati dai colori scuderia.
+        primary: '#10B981',
+        accent: '#FFD60A',
         // Colori scuderia: validati per daltonismo, usati anche come palette dei grafici.
         aurora: '#E8283C',
         vantar: '#3E86F0',
@@ -26,8 +30,9 @@ export default {
         bad: '#E8283C',
       },
       fontFamily: {
-        display: ["'Saira Condensed'", 'Arial Narrow', 'sans-serif'],
-        sans: ["'IBM Plex Sans'", 'system-ui', 'sans-serif'],
+        display: ["'Barlow Condensed'", 'Arial Narrow', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        // I numeri di una torre dei tempi devono incolonnarsi: serve un monospace.
         mono: ["'IBM Plex Mono'", 'ui-monospace', 'monospace'],
       },
       fontSize: {
