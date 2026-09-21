@@ -1,0 +1,142 @@
+import { describe, expect, it } from 'vitest';
+import { createWorld, endSeason, advanceWeek } from '../src/engine/world.js';
+import { SEASON_WEEKS, driverStandings } from '../src/engine/season.js';
+import { overall, potentialOverall } from '../src/engine/driver.js';
+import type { World } from '../src/engine/types.js';
+
+function runSeasons(world: World, n: number) {
+  const summaries = [];
+  for (let i = 0; i < n; i++) {
+    while (world.week < SEASON_WEEKS) advanceWeek(world);
+    summaries.push(endSeason(world));
+  }
+  return summaries;
+}
+
+function activeDrivers(world: World) {
+  return Object.values(world.drivers).filter((d) => !d.retired && d.teamId);
+}
+
+describe('creazione del mondo', () => {
+  it('riempie ogni sedile e ogni scuderia', () => {
+    const w = createWorld({ seed: 1 });
+    expect(Object.keys(w.teams)).toHaveLength(5);
+    for (const t of Object.values(w.teams)) expect(t.driverIds).toHaveLength(2);
+    expect(activeDrivers(w)).toHaveLength(10);
+  });
+
+  it('è riproducibile dal seed', () => {
+    const a = createWorld({ seed: 4242 });
+    const b = createWorld({ seed: 4242 });
+    runSeasons(a, 3);
+    runSeasons(b, 3);
+    expect(a.champions).toEqual(b.champions);
+  });
+
+  it('il calendario non mette mai tre gare di fila', () => {
+    const w = createWorld({ seed: 77 });
+    let streak = 0;
+    for (const slot of w.schedule) {
+      streak = slot ? streak + 1 : 0;
+      expect(streak).toBeLessThanOrEqual(2);
+    }
+  });
+});
+
+describe('quaranta stagioni: il mondo si regge da solo', () => {
+  const world = createWorld({ seed: 20260921 });
+  const startPotential =
+    activeDrivers(world).reduce((s, d) => s + potentialOverall(d), 0) / activeDrivers(world).length;
+  const summaries = runSeasons(world, 40);
+
+  it('ogni stagione assegna un titolo', () => {
+    expect(summaries).toHaveLength(40);
+    expect(world.champions).toHaveLength(40);
+    expect(summaries.every((s) => s.championId !== '')).toBe(true);
+  });
+
+  it('la griglia resta piena: la rigenerazione funziona', () => {
+    expect(activeDrivers(world)).toHaveLength(10);
+    for (const t of Object.values(world.teams)) expect(t.driverIds).toHaveLength(2);
+  });
+
+  it('nessun attributo sfonda il proprio tetto', () => {
+    for (const d of Object.values(world.drivers)) {
+      for (const k of Object.keys(d.attrs) as (keyof typeof d.attrs)[]) {
+        expect(d.attrs[k]).toBeLessThanOrEqual(d.caps[k] + 1e-6);
+      }
+    }
+  });
+
+  it('gli attributi non si gonfiano nel tempo (anti-inflazione)', () => {
+    const now = activeDrivers(world);
+    const endPotential = now.reduce((s, d) => s + potentialOverall(d), 0) / now.length;
+    expect(Math.abs(endPotential - startPotential)).toBeLessThan(6);
+  });
+
+  it('la griglia resta giovane: i vecchi si ritirano', () => {
+    const ages = activeDrivers(world).map((d) => d.age);
+    const mean = ages.reduce((s, a) => s + a, 0) / ages.length;
+    expect(mean).toBeGreaterThan(20);
+    expect(mean).toBeLessThan(38);
+    expect(Math.max(...ages)).toBeLessThanOrEqual(41);
+  });
+
+  it('il titolo cambia mano: la gerarchia non si congela', () => {
+    const champions = new Set(world.champions.map((c) => c.driverId));
+    const teams = new Set(world.champions.map((c) => c.teamId));
+    expect(champions.size).toBeGreaterThan(4);
+    expect(teams.size).toBeGreaterThan(1);
+  });
+
+  it('nessuna scuderia monopolizza il campionato', () => {
+    // Regressione: la prima simulazione a 40 stagioni dava 29 titoli su 40 a una
+    // sola scuderia. Handicap di sviluppo, budget cap e mobilità del mercato
+    // esistono per impedirlo.
+    const byTeam = new Map<string, number>();
+    for (const c of world.champions) byTeam.set(c.teamId, (byTeam.get(c.teamId) ?? 0) + 1);
+    const best = Math.max(...byTeam.values());
+    expect(best / world.champions.length).toBeLessThan(0.55);
+    expect(byTeam.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it('i regolamenti si azzerano periodicamente', () => {
+    expect(summaries.filter((s) => s.regulationReset).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('lo storico resta compatto: solo aggregati', () => {
+    const veteran = Object.values(world.drivers)
+      .filter((d) => d.history.length > 0)
+      .sort((a, b) => b.history.length - a.history.length)[0]!;
+    expect(veteran.history.length).toBeLessThanOrEqual(25);
+    const bytes = JSON.stringify(world).length;
+    expect(bytes).toBeLessThan(4_000_000);
+  });
+});
+
+describe('una stagione settimana per settimana', () => {
+  it('corre tutte le gare in calendario e le classifiche tornano', () => {
+    const w = createWorld({ seed: 5, races: 20 });
+    let races = 0;
+    while (w.week < SEASON_WEEKS) if (advanceWeek(w).raceRun) races++;
+    expect(races).toBe(20);
+    expect(w.results).toHaveLength(20);
+    const table = driverStandings(w);
+    const totalPoints = table.reduce((s, r) => s + r.points, 0);
+    const racePoints = w.results.reduce(
+      (s, wk) => s + wk.race.reduce((x, r) => x + r.points, 0), 0);
+    expect(totalPoints).toBe(racePoints);
+    expect(table[0]!.points).toBeGreaterThan(0);
+  });
+
+  it('i giovani crescono nel corso di una stagione', () => {
+    const w = createWorld({ seed: 8 });
+    const young = Object.values(w.drivers)
+      .filter((d) => d.teamId && d.age <= 24 && potentialOverall(d) - overall(d.attrs) > 6)
+      .sort((a, b) => a.age - b.age)[0];
+    if (!young) return;
+    const before = overall(young.attrs);
+    while (w.week < SEASON_WEEKS) advanceWeek(w);
+    expect(overall(young.attrs)).toBeGreaterThan(before);
+  });
+});
