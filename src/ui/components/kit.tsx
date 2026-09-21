@@ -21,10 +21,11 @@ export function Panel({
 }
 
 export function Btn({
-  children, onClick, variant = 'ghost', disabled, className = '', title,
+  children, onClick, variant = 'ghost', disabled, className = '', title, testId,
 }: {
   children: ReactNode; onClick?: () => void;
-  variant?: 'ghost' | 'primary' | 'danger'; disabled?: boolean; className?: string; title?: string;
+  variant?: 'ghost' | 'primary' | 'danger'; disabled?: boolean;
+  className?: string; title?: string; testId?: string;
 }) {
   const base =
     'font-display uppercase tracking-[0.1em] font-bold rounded-sm border px-3 py-2 text-sm disabled:opacity-35 disabled:cursor-not-allowed';
@@ -35,7 +36,7 @@ export function Btn({
         ? 'bg-transparent border-line text-bad'
         : 'bg-panel2 border-line text-ink';
   return (
-    <button type="button" title={title} className={`${base} ${look} ${className}`} onClick={onClick} disabled={disabled}>
+    <button type="button" data-testid={testId} title={title} className={`${base} ${look} ${className}`} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );

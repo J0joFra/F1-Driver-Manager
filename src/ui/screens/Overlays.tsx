@@ -10,7 +10,7 @@ function Sheet({ children, onClose, cta = 'Continua' }: { children: React.ReactN
     <div className="absolute inset-0 z-30 bg-ground/[0.97] backdrop-blur-md flex flex-col">
       <div className="flex-1 min-h-0 p-3">{children}</div>
       <div className="shrink-0 p-3 pt-0">
-        <Btn variant="primary" onClick={onClose} className="w-full py-3">{cta}</Btn>
+        <Btn variant="primary" onClick={onClose} className="w-full py-3" testId="dismiss-sheet">{cta}</Btn>
       </div>
     </div>
   );

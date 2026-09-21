@@ -38,20 +38,28 @@ export function offeredSalary(d: Driver, teamBudget: number, rng: Rng): number {
  * più deboli, e viceversa. Senza questo, dopo 40 stagioni i record delle prime
  * annate sembrerebbero ridicoli.
  */
-export function newgenAnchor(world: World): number {
-  // Misurare solo i piloti con un sedile falserebbe il conto: al volante
-  // arrivano i migliori, quindi la loro media sta sempre sopra il bacino da
-  // cui sono stati pescati, e la correzione lascerebbe un errore permanente.
-  // Il riferimento è l'intera popolazione viva, academy compresa.
-  const living = Object.values(world.drivers).filter((d) => !d.retired);
-  if (living.length === 0) return POTENTIAL_ANCHOR;
-  const mean = living.reduce((s, d) => s + potentialOverall(d), 0) / living.length;
-  return POTENTIAL_ANCHOR - (mean - POTENTIAL_ANCHOR) * 1.1;
+/**
+ * Correzione anti-inflazione, a controllo integrale.
+ *
+ * Una correzione proporzionale (guardo quanto la griglia si è alzata e genero
+ * i nuovi altrettanto più deboli) lascia sempre un errore residuo: al volante
+ * arrivano i migliori del bacino, quindi la media di chi corre sta
+ * stabilmente sopra il livello a cui i piloti vengono generati, e la
+ * correzione insegue senza mai raggiungere. Accumulando la correzione anno
+ * dopo anno in `world.talentAnchor`, l'errore residuo si annulla.
+ */
+export function updateTalentAnchor(world: World): number {
+  const active = Object.values(world.drivers).filter((d) => !d.retired && d.teamId);
+  if (active.length === 0) return world.talentAnchor;
+  const mean = active.reduce((s, d) => s + potentialOverall(d), 0) / active.length;
+  const corrected = world.talentAnchor - (mean - POTENTIAL_ANCHOR) * 0.5;
+  world.talentAnchor = clamp(corrected, POTENTIAL_ANCHOR - 12, POTENTIAL_ANCHOR + 12);
+  return world.talentAnchor;
 }
 
 /** Nuova leva: giovani che entrano nell'academy e aspettano un sedile. */
 export function intakeNewgens(world: World, rng: Rng, count: number): void {
-  const anchor = newgenAnchor(world);
+  const anchor = updateTalentAnchor(world);
   const base = Object.keys(world.drivers).length;
   for (let i = 0; i < count; i++) {
     const d = createNewgen(rng, { potentialAnchor: anchor, id: `d${world.year}x${base + i}` });

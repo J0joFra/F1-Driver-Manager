@@ -50,6 +50,7 @@ export function TopBar({ onAdvance, busy }: { onAdvance: () => void; busy: boole
 
       <button
         type="button"
+        data-testid="advance"
         onClick={onAdvance}
         disabled={busy}
         className="shrink-0 flex items-center gap-1.5 font-display text-sm font-bold uppercase tracking-[0.1em] px-3 py-1.5 rounded-sm bg-aurora text-white disabled:opacity-40"

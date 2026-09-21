@@ -55,7 +55,7 @@ export function NewGame() {
           </label>
         </div>
 
-        <Btn variant="primary" onClick={start} className="w-full py-3 text-base">
+        <Btn variant="primary" onClick={start} className="w-full py-3 text-base" testId="start-career">
           Inizia la carriera
         </Btn>
 

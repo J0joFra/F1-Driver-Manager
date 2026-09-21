@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useGame, seasonWeeks } from './state/useGame.js';
 import { OrientationGate } from './ui/shell/OrientationGate.js';
 import { NavRail } from './ui/shell/NavRail.js';
@@ -12,6 +12,8 @@ import { TeamScreen } from './ui/screens/TeamScreen.js';
 import { Standings } from './ui/screens/Standings.js';
 import { History } from './ui/screens/History.js';
 import { SeasonOverlay, WeekendOverlay } from './ui/screens/Overlays.js';
+import { GridScreen } from './ui/race/GridScreen.js';
+import { RaceView } from './ui/race/RaceView.js';
 
 export function App() {
   const world = useGame((s) => s.world);
@@ -21,7 +23,18 @@ export function App() {
   const closeSeason = useGame((s) => s.closeSeason);
   const lastWeek = useGame((s) => s.lastWeek);
   const lastSeason = useGame((s) => s.lastSeason);
+  const pendingRace = useGame((s) => s.pendingRace);
+  const raceRunning = useGame((s) => s.raceRunning);
+  const gridReady = useGame((s) => s.gridReady);
+  const openGrid = useGame((s) => s.openGrid);
+  const completeRace = useGame((s) => s.completeRace);
   const [busy, setBusy] = useState(false);
+
+  // Una gara in sospeso prende il controllo dello schermo: prima la griglia,
+  // poi la pista. Il resto dell'interfaccia torna quando è registrata.
+  useEffect(() => {
+    if (pendingRace) openGrid();
+  }, [pendingRace, openGrid]);
 
   const onAdvance = useCallback(() => {
     const w = useGame.getState().world;
@@ -39,6 +52,22 @@ export function App() {
     return (
       <OrientationGate>
         <NewGame />
+      </OrientationGate>
+    );
+  }
+
+  if (pendingRace) {
+    return (
+      <OrientationGate>
+        {!gridReady ? (
+          <div className="h-full grid place-items-center font-display text-sm tracking-[0.2em] uppercase text-dim">
+            Qualifica in corso…
+          </div>
+        ) : raceRunning ? (
+          <RaceView onFinish={completeRace} />
+        ) : (
+          <GridScreen />
+        )}
       </OrientationGate>
     );
   }
