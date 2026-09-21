@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Il gioco si tiene in orizzontale: su un telefono restano ~390 px di altezza.
+ * L'altezza è la risorsa scarsa, quindi la pagina non scorre mai — scorrono
+ * solo i pannelli che lo dichiarano.
+ */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body {
+    @apply bg-ground text-ink font-sans;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    /* In orizzontale la tacca del telefono sta sui lati, non in alto. */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  button {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  :focus-visible {
+    outline: 2px solid theme('colors.vantar');
+    outline-offset: 2px;
+  }
+
+  input[type='text'] {
+    @apply bg-panel2 border border-line rounded-sm px-3 py-2 text-ink;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-panel border border-line rounded-sm;
+  }
+  .panel-head {
+    @apply flex items-center justify-between gap-2 px-3 py-2 border-b border-line;
+  }
+  .panel-title {
+    @apply font-display text-xs tracking-[0.17em] uppercase text-muted font-semibold;
+  }
+  .scroll-y {
+    @apply overflow-y-auto;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .scroll-y::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scroll-y::-webkit-scrollbar-thumb {
+    @apply bg-line rounded-sm;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

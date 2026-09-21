@@ -4,8 +4,9 @@ Gestionale di Formula 1 per browser e Android. Due modalità sullo stesso mondo 
 **Pilota** (fai carriera, cresci, ti scegli il sedile) e **Scuderia** (dirigi un team) —
 con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 
-> **Stato: motore di simulazione funzionante, nessuna interfaccia.**
-> Il mondo gira da riga di comando: 40 stagioni in ~300 ms.
+> **Stato: motore completo + Modalità Pilota navigabile.**
+> Il mondo gira da riga di comando (40 stagioni in ~300 ms) e l'app si gioca
+> settimana per settimana fino a fine stagione.
 
 ---
 
@@ -47,9 +48,13 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 
 ```bash
 npm install
+npm run dev                   # l'app, su http://localhost:5173
 npm test                      # 34 test
 npm run sim -- --seasons 40 --verbose
 ```
+
+**Il gioco si tiene in orizzontale.** Se apri l'app su un telefono in verticale
+ti chiede di ruotarlo: la torre dei tempi e la pista hanno bisogno di larghezza.
 
 Output reale dell'ultima esecuzione (seed `20260921`):
 
@@ -82,6 +87,29 @@ Quello che questi numeri dicono: il mondo **non si congela** (cinque scuderie di
 > le protegge.
 
 ---
+
+## L'interfaccia è orizzontale per costruzione
+
+Un telefono in orizzontale lascia circa **390 px di altezza**. È l'altezza la
+risorsa scarsa, non la larghezza, e questo decide tutto il resto:
+
+| Scelta | Perché |
+|---|---|
+| **Rail verticale a sinistra**, non schede in alto | una barra orizzontale costerebbe il 10% dell'altezza utile |
+| **La pagina non scorre mai** (`html, body, #root { overflow: hidden }`) | scorrono solo i pannelli che lo dichiarano, con `.scroll-y` |
+| **Barra di stato alta 36 px** | anno, settimana, prossima gara e l'unico comando sempre presente: *Avanza* |
+| **Due colonne affiancate** in ogni schermata | in orizzontale la larghezza abbonda: si mostra il doppio senza scorrere |
+| **Scala tipografica compatta** (base 13 px) | densità da muretto box, non da sito web |
+| `padding-left/right: env(safe-area-inset-*)` | in orizzontale la tacca del telefono sta sui lati |
+
+`tools/screenshots.mjs` cattura tutte le schermate a 844×390 e **verifica che la
+pagina non scorra in verticale**: è una regressione facile da introdurre e
+invisibile su desktop.
+
+```bash
+npm run build && npm run preview &
+npm run shots -- screenshots
+```
 
 ## Architettura: perché il motore viene prima
 
@@ -271,7 +299,15 @@ Le regole 2–6 sono state aggiunte **dopo** la prima simulazione a 40 stagioni,
 ## Struttura del progetto
 
 ```
-src/engine/
+src/
+  App.tsx           instrada le schermate, gestisce l'avanzamento della settimana
+  state/useGame.ts  store zustand + persist: sposta dati, non decide nulla
+  ui/
+    shell/          rail di navigazione, barra di stato, blocco orientamento
+    components/     primitive (Panel, Stat, Bar, Btn, Note)
+    screens/        Paddock, Pilota, Allenamento, Finanze, Scuderia,
+                    Classifiche, Storia, overlay di fine weekend e di fine anno
+engine/
   rng.ts            generatore deterministico, fork etichettati, clamp
   types.ts          modello dati completo del mondo
   driver.ts         creazione, newgen, overall, curve di età, ritiro
@@ -288,6 +324,7 @@ src/engine/
     names.ts        bacino di nomi per la rigenerazione annuale
 tests/              34 test: rng, gara, allenamento, mondo a 40 stagioni
 tools/simulate.ts   simulatore da riga di comando
+tools/screenshots.mjs  schermate a 844×390 + controllo che la pagina non scorra
 ```
 
 ### Perché i nomi sono di fantasia
@@ -296,15 +333,24 @@ tools/simulate.ts   simulatore da riga di comando
 
 ### La palette delle scuderie
 
-I cinque colori non sono decorativi: sono anche i colori delle barre in tutte le classifiche, quindi devono funzionare come palette categorica. Sono stati verificati con un validatore per daltonismo — banda di luminosità, soglia di croma, separazione ΔE ≥ 9 fra tinte adiacenti in protanopia e tritanopia, contrasto ≥ 3:1 sul fondo scuro.
+Gli otto colori non sono decorativi: sono anche i colori delle barre in tutte le classifiche, quindi devono funzionare come palette categorica. Sono stati verificati con un validatore per daltonismo — banda di luminosità, soglia di croma, separazione ΔE ≥ 9 fra tinte adiacenti in protanopia e tritanopia, contrasto ≥ 3:1 sul fondo scuro.
 
 | Scuderia | Colore |
 |---|---|
 | Scuderia Aurora | `#E8283C` |
 | Vantar Racing | `#3E86F0` |
 | Kestrel Motors | `#12A06E` |
+| Solaro Corse | `#0E9BB4` |
 | Mirage GP | `#D4761E` |
+| Brandt Werke | `#DE5AA2` |
 | Nordvik Squadra | `#A06BE0` |
+| Kaizen Racing | `#94892A` |
+
+L'unica coppia sotto la soglia di separazione (rosa e ciano in deuteranopia,
+ΔE 6.3) è sempre accompagnata dal nome della scuderia: nell'interfaccia il
+colore non è mai l'unico elemento che distingue una riga. Dieci tinte
+ugualmente distinguibili non esistono — il validatore lo dice chiaramente — ed
+è il motivo per cui la griglia ha otto scuderie e non dieci.
 
 ---
 
@@ -342,15 +388,22 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 
 ## Cosa manca
 
-**Prossimo passo** — la Modalità Pilota giocabile:
+**Fatto** — la Modalità Pilota è navigabile:
 
-- [ ] `src/ui/` con Vite + React + TypeScript + Tailwind + shadcn/ui
-- [ ] Hub a schede: Paddock, Pilota, Allenamento, Finanze, Scuderia, Classifiche, Contratti, Storia
+- [x] Vite + React + TypeScript + Tailwind, layout orizzontale
+- [x] Hub: Paddock, Pilota, Allenamento, Finanze, Scuderia, Classifiche, Storia
+- [x] Ciclo settimanale completo: allenamento → weekend → fine stagione
+- [x] Salvataggio automatico con Zustand `persist`
+
+**Prossimo passo**:
+
 - [ ] Vista gara: tracciato SVG, torre dei tempi, striscia dei distacchi, comandi strategia
-- [ ] I tre minigiochi in React
+- [ ] I tre minigiochi in React, con il risultato scritto all'avvio della partita
 - [ ] Qualifica: le tre decisioni e il giro lanciato
 - [ ] Libere: la direzione di assetto
-- [ ] Salvataggio con Zustand `persist`, slot multipli, migrazioni di versione
+- [ ] Mercato dello staff personale (il motore c'è già, manca la schermata)
+- [ ] Contratti e offerte di fine stagione
+- [ ] Slot di salvataggio multipli e migrazioni di versione
 
 **Poi**:
 

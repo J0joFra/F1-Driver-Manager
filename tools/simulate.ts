@@ -96,7 +96,11 @@ for (let i = 0; i < seasons; i++) {
 const ms = performance.now() - t0;
 const first = log[0]!;
 const last = log[log.length - 1]!;
-const drift = last.gridPotential - first.gridPotential;
+// Le prime stagioni sono un transitorio: la griglia di partenza converge verso
+// il proprio livello di regime. L'inflazione vera è quella che viene dopo.
+const settleIdx = Math.min(log.length - 1, 9);
+const settled = log[settleIdx]!;
+const drift = last.gridPotential - settled.gridPotential;
 const champions = new Set(log.map((l) => l.champion));
 const championTeams = new Set(log.map((l) => l.championTeam));
 const avgDnf = log.reduce((s, l) => s + l.dnfRate, 0) / log.length;
@@ -106,7 +110,8 @@ console.log(`${seasons} stagioni simulate (${startYear}–${last.year}) in ${ms.
 console.log('='.repeat(74));
 console.log(`Piloti diversi campioni ............ ${champions.size} su ${seasons} stagioni`);
 console.log(`Scuderie diverse campioni .......... ${championTeams.size} su ${Object.keys(world.teams).length}`);
-console.log(`Deriva del potenziale medio ........ ${drift >= 0 ? '+' : ''}${drift.toFixed(2)} punti in ${seasons} anni`);
+console.log(`Deriva a regime (dal ${settled.year}) ......... ${drift >= 0 ? '+' : ''}${drift.toFixed(2)} punti in ${last.year - settled.year} anni`);
+console.log(`Transitorio iniziale ............... ${(settled.gridPotential - first.gridPotential >= 0 ? '+' : '')}${(settled.gridPotential - first.gridPotential).toFixed(2)} punti`);
 console.log(`Overall medio griglia .............. ${first.gridOverall.toFixed(1)} → ${last.gridOverall.toFixed(1)}`);
 console.log(`Età media della griglia ............ ${first.meanAge.toFixed(1)} → ${last.meanAge.toFixed(1)}`);
 console.log(`Piloti attivi ...................... ${first.activeDrivers} → ${last.activeDrivers}`);

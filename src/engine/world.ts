@@ -69,6 +69,7 @@ export function createWorld(opts: CreateWorldOptions): World {
     world.teams[seed.id] = {
       id: seed.id,
       name: seed.name,
+      short: seed.short,
       colour: seed.colour,
       car: { ...seed.car },
       budget: seed.budget,
@@ -83,7 +84,7 @@ export function createWorld(opts: CreateWorldOptions): World {
   // Griglia iniziale: due piloti già formati per scuderia, di età varia.
   for (const team of Object.values(world.teams)) {
     for (let i = 0; i < 2; i++) {
-      const anchor = POTENTIAL_ANCHOR + (team.prestige - 70) * 0.28;
+      const anchor = POTENTIAL_ANCHOR + (team.prestige - 55) * 0.3;
       const d = createVeteran(rng, anchor, rng.int(22, 34), `d${year}i${team.id}${i}`);
       d.teamId = team.id;
       d.contractYears = rng.int(1, 3);

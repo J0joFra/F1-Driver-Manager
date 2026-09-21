@@ -39,10 +39,14 @@ export function offeredSalary(d: Driver, teamBudget: number, rng: Rng): number {
  * annate sembrerebbero ridicoli.
  */
 export function newgenAnchor(world: World): number {
-  const active = Object.values(world.drivers).filter((d) => !d.retired && d.teamId);
-  if (active.length === 0) return POTENTIAL_ANCHOR;
-  const mean = active.reduce((s, d) => s + potentialOverall(d), 0) / active.length;
-  return POTENTIAL_ANCHOR - (mean - POTENTIAL_ANCHOR) * 1.0;
+  // Misurare solo i piloti con un sedile falserebbe il conto: al volante
+  // arrivano i migliori, quindi la loro media sta sempre sopra il bacino da
+  // cui sono stati pescati, e la correzione lascerebbe un errore permanente.
+  // Il riferimento è l'intera popolazione viva, academy compresa.
+  const living = Object.values(world.drivers).filter((d) => !d.retired);
+  if (living.length === 0) return POTENTIAL_ANCHOR;
+  const mean = living.reduce((s, d) => s + potentialOverall(d), 0) / living.length;
+  return POTENTIAL_ANCHOR - (mean - POTENTIAL_ANCHOR) * 1.1;
 }
 
 /** Nuova leva: giovani che entrano nell'academy e aspettano un sedile. */
