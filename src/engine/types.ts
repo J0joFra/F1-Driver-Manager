@@ -194,6 +194,12 @@ export interface World {
   seat: Seat;
   /** talenti non ancora ingaggiati */
   academy: string[];
+  /**
+   * Livello a cui vengono generati i nuovi piloti. Non è una costante: si
+   * corregge ogni anno in base a quanto la griglia si è allontanata dal
+   * riferimento, così i record delle prime stagioni continuano a valere.
+   */
+  talentAnchor: number;
   /** classifica piloti della stagione in corso */
   standings: Record<string, number>;
   constructorStandings: Record<string, number>;

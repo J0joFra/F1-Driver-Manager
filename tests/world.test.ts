@@ -56,7 +56,6 @@ describe('quaranta stagioni: il mondo si regge da solo', () => {
   // Le prime stagioni sono un transitorio; l'inflazione da misurare è quella
   // che resta dopo, perché è quella che svaluterebbe i record più vecchi.
   const firstTen = runSeasons(world, 10);
-  const settledPotential = meanPotential(world);
   const summaries = [...firstTen, ...runSeasons(world, 30)];
 
   it('ogni stagione assegna un titolo', () => {
@@ -78,10 +77,6 @@ describe('quaranta stagioni: il mondo si regge da solo', () => {
     }
   });
 
-  it('gli attributi non si gonfiano nel tempo (anti-inflazione)', () => {
-    expect(Math.abs(meanPotential(world) - settledPotential)).toBeLessThan(5);
-  });
-
   it('la griglia resta giovane: i vecchi si ritirano', () => {
     const ages = activeDrivers(world).map((d) => d.age);
     const mean = ages.reduce((s, a) => s + a, 0) / ages.length;
@@ -95,17 +90,6 @@ describe('quaranta stagioni: il mondo si regge da solo', () => {
     const teams = new Set(world.champions.map((c) => c.teamId));
     expect(champions.size).toBeGreaterThan(4);
     expect(teams.size).toBeGreaterThan(1);
-  });
-
-  it('nessuna scuderia monopolizza il campionato', () => {
-    // Regressione: la prima simulazione a 40 stagioni dava 29 titoli su 40 a una
-    // sola scuderia. Handicap di sviluppo, budget cap e mobilità del mercato
-    // esistono per impedirlo.
-    const byTeam = new Map<string, number>();
-    for (const c of world.champions) byTeam.set(c.teamId, (byTeam.get(c.teamId) ?? 0) + 1);
-    const best = Math.max(...byTeam.values());
-    expect(best / world.champions.length).toBeLessThan(0.55);
-    expect(byTeam.size).toBeGreaterThanOrEqual(3);
   });
 
   it('i regolamenti si azzerano periodicamente', () => {
@@ -146,5 +130,51 @@ describe('una stagione settimana per settimana', () => {
     const before = overall(young.attrs);
     while (w.week < SEASON_WEEKS) advanceWeek(w);
     expect(overall(young.attrs)).toBeGreaterThan(before);
+  });
+});
+
+/**
+ * Le proprietà che contano — che il mondo non si congeli e non si gonfi — sono
+ * statistiche: un singolo seed può sempre produrre un'era di dominio, che è una
+ * storia, non un difetto. Si misurano su più mondi.
+ */
+describe('proprietà del mondo su più semi', () => {
+  const SEEDS = [1, 7, 42, 999, 20260921, 12345];
+
+  const runs = SEEDS.map((seed) => {
+    const w = createWorld({ seed });
+    runSeasons(w, 10);
+    const settled = meanPotential(w);
+    runSeasons(w, 30);
+    const byTeam = new Map<string, number>();
+    for (const c of w.champions) byTeam.set(c.teamId, (byTeam.get(c.teamId) ?? 0) + 1);
+    return {
+      seed,
+      drift: Math.abs(meanPotential(w) - settled),
+      share: Math.max(...byTeam.values()) / w.champions.length,
+      championTeams: byTeam.size,
+      championDrivers: new Set(w.champions.map((c) => c.driverId)).size,
+    };
+  });
+
+  it('nessun mondo si congela su una sola scuderia', () => {
+    // Regressione: la prima simulazione a 40 stagioni dava 29 titoli su 40 a
+    // una sola scuderia. Handicap di sviluppo inverso alla classifica, budget
+    // cap comune, prestigio legato ai risultati e mobilità del mercato
+    // esistono per impedirlo.
+    const meanShare = runs.reduce((s, r) => s + r.share, 0) / runs.length;
+    expect(meanShare).toBeLessThan(0.5);
+    for (const r of runs) {
+      expect(r.share, `seed ${r.seed}`).toBeLessThan(0.7);
+      expect(r.championTeams, `seed ${r.seed}`).toBeGreaterThanOrEqual(3);
+      expect(r.championDrivers, `seed ${r.seed}`).toBeGreaterThan(6);
+    }
+  });
+
+  it('gli attributi non si gonfiano nel tempo (anti-inflazione)', () => {
+    const sorted = runs.map((r) => r.drift).sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)]!;
+    expect(median).toBeLessThan(3);
+    for (const r of runs) expect(r.drift, `seed ${r.seed}`).toBeLessThan(8);
   });
 });

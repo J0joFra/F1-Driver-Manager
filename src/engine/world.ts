@@ -58,6 +58,7 @@ export function createWorld(opts: CreateWorldOptions): World {
     regulations: { lastResetYear: year, nextResetYear: year + rng.int(4, 6) },
     seat: opts.seat ?? { mode: 'osservatore' },
     academy: [],
+    talentAnchor: POTENTIAL_ANCHOR,
     standings: {},
     constructorStandings: {},
     results: [],
@@ -104,11 +105,19 @@ export interface WeekOptions {
   plan?: TrainingPlan;
   /** punteggio 0–1 nel minigioco; se assente vale l'allenamento automatico */
   minigameScore?: number;
+  /**
+   * Non correre la gara: gli allenamenti vengono applicati e la settimana si
+   * ferma prima del weekend, che l'interfaccia farà giocare dal vivo.
+   * La settimana non avanza finché la gara non è registrata.
+   */
+  deferRace?: boolean;
 }
 
 export interface WeekReport {
   week: number;
   raceRun: string | null;
+  /** gara da giocare: la settimana resta ferma finché non è registrata */
+  pendingRace: string | null;
   minigame: MinigameKind | null;
   seasonOver: boolean;
 }
@@ -148,11 +157,32 @@ export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
   }
 
   if (minigame) world.lastMinigame = minigame;
+
+  if (trackId && opts.deferRace) {
+    // Gli allenamenti sono già applicati; la settimana avanzerà con
+    // `finishPendingRace`, quando l'esito della gara sarà noto.
+    return { week: world.week, raceRun: null, pendingRace: trackId, minigame, seasonOver: false };
+  }
+
   if (trackId) runWeekend(world, trackId);
 
   world.week += 1;
   const seasonOver = world.week >= SEASON_WEEKS;
-  return { week: world.week - 1, raceRun: trackId, minigame, seasonOver };
+  return { week: world.week - 1, raceRun: trackId, pendingRace: null, minigame, seasonOver };
+}
+
+/** Chiude una settimana lasciata in sospeso da `deferRace`. */
+export function finishPendingRace(world: World, commit: () => void): WeekReport {
+  const trackId = world.schedule[world.week] ?? null;
+  commit();
+  world.week += 1;
+  return {
+    week: world.week - 1,
+    raceRun: trackId,
+    pendingRace: null,
+    minigame: null,
+    seasonOver: world.week >= SEASON_WEEKS,
+  };
 }
 
 export interface SeasonSummary {

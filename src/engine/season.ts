@@ -1,4 +1,4 @@
-import type { Driver, SeasonTotals, WeekendResult, World } from './types.js';
+import type { Driver, QualifyingResult, RaceResult, SeasonTotals, Track, WeekendResult, World } from './types.js';
 import { clamp, createRng, hashSeed, type Rng } from './rng.js';
 import { getTrack } from './data/tracks.js';
 import { carPace } from './regulations.js';
@@ -37,8 +37,23 @@ export function buildEntries(world: World): RaceEntry[] {
   return entries;
 }
 
-/** Corre il weekend della settimana corrente e aggiorna il mondo. */
-export function runWeekend(world: World, trackId: string): WeekendResult {
+export interface PreparedWeekend {
+  trackId: string;
+  track: Track;
+  entries: RaceEntry[];
+  qualifying: QualifyingResult[];
+  wet: boolean;
+  /** generatore da passare alla gara, derivato dal salvataggio */
+  raceRng: Rng;
+}
+
+/**
+ * Prepara il weekend fino alla griglia di partenza, senza correre la gara.
+ *
+ * Serve a dare all'interfaccia il punto in cui fermarsi: la gara può essere
+ * giocata dal vivo oppure simulata, e in entrambi i casi parte da qui.
+ */
+export function prepareWeekend(world: World, trackId: string): PreparedWeekend {
   const track = getTrack(trackId);
   const rng = rngFor(world, `weekend:${trackId}`);
   const entries = buildEntries(world);
@@ -48,13 +63,24 @@ export function runWeekend(world: World, trackId: string): WeekendResult {
   const gridById = new Map(qualifying.map((q) => [q.driverId, q.position]));
   for (const e of entries) e.grid = gridById.get(e.driverId) ?? entries.length;
 
-  const outcome = simulateRace(track, entries, rng, { wet });
+  return { trackId, track, entries, qualifying, wet, raceRng: rng.fork(`race:${trackId}`) };
+}
+
+/** Registra l'esito nel mondo: punti, classifiche, carriere, reputazione, forma. */
+export function commitWeekend(
+  world: World,
+  prepared: PreparedWeekend,
+  results: RaceResult[],
+  safetyCars: number,
+): WeekendResult {
+  const { entries, qualifying, trackId } = prepared;
+  const gridById = new Map(qualifying.map((q) => [q.driverId, q.position]));
 
   // Posizione attesa in base alla sola monoposto: serve a giudicare il pilota.
   const byCar = [...entries].sort((a, b) => b.carPace - a.carPace);
   const expected = new Map(byCar.map((e, i) => [e.driverId, i + 1]));
 
-  for (const r of outcome.results) {
+  for (const r of results) {
     const d = world.drivers[r.driverId];
     if (!d) continue;
     world.standings[d.id] = (world.standings[d.id] ?? 0) + r.points;
@@ -88,13 +114,20 @@ export function runWeekend(world: World, trackId: string): WeekendResult {
     trackId,
     round: world.round,
     qualifying,
-    race: outcome.results,
-    wet: outcome.wet,
-    safetyCars: outcome.safetyCars,
+    race: results,
+    wet: prepared.wet,
+    safetyCars,
   };
   world.results.push(result);
   world.round += 1;
   return result;
+}
+
+/** Weekend completo simulato: prepara, corre e registra. */
+export function runWeekend(world: World, trackId: string): WeekendResult {
+  const prepared = prepareWeekend(world, trackId);
+  const outcome = simulateRace(prepared.track, prepared.entries, prepared.raceRng, { wet: prepared.wet });
+  return commitWeekend(world, prepared, outcome.results, outcome.safetyCars);
 }
 
 export interface StandingRow {

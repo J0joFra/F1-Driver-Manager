@@ -4,9 +4,10 @@ Gestionale di Formula 1 per browser e Android. Due modalità sullo stesso mondo 
 **Pilota** (fai carriera, cresci, ti scegli il sedile) e **Scuderia** (dirigi un team) —
 con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 
-> **Stato: motore completo + Modalità Pilota navigabile.**
-> Il mondo gira da riga di comando (40 stagioni in ~300 ms) e l'app si gioca
-> settimana per settimana fino a fine stagione.
+> **Stato: Modalità Pilota giocabile, gara compresa.**
+> Il mondo gira da riga di comando (40 stagioni in ~300 ms), l'app si gioca
+> settimana per settimana e le gare si corrono dal vivo: tracciato, torre dei
+> tempi, distacchi e strategia.
 
 ---
 
@@ -49,7 +50,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 34 test
+npm test                      # 46 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -255,7 +256,40 @@ Due freni secondari: **costo superlineare, effetto sublineare** (`staffPrice` cr
 
 ---
 
+## La gara che si gioca
+
+Il weekend si ferma sulla **griglia di partenza**: lì si vede la qualifica, si
+sceglie la gomma di partenza e si decide se correre o simulare. Poi la pista.
+
+| Elemento | Cosa fa |
+|---|---|
+| **Tracciato** | vista dall'alto, una vettura per puntino. È atmosfera: dà contesto, non numeri |
+| **Torre dei tempi** | chi è davanti a chi, distacco dal leader. Segue il giocatore invece di lasciarlo fuori schermo |
+| **Striscia dei distacchi** | i secondi dal leader su una scala. È la vista funzionale: il trenino, chi si stacca, l'undercut |
+| **Comandi** | mescola e box, modalità motore, attacco quando sei entro un secondo |
+| **Velocità** | pausa, 1×, 4×, 8×, più «simula il resto» |
+
+**Il gioco rallenta da solo.** Quando entri in zona DRS, quando sei sotto
+attacco, quando le gomme sono finite o esce la safety car, la simulazione torna
+a 1× e compare la fascia gialla: è ciò che rende guardabile una gara da 53 giri
+senza chiedere di stare sempre sul pezzo.
+
+I dodici circuiti non sono disegnati a mano: la forma nasce dal seed del
+tracciato (`ui/race/trackPath.ts`), con più curve dove si sorpassa poco. Sempre
+uguale per lo stesso autodromo, diversa da tutti gli altri, zero file da
+mantenere.
+
+Gli eventi di gara sono **dati, non frasi**: il motore emette `{kind, drivers}`
+e l'interfaccia compone il testo. La simulazione non conosce i nomi dei piloti
+né la lingua.
+
 ## Il modello di gara
+
+Un solo modello, due cadenze. `race.ts` definisce le formule — tempo sul giro,
+degrado, sorpasso, ritiro, sosta — e le usano sia `simulateRace()` a
+**risoluzione di giro**, per simulare stagioni intere da riga di comando, sia
+`liveRace.ts` a **risoluzione di tick**, per la gara che il giocatore guarda e
+in cui interviene. Le formule stanno scritte una volta sola.
 
 `simulateRace()` lavora a **risoluzione di giro**. Nessuna fisica: si calcola un tempo sul giro per vettura, lo si accumula e si risolvono aria sporca e sorpassi con un modello probabilistico.
 
@@ -291,6 +325,7 @@ Ognuna nasce da un problema osservato, non da un'intuizione.
 | 6 | La macchina pesa il doppio del pilota | è la Formula 1, non i kart | `race.ts` |
 | 7 | Ancoraggio del potenziale | i record delle prime stagioni devono continuare a valere | `market.ts` |
 | 8 | Reset regolamentare ogni 4–6 anni | rimescola la gerarchia; senza, il gioco muore entro la decima stagione | `regulations.ts` |
+| 9 | Anti-inflazione a controllo integrale | una correzione proporzionale lascia un errore permanente: al volante arrivano i migliori del bacino | `market.ts` |
 
 Le regole 2–6 sono state aggiunte **dopo** la prima simulazione a 40 stagioni, che aveva dato 29 titoli su 40 a una sola scuderia. Il test `nessuna scuderia monopolizza il campionato` impedisce alla regressione di tornare.
 
@@ -307,13 +342,18 @@ src/
     components/     primitive (Panel, Stat, Bar, Btn, Note)
     screens/        Paddock, Pilota, Allenamento, Finanze, Scuderia,
                     Classifiche, Storia, overlay di fine weekend e di fine anno
+    race/           griglia di partenza, tracciato, torre dei tempi, striscia
+                    dei distacchi, comandi, forma procedurale del circuito
+  state/raceSession.ts  la gara in corso, fuori dallo store: contiene il
+                    generatore casuale, che non è serializzabile
 engine/
   rng.ts            generatore deterministico, fork etichettati, clamp
   types.ts          modello dati completo del mondo
   driver.ts         creazione, newgen, overall, curve di età, ritiro
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   training.ts       sessioni, tetti, scelta del minigioco, applicazione crescita
-  race.ts           simulazione di gara e di qualifica
+  race.ts           il modello: formule di gara, gara veloce, qualifica
+  liveRace.ts       la stessa gara avanzata a passi, con i comandi del giocatore
   regulations.ts    sviluppo monoposto, handicap, budget cap, prestigio, reset
   market.ts         valore di mercato, ingaggi, mercato piloti, finanze
   season.ts         weekend, classifiche, aggregati storici
@@ -322,7 +362,7 @@ engine/
     tracks.ts       12 circuiti di fantasia, parametrizzati sui valori reali
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              34 test: rng, gara, allenamento, mondo a 40 stagioni
+tests/              46 test: rng, gara, gara live, allenamento, mondo
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + controllo che la pagina non scorra
 ```
@@ -395,9 +435,10 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 - [x] Ciclo settimanale completo: allenamento → weekend → fine stagione
 - [x] Salvataggio automatico con Zustand `persist`
 
+- [x] Vista gara: griglia, tracciato SVG, torre dei tempi, striscia dei distacchi, strategia
+
 **Prossimo passo**:
 
-- [ ] Vista gara: tracciato SVG, torre dei tempi, striscia dei distacchi, comandi strategia
 - [ ] I tre minigiochi in React, con il risultato scritto all'avvio della partita
 - [ ] Qualifica: le tre decisioni e il giro lanciato
 - [ ] Libere: la direzione di assetto
