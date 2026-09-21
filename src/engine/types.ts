@@ -109,6 +109,7 @@ export interface CarRating {
 export interface Team {
   id: string;
   name: string;
+  short: string;
   colour: string;
   car: CarRating;
   /** budget cap annuo in euro */

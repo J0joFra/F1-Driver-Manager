@@ -8,5 +8,7 @@ export * from './regulations.js';
 export * from './market.js';
 export * from './season.js';
 export * from './world.js';
+export * from './career.js';
+export * from './selectors.js';
 export { TRACKS, getTrack } from './data/tracks.js';
 export { TEAM_SEEDS } from './data/teams.js';

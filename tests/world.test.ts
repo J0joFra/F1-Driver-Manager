@@ -3,6 +3,9 @@ import { createWorld, endSeason, advanceWeek } from '../src/engine/world.js';
 import { SEASON_WEEKS, driverStandings } from '../src/engine/season.js';
 import { overall, potentialOverall } from '../src/engine/driver.js';
 import type { World } from '../src/engine/types.js';
+import { TEAM_SEEDS } from '../src/engine/data/teams.js';
+
+const SEATS = TEAM_SEEDS.length * 2;
 
 function runSeasons(world: World, n: number) {
   const summaries = [];
@@ -20,9 +23,9 @@ function activeDrivers(world: World) {
 describe('creazione del mondo', () => {
   it('riempie ogni sedile e ogni scuderia', () => {
     const w = createWorld({ seed: 1 });
-    expect(Object.keys(w.teams)).toHaveLength(5);
+    expect(Object.keys(w.teams)).toHaveLength(TEAM_SEEDS.length);
     for (const t of Object.values(w.teams)) expect(t.driverIds).toHaveLength(2);
-    expect(activeDrivers(w)).toHaveLength(10);
+    expect(activeDrivers(w)).toHaveLength(SEATS);
   });
 
   it('è riproducibile dal seed', () => {
@@ -43,11 +46,18 @@ describe('creazione del mondo', () => {
   });
 });
 
+function meanPotential(world: World): number {
+  const a = activeDrivers(world);
+  return a.reduce((s, d) => s + potentialOverall(d), 0) / a.length;
+}
+
 describe('quaranta stagioni: il mondo si regge da solo', () => {
   const world = createWorld({ seed: 20260921 });
-  const startPotential =
-    activeDrivers(world).reduce((s, d) => s + potentialOverall(d), 0) / activeDrivers(world).length;
-  const summaries = runSeasons(world, 40);
+  // Le prime stagioni sono un transitorio; l'inflazione da misurare è quella
+  // che resta dopo, perché è quella che svaluterebbe i record più vecchi.
+  const firstTen = runSeasons(world, 10);
+  const settledPotential = meanPotential(world);
+  const summaries = [...firstTen, ...runSeasons(world, 30)];
 
   it('ogni stagione assegna un titolo', () => {
     expect(summaries).toHaveLength(40);
@@ -56,7 +66,7 @@ describe('quaranta stagioni: il mondo si regge da solo', () => {
   });
 
   it('la griglia resta piena: la rigenerazione funziona', () => {
-    expect(activeDrivers(world)).toHaveLength(10);
+    expect(activeDrivers(world)).toHaveLength(SEATS);
     for (const t of Object.values(world.teams)) expect(t.driverIds).toHaveLength(2);
   });
 
@@ -69,9 +79,7 @@ describe('quaranta stagioni: il mondo si regge da solo', () => {
   });
 
   it('gli attributi non si gonfiano nel tempo (anti-inflazione)', () => {
-    const now = activeDrivers(world);
-    const endPotential = now.reduce((s, d) => s + potentialOverall(d), 0) / now.length;
-    expect(Math.abs(endPotential - startPotential)).toBeLessThan(6);
+    expect(Math.abs(meanPotential(world) - settledPotential)).toBeLessThan(5);
   });
 
   it('la griglia resta giovane: i vecchi si ritirano', () => {
