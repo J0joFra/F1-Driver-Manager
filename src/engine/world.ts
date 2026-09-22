@@ -3,7 +3,10 @@ import { createRng, hashSeed, type Rng } from './rng.js';
 import { TEAM_SEEDS } from './data/teams.js';
 import { TRACKS } from './data/tracks.js';
 import { applyAging, createVeteran, overall, retirementChance } from './driver.js';
-import { intakeNewgens, POTENTIAL_ANCHOR, runTransferMarket, settleFinances } from './market.js';
+import {
+  acceptOffer as marketAcceptOffer, intakeNewgens, POTENTIAL_ANCHOR,
+  runTransferMarket, settleFinances,
+} from './market.js';
 import { developCars, maybeReset, updatePrestige, updateTeamResources } from './regulations.js';
 import { constructorStandings, driverStandings, rngFor, runWeekend, SEASON_WEEKS, seasonTotalsFor } from './season.js';
 import {
@@ -64,6 +67,7 @@ export function createWorld(opts: CreateWorldOptions): World {
     results: [],
     champions: [],
     lastMinigame: null,
+    offers: [],
   };
 
   for (const seed of TEAM_SEEDS) {
@@ -267,6 +271,16 @@ export function endSeason(world: World): SeasonSummary {
     newgens,
     regulationReset,
   };
+}
+
+/**
+ * Accetta una delle offerte in attesa. Finché ce ne sono il sedile del
+ * giocatore resta vuoto, quindi questa è l'unica via per ripartire.
+ */
+export function takeOffer(world: World, teamId: string): boolean {
+  const offer = world.offers.find((o) => o.teamId === teamId);
+  if (!offer) return false;
+  return marketAcceptOffer(world, offer, rngFor(world, `offer:${teamId}`));
 }
 
 /** Corre una stagione intera senza input del giocatore. */

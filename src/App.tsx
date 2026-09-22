@@ -9,6 +9,7 @@ import { Training } from './ui/screens/Training.js';
 import { DriverScreen } from './ui/screens/DriverScreen.js';
 import { Finance } from './ui/screens/Finance.js';
 import { TeamScreen } from './ui/screens/TeamScreen.js';
+import { Contracts } from './ui/screens/Contracts.js';
 import { Standings } from './ui/screens/Standings.js';
 import { History } from './ui/screens/History.js';
 import { SeasonOverlay, WeekendOverlay } from './ui/screens/Overlays.js';
@@ -24,6 +25,7 @@ export function App() {
   const lastWeek = useGame((s) => s.lastWeek);
   const lastSeason = useGame((s) => s.lastSeason);
   const pendingRace = useGame((s) => s.pendingRace);
+  const offersOpen = (world?.offers.length ?? 0) > 0;
   const raceRunning = useGame((s) => s.raceRunning);
   const gridReady = useGame((s) => s.gridReady);
   const openGrid = useGame((s) => s.openGrid);
@@ -35,6 +37,13 @@ export function App() {
   useEffect(() => {
     if (pendingRace) openGrid();
   }, [pendingRace, openGrid]);
+
+  // Con un'offerta sul tavolo non si va da nessuna parte: la stagione riparte
+  // solo dopo la firma, quindi la schermata si apre da sola.
+  const goTo = useGame((s) => s.goTo);
+  useEffect(() => {
+    if (offersOpen) goTo('contratti');
+  }, [offersOpen, goTo]);
 
   const onAdvance = useCallback(() => {
     const w = useGame.getState().world;
@@ -87,6 +96,7 @@ export function App() {
             {screen === 'allenamento' && <Training onAdvance={onAdvance} />}
             {screen === 'finanze' && <Finance />}
             {screen === 'scuderia' && <TeamScreen />}
+            {screen === 'contratti' && <Contracts />}
             {screen === 'classifiche' && <Standings />}
             {screen === 'storia' && <History />}
           </main>

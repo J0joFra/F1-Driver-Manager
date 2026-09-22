@@ -80,8 +80,9 @@ for (const [screen, file] of [
   ['pilota', '04-pilota'],
   ['finanze', '05-finanze'],
   ['scuderia', '06-scuderia'],
-  ['classifiche', '07-classifiche'],
-  ['storia', '08-storia'],
+  ['contratti', '07-contratti'],
+  ['classifiche', '08-classifiche'],
+  ['storia', '09-storia'],
 ]) {
   await page.click(`[data-testid=nav-${screen}]`);
   await page.waitForTimeout(120);
@@ -95,21 +96,21 @@ for (let i = 0; i < 10; i++) {
   await page.click('[data-testid=advance]', { timeout: 4000 });
   await page.waitForTimeout(150);
 }
-await shot('09-griglia');
+await shot('10-griglia');
 await noVerticalScroll('griglia');
 
 await page.click('[data-testid=go-racing]');
 await page.waitForTimeout(2500);
-await shot('10-gara');
+await shot('11-gara');
 await noVerticalScroll('gara');
 
 await page.click('button:has-text("4×")');
 await page.waitForTimeout(2500);
-await shot('11-gara-veloce');
+await shot('12-gara-veloce');
 
 await page.click('[data-testid=skip-race]');
 await page.waitForTimeout(900);
-await shot('12-risultato');
+await shot('13-risultato');
 await noVerticalScroll('risultato');
 
 console.log(`Schermate salvate in ${out}/`);

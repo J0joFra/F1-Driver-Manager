@@ -173,6 +173,17 @@ export interface Regulations {
   nextResetYear: number;
 }
 
+/** Un'offerta di contratto rivolta al giocatore a fine stagione. */
+export interface ContractOffer {
+  teamId: string;
+  years: number;
+  /** ingaggio annuo lordo in euro */
+  salary: number;
+  role: 'prima' | 'seconda';
+  /** 0–100: quanto la scuderia ti vuole */
+  interest: number;
+}
+
 /** Chi è il giocatore. Lo stesso mondo regge entrambe le modalità. */
 export type Seat =
   | { mode: 'pilota'; driverId: string }
@@ -206,6 +217,11 @@ export interface World {
   results: WeekendResult[];
   /** minigioco assegnato la settimana scorsa: non può ripetersi */
   lastMinigame: MinigameKind | null;
+  /**
+   * Offerte in attesa di risposta dal giocatore. Finché ce ne sono, il suo
+   * sedile resta vuoto e la stagione non può ripartire.
+   */
+  offers: ContractOffer[];
   /** albo d'oro: anno → id del campione */
   champions: { year: number; driverId: string; teamId: string }[];
 }

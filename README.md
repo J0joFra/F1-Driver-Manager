@@ -50,7 +50,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 47 test
+npm test                      # 52 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -125,6 +125,9 @@ una torre dei tempi i numeri devono incolonnarsi.
 | **Allenamento** | piano settimanale a sinistra con i pip di allocazione, a destra gli attributi che si muovono |
 | **Finanze** | entrate · uscite · il netto isolato in una colonna sua |
 | **Scuderia** | la squadra · i piloti in schede · lo sviluppo, in sola lettura |
+| **Contratti** | profilo e stagione a sinistra, a destra il contratto in corso o le offerte da firmare |
+| **Classifiche** | piloti in tabella (V, P, OVR, PT) · scuderie in schede con passo, affidabilità e prestigio |
+| **Storia** | albo d'oro · titoli per scuderia · ordine d'arrivo dell'ultima gara |
 
 ## L'interfaccia è orizzontale per costruzione
 
@@ -265,6 +268,23 @@ Il minigioco della settimana **non è casuale**: è quello della categoria in cu
 
 ---
 
+## I contratti si firmano, non si subiscono
+
+Gli altri diciannove piloti vengono assegnati d'ufficio dal mercato. Il
+giocatore no: quando il contratto scade riceve **fino a tre offerte** e sceglie
+lui. Finché non firma, il suo sedile resta vuoto e la stagione non riparte —
+l'interfaccia apre da sola la schermata e disabilita il pulsante che fa passare
+il tempo.
+
+Perché questo non lasci buchi in griglia, le scuderie interessate **tengono un
+posto libero** durante il mercato, e i posti rimasti si riempiono nell'istante
+in cui il giocatore firma. Una squadra di coda offre sempre: restare senza
+sedile a vent'anni sarebbe una fine di carriera decisa da un tiro di dado.
+
+`npm run check:offers` verifica il flusso: nel gioco quelle schermate compaiono
+solo dopo due o tre stagioni, quindi il mondo viene fatto avanzare dal motore,
+iniettato nel salvataggio e controllato nell'interfaccia.
+
 ## Soldi e staff personale
 
 L'ingaggio non è un numero di vanità: è la risorsa che finanzia la tua crescita. È questo che trasforma la schermata dei contratti nella più importante del gioco.
@@ -404,9 +424,10 @@ engine/
     tracks.ts       12 circuiti di fantasia, parametrizzati sui valori reali
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              47 test: rng, gara, gara live, allenamento, mondo
+tests/              52 test: rng, gara, gara live, allenamento, mondo, contratti
 tools/simulate.ts   simulatore da riga di comando
-tools/screenshots.mjs  schermate a 844×390 + controllo che la pagina non scorra
+tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
+tools/check-offers.mjs verifica il flusso delle offerte di contratto
 ```
 
 ### Perché i nomi sono di fantasia

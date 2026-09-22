@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { RaceResult, TrainingPlan, World } from '../engine/types.js';
-import { advanceWeek, endSeason, finishPendingRace, type SeasonSummary, type WeekReport } from '../engine/world.js';
+import { advanceWeek, endSeason, finishPendingRace, takeOffer, type SeasonSummary, type WeekReport } from '../engine/world.js';
 import { startCareer, type StartCareerOptions } from '../engine/career.js';
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
 import { beginRace, currentRace, endRace } from './raceSession.js';
@@ -18,6 +18,7 @@ export type Screen =
   | 'allenamento'
   | 'finanze'
   | 'scuderia'
+  | 'contratti'
   | 'classifiche'
   | 'storia';
 
@@ -44,6 +45,8 @@ interface GameState {
   openGrid: () => void;
   startRace: () => void;
   completeRace: (results: RaceResult[], safetyCars: number) => void;
+  /** accetta una delle offerte in attesa; senza, la stagione non riparte */
+  acceptOffer: (teamId: string) => void;
   newGame: (opts: StartCareerOptions) => void;
   abandon: () => void;
   goTo: (screen: Screen) => void;
@@ -88,6 +91,7 @@ export const useGame = create<GameState>()(
       advance: (plan, minigameScore) => {
         const world = get().world;
         if (!world || world.week >= SEASON_WEEKS || get().pendingRace) return null;
+        if (world.offers.length > 0) return null;
         // Se il giocatore è in griglia la settimana si ferma prima del via: la
         // gara la corre lui, e sarà `completeRace` a registrarla.
         const racing = world.seat.mode === 'pilota';
@@ -133,6 +137,12 @@ export const useGame = create<GameState>()(
         const summary = endSeason(world);
         set({ world: { ...world }, lastSeason: summary, lastWeek: null });
         return summary;
+      },
+
+      acceptOffer: (teamId) => {
+        const world = get().world;
+        if (!world) return;
+        if (takeOffer(world, teamId)) set({ world: { ...world } });
       },
 
       dismissSummary: () => set({ lastWeek: null, lastSeason: null }),
