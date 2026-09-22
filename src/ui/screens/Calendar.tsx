@@ -1,0 +1,222 @@
+import { useEffect, useRef } from 'react';
+import { CalendarDays, Flag, Snowflake, Sun, Wrench } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { useGame } from '../../state/useGame.js';
+import { player } from '../../engine/selectors.js';
+import { getTrack } from '../../engine/data/tracks.js';
+import {
+  formatDay, formatShortDay, monthName, raceCountOf, weekendDays, weekMonday,
+  WEEK_LABEL, WEEK_TRAINING_CAPACITY, type SeasonWeek, type WeekKind,
+} from '../../engine/calendar.js';
+import { Panel, Stat } from '../components/kit.js';
+
+const KIND_ICON: Record<WeekKind, LucideIcon> = {
+  testing: Wrench,
+  race: Flag,
+  free: CalendarDays,
+  summerBreak: Sun,
+  postseason: Snowflake,
+};
+
+const KIND_COLOUR: Record<WeekKind, string> = {
+  testing: 'text-vantar',
+  race: 'text-aurora',
+  free: 'text-dim',
+  summerBreak: 'text-accent',
+  postseason: 'text-muted',
+};
+
+/**
+ * Il calendario della stagione.
+ *
+ * Non è solo una vista: il carattere della settimana decide quanto ci si può
+ * allenare. Sei sessioni in un weekend di gara, dodici durante i test, zero
+ * nella pausa estiva — dove però si recupera. Vederlo tutto insieme serve a
+ * pianificare, non solo a sapere che giorno è.
+ */
+export function Calendar() {
+  const world = useGame((s) => s.world)!;
+  const me = player(world)!;
+  const scroller = useRef<HTMLDivElement>(null);
+  const currentRow = useRef<HTMLDivElement>(null);
+
+  // La settimana in corso deve essere già sotto gli occhi all'apertura.
+  useEffect(() => {
+    currentRow.current?.scrollIntoView({ block: 'center' });
+  }, []);
+
+  const current = world.schedule[world.week];
+  const totalRaces = raceCountOf(world.schedule);
+  const resultFor = (round: number | null) =>
+    round === null ? null : world.results[round - 1] ?? null;
+
+  let lastMonth = -1;
+
+  return (
+    <div className="h-full grid grid-cols-[1fr_228px] gap-2 min-h-0">
+      <Panel
+        title={`Stagione ${world.year}`}
+        tag={`${world.round}/${totalRaces} gare corse`}
+        bodyClass="p-0 flex flex-col min-h-0"
+      >
+        <div className="grid grid-cols-[30px_46px_18px_1fr_86px_40px] gap-1.5 px-3 py-1.5
+          border-b border-line shrink-0 field-label">
+          <span>Sett.</span>
+          <span>Data</span>
+          <span />
+          <span>Evento</span>
+          <span>Risultato</span>
+          <span className="text-right">Sess.</span>
+        </div>
+
+        <div ref={scroller} className="flex-1 min-h-0 scroll-y">
+          {world.schedule.map((week) => {
+            const isCurrent = week.index === world.week;
+            const past = week.index < world.week;
+            const monday = weekMonday(world.year, week);
+            const month = monday.getUTCMonth();
+            const showMonth = month !== lastMonth;
+            lastMonth = month;
+
+            const track = week.trackId ? getTrack(week.trackId) : null;
+            const result = resultFor(week.round);
+            const mine = result?.race.find((r) => r.driverId === me.id);
+            const Icon = KIND_ICON[week.kind];
+
+            return (
+              <div key={week.index}>
+                {showMonth && (
+                  <div className="px-3 pt-2 pb-1 field-label text-muted border-t border-line first:border-0">
+                    {monthName(month)}
+                  </div>
+                )}
+                <div
+                  ref={isCurrent ? currentRow : undefined}
+                  className={`grid grid-cols-[30px_46px_18px_1fr_86px_40px] gap-1.5 px-3 py-[5px]
+                    border-b border-line/40 items-center font-mono text-2xs tnum
+                    ${isCurrent ? 'bg-primary/12 border-l-2 border-l-primary pl-[10px]' : ''}
+                    ${past && !isCurrent ? 'opacity-55' : ''}`}
+                >
+                  <span className="text-dim">{week.index + 1}</span>
+                  <span className="text-muted">{formatShortDay(monday)}</span>
+                  <span className={KIND_COLOUR[week.kind]}>
+                    <Icon className="w-3 h-3" strokeWidth={2} />
+                  </span>
+                  <span className="truncate">
+                    {track ? (
+                      <>
+                        <span className="text-accent">R{week.round}</span>{' '}
+                        <span className="font-sans text-xs text-ink">{track.name}</span>
+                      </>
+                    ) : (
+                      <span className="text-dim">{WEEK_LABEL[week.kind]}</span>
+                    )}
+                  </span>
+                  <span className={mine ? (mine.dnf ? 'text-bad' : 'text-ink') : 'text-dim'}>
+                    {mine ? (mine.dnf ? 'ritiro' : `P${mine.position} · ${mine.points}pt`) : ''}
+                  </span>
+                  <span className="text-right text-dim">
+                    {WEEK_TRAINING_CAPACITY[week.kind] || '—'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+
+      <div className="flex flex-col gap-2 min-h-0">
+        <Panel title="Questa settimana" className="shrink-0" bodyClass="p-2.5">
+          {current ? (
+            <>
+              <div className="flex items-center gap-2">
+                <span className={KIND_COLOUR[current.kind]}>
+                  {(() => {
+                    const Icon = KIND_ICON[current.kind];
+                    return <Icon className="w-4 h-4" strokeWidth={2} />;
+                  })()}
+                </span>
+                <span className="font-sans text-xs font-bold">{WEEK_LABEL[current.kind]}</span>
+              </div>
+              <div className="font-mono text-2xs text-muted mt-1">
+                dal {formatDay(weekMonday(world.year, current))}
+              </div>
+
+              {current.trackId && (
+                <div className="mt-2 pt-2 border-t border-line">
+                  <div className="font-sans text-xs font-bold truncate">
+                    {getTrack(current.trackId).name}
+                  </div>
+                  {(() => {
+                    const days = weekendDays(world.year, current);
+                    return (
+                      <div className="mt-1.5 flex flex-col gap-[3px]">
+                        {[
+                          ['Libere', days.practice],
+                          ['Qualifica', days.qualifying],
+                          ['Gara', days.race],
+                        ].map(([label, date]) => (
+                          <div key={label as string} className="flex justify-between font-mono text-2xs">
+                            <span className="text-muted">{label as string}</span>
+                            <span className="text-ink tnum">{formatDay(date as Date)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <div className="mt-2 pt-2 border-t border-line flex justify-between font-mono text-2xs">
+                <span className="text-muted">Sessioni disponibili</span>
+                <span className={WEEK_TRAINING_CAPACITY[current.kind] > 0 ? 'text-ink' : 'text-accent'}>
+                  {WEEK_TRAINING_CAPACITY[current.kind] || 'riposo'}
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="font-mono text-2xs text-dim">Stagione conclusa.</p>
+          )}
+        </Panel>
+
+        <Panel title="Il resto dell'anno" className="flex-1" bodyClass="p-2.5 scroll-y">
+          <div className="grid grid-cols-2 gap-y-3">
+            <Stat value={world.round} label="Gare corse" />
+            <Stat value={totalRaces - world.round} label="Rimaste" tone="accent" />
+            <Stat value={Math.round(me.fatigue)} label="Stanchezza" tone={me.fatigue > 70 ? 'accent' : undefined} />
+            <Stat value={`${world.week + 1}/${world.schedule.length}`} label="Settimana" />
+          </div>
+
+          <div className="mt-3 pt-2 border-t border-line flex flex-col gap-[3px]">
+            {nextOf(world.schedule, world.week, 'summerBreak', 'Pausa estiva', world.year)}
+            {nextOf(world.schedule, world.week, 'race', 'Prossima gara', world.year)}
+            {nextOf(world.schedule, world.week, 'postseason', 'Fine stagione', world.year)}
+          </div>
+
+          <p className="font-mono text-[8.5px] text-dim leading-relaxed mt-2.5">
+            Nella pausa estiva le fabbriche chiudono: non ci si allena e si recupera. È l'unico
+            momento dell'anno in cui la stanchezza scende da sola.
+          </p>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function nextOf(
+  schedule: readonly SeasonWeek[],
+  from: number,
+  kind: WeekKind,
+  label: string,
+  year: number,
+) {
+  const found = schedule.find((w) => w.index >= from && w.kind === kind);
+  return (
+    <div key={kind} className="flex justify-between font-mono text-2xs">
+      <span className="text-muted">{label}</span>
+      <span className="text-ink tnum">
+        {found ? formatShortDay(weekMonday(year, found)) : '—'}
+      </span>
+    </div>
+  );
+}

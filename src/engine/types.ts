@@ -1,5 +1,9 @@
 /** Modello dati del mondo di gioco. Nessuna dipendenza da React o dal DOM. */
 
+import type { SeasonWeek } from './calendar.js';
+
+export type { SeasonWeek } from './calendar.js';
+
 export type AttributeKey =
   | 'speed'        // velocità pura sul giro secco
   | 'consistency'  // costanza: quanto raramente sbagli
@@ -233,8 +237,8 @@ export interface World {
   round: number;
   drivers: Record<string, Driver>;
   teams: Record<string, Team>;
-  /** una voce per settimana: l'id del circuito, oppure null se è una settimana libera */
-  schedule: (string | null)[];
+  /** il calendario dell'anno: una voce per settimana, con carattere e data */
+  schedule: SeasonWeek[];
   regulations: Regulations;
   seat: Seat;
   /** talenti non ancora ingaggiati */

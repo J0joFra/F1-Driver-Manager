@@ -4,7 +4,9 @@ import { getTrack } from './data/tracks.js';
 import { carPace } from './regulations.js';
 import { simulateQualifying, simulateRace, type RaceEntry } from './race.js';
 
-export const SEASON_WEEKS = 36;
+// La lunghezza della stagione la decide il calendario: qui si riespone perché
+// mezzo motore la usa come limite del ciclo settimanale.
+export { SEASON_WEEKS } from './calendar.js';
 
 /** Generatore derivato dal salvataggio: stesso mondo, stessa storia. */
 export function rngFor(world: World, label: string): Rng {

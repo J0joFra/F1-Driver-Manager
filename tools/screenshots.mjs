@@ -78,6 +78,7 @@ await noVerticalScroll('paddock');
 for (const [screen, file] of [
   ['allenamento', '03-allenamento'],
   ['pilota', '04-pilota'],
+  ['calendario', '04b-calendario'],
   ['finanze', '05-finanze'],
   ['scuderia', '06-scuderia'],
   ['contratti', '07-contratti'],

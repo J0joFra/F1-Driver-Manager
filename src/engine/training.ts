@@ -1,6 +1,7 @@
 import type { AttributeKey, Driver, MinigameKind, TrainingCategory, TrainingPlan } from './types.js';
 import { commitTraining, previewTraining, recover } from './progression.js';
 import { physioQuality } from './staff.js';
+import { WEEK_TRAINING_CAPACITY, type WeekKind } from './calendar.js';
 import { clamp } from './curves.js';
 
 /**
@@ -11,8 +12,6 @@ import { clamp } from './curves.js';
  * scelta resta viva invece di collassare sempre sullo stesso ottimo.
  */
 
-export const SESSIONS_RACE_WEEK = 6;
-export const SESSIONS_FREE_WEEK = 10;
 export const MAX_PER_CATEGORY = 4;
 
 export const TRAINING_CATEGORIES: readonly TrainingCategory[] = [
@@ -40,17 +39,28 @@ export interface TrainingLimits {
   perCategory: Record<TrainingCategory, number>;
 }
 
-/** Lo staff non regala punti: alza i tetti. Un ingaggio che cambia una regola vale più di uno che cambia un numero. */
-export function trainingLimits(d: Driver, isRaceWeek: boolean): TrainingLimits {
+/**
+ * Quanto si può lavorare in una settimana.
+ *
+ * Il monte dipende dal carattere della settimana — sei sessioni in un weekend
+ * di gara, dodici durante i test invernali, zero nella pausa estiva — e lo
+ * staff alza i tetti. Un ingaggio che cambia una regola vale più di uno che
+ * cambia un numero.
+ */
+export function trainingLimits(d: Driver, week: WeekKind | boolean): TrainingLimits {
+  // Accetta ancora il booleano di prima per non rompere i richiami esistenti.
+  const kind: WeekKind = typeof week === 'boolean' ? (week ? 'race' : 'free') : week;
+  const base = WEEK_TRAINING_CAPACITY[kind];
   const hasCoach = d.staff.some((s) => s.role === 'coach');
   const hasTrainer = d.staff.some((s) => s.role === 'trainer');
+  const perCategory = Math.min(MAX_PER_CATEGORY, base);
   return {
-    total: (isRaceWeek ? SESSIONS_RACE_WEEK : SESSIONS_FREE_WEEK) + (hasTrainer ? 2 : 0),
+    total: base > 0 ? base + (hasTrainer ? 2 : 0) : 0,
     perCategory: {
-      simulator: MAX_PER_CATEGORY + (hasCoach ? 1 : 0),
-      fitness: MAX_PER_CATEGORY,
-      engineering: MAX_PER_CATEGORY,
-      media: MAX_PER_CATEGORY,
+      simulator: perCategory + (hasCoach && base > 0 ? 1 : 0),
+      fitness: perCategory,
+      engineering: perCategory,
+      media: perCategory,
     },
   };
 }
@@ -122,10 +132,10 @@ export function applyTraining(
   d: Driver,
   plan: TrainingPlan,
   minigameMult = MINIGAME_AUTO,
-  isRaceWeek = false,
+  week: WeekKind | boolean = false,
   efficiency?: number,
 ): TrainingOutcome {
-  const limits = trainingLimits(d, isRaceWeek);
+  const limits = trainingLimits(d, week);
   const preview = previewTraining(
     d, plan, limits.perCategory, limits.total, minigameMult, 1, efficiency,
   );

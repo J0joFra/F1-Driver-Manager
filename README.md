@@ -18,6 +18,7 @@ con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 - [Architettura: perché il motore viene prima](#architettura-perché-il-motore-viene-prima)
 - [Le due modalità](#le-due-modalità)
 - [Il mondo infinito](#il-mondo-infinito)
+- [Il calendario della stagione](#il-calendario-della-stagione)
 - [La settimana di gioco](#la-settimana-di-gioco)
 - [Soldi e staff personale](#soldi-e-staff-personale)
 - [Il modello di gara](#il-modello-di-gara)
@@ -50,7 +51,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 77 test
+npm test                      # 80 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -123,6 +124,7 @@ una torre dei tempi i numeri devono incolonnarsi.
 | **Paddock** | tre colonne: il tuo pilota e il contratto · il prossimo weekend e la classifica piloti · la scuderia e la classifica costruttori |
 | **Pilota** | profilo e carriera a sinistra, i sette attributi per esteso a destra, ognuno con il proprio tetto |
 | **Allenamento** | piano settimanale a sinistra con i pip di allocazione, a destra gli attributi che si muovono |
+| **Calendario** | l'anno intero in tabella a sinistra, con gli stacchi dei mesi · a destra la settimana corrente e il resto della stagione |
 | **Finanze** | entrate · uscite · il netto isolato in una colonna sua |
 | **Scuderia** | la squadra · i piloti in schede · lo sviluppo, in sola lettura |
 | **Contratti** | profilo e stagione a sinistra, a destra il contratto in corso o le offerte da firmare |
@@ -228,13 +230,71 @@ Quattro sistemi rendono tutto questo possibile, e sono già nel motore:
 
 ---
 
+## Il calendario della stagione
+
+In *Soccer Manager* il calendario non è una tabella di consultazione: è
+l'oggetto che fa esistere il tempo. Le partite stanno in giorni veri, le soste
+si vedono, e la programmazione della settimana discende da lì. Qui vale lo
+stesso, con le pause che la Formula 1 ha davvero.
+
+[`engine/calendar.ts`](src/engine/calendar.ts) costruisce le 40 settimane
+dell'anno **una volta sola**, quando il mondo nasce, e le salva dentro
+`World.schedule`. Ogni settimana è un oggetto, non un id di circuito:
+
+```ts
+interface SeasonWeek {
+  index: number;             // 0..39
+  kind: WeekKind;            // testing | race | free | summerBreak | postseason
+  startDay: number;          // giorni dal 1° gennaio: il lunedì di quella settimana
+  trackId: string | null;
+  round: number | null;      // numerazione delle gare, non delle settimane
+}
+```
+
+Le date sono reali. La stagione si ancora al **primo lunedì di febbraio**, e da
+lì `weekMonday(year, week)` e `weekendDays(year, week)` producono giorni che
+cadono nel giorno giusto della settimana: libere venerdì, qualifica sabato,
+gara domenica. Il calendario di un anno bisestile non slitta, perché tutto
+parte da una data e non da un conteggio.
+
+| Tipo di settimana | Quando | Sessioni di allenamento | Recupero |
+|---|---|---|---|
+| **Test invernali** | prime 2 settimane | 12 | — |
+| **Settimana libera** | fra due gare | 10 | — |
+| **Settimana di gara** | ~20 volte l'anno | 6 | — |
+| **Pausa estiva** | 3 settimane a fine giugno | 0 | 22 punti di stanchezza |
+| **Dopo-stagione** | ultime settimane | 8 | 6 punti |
+
+Le due colonne a destra sono il motivo per cui il calendario sta nel motore e
+non nell'interfaccia: **`WEEK_TRAINING_CAPACITY` e `WEEK_RECOVERY` sono la
+regola**, e [`training.ts`](src/engine/training.ts) le legge invece di avere una
+soglia propria. Una pausa estiva che non insegna niente sarebbe decorazione; qui
+è l'unico momento dell'anno in cui la stanchezza scende davvero, quindi arrivare
+a giugno logori è una scelta con una conseguenza.
+
+Le gare non sono distribuite a caso e nemmeno a intervalli fissi: il
+generatore riempie le settimane disponibili a passo `slot/gare`, ma **non
+permette più di due gare consecutive** prima di forzare una settimana libera.
+È la vincola che rende il calendario giocabile, perché tre gare di fila
+lascerebbero un pilota senza modo di recuperare. Un test la verifica su quattro
+seed diversi.
+
+La schermata **Calendario** mostra l'anno intero in una tabella — settimana,
+data, evento, risultato, sessioni disponibili — con gli stacchi dei mesi e la
+settimana corrente evidenziata e portata in vista da sola. A destra due
+pannelli: cosa succede questa settimana (con i giorni del weekend, se c'è) e
+cosa resta dell'anno (gare corse e rimaste, stanchezza, prossima pausa,
+prossima gara, fine stagione).
+
+---
+
 ## La settimana di gioco
 
-Una stagione dura **36 settimane**, di cui ~20 con una gara. `advanceWeek()` fa avanzare il mondo di una settimana.
+Una stagione dura **40 settimane**, di cui ~20 con una gara. `advanceWeek()` fa avanzare il mondo di una settimana; il [calendario](#il-calendario-della-stagione) decide cosa contiene.
 
 | Giorno | Cosa fai | Durata |
 |---|---|---|
-| Lun–Gio | **Allenamento**: 6 sessioni in settimana di gara, 10 in settimana libera, **max 4 per categoria** | 30 s |
+| Lun–Gio | **Allenamento**: sessioni secondo il tipo di settimana (12 nei test, 10 se libera, 6 se c'è la gara), **max 4 per categoria** | 30 s |
 | Gio | **Il minigioco della settimana**, una sola partita | 40 s |
 | Ven | **Libere**: scegli una direzione di assetto | 20 s |
 | Sab | **Qualifica**: tre decisioni + il giro lanciato | 90 s |
@@ -499,8 +559,9 @@ src/
   ui/
     shell/          rail di navigazione, barra di stato, blocco orientamento
     components/     primitive (Panel, Stat, Bar, Btn, Note)
-    screens/        Paddock, Pilota, Allenamento, Finanze, Scuderia,
-                    Classifiche, Storia, overlay di fine weekend e di fine anno
+    screens/        Paddock, Pilota, Allenamento, Calendario, Finanze,
+                    Scuderia, Contratti, Classifiche, Storia, overlay di fine
+                    weekend e di fine anno
     race/           griglia di partenza, tracciato, torre dei tempi, striscia
                     dei distacchi, comandi, forma procedurale del circuito
   state/raceSession.ts  la gara in corso, fuori dallo store: contiene il
@@ -510,6 +571,7 @@ engine/
   types.ts          modello dati completo del mondo
   driver.ts         creazione, newgen, overall, curve di età, ritiro
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
+  calendar.ts       calendario della stagione: date vere, gare, pause, capienza
   training.ts       sessioni, tetti, scelta del minigioco, applicazione crescita
   curves.ts         sigmoidi, curve di età, rendimenti decrescenti
   progression.ts    crescita settimanale, sovrallenamento, stanchezza
@@ -528,7 +590,7 @@ engine/
     tracks.ts       12 circuiti di fantasia, parametrizzati sui valori reali
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              77 test: rng, curve e modelli, gara, gara live,
+tests/              80 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -566,7 +628,7 @@ ugualmente distinguibili non esistono — il validatore lo dice chiaramente — 
 ## Comandi
 
 ```bash
-npm test               # vitest, 34 test
+npm test               # vitest, 80 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
@@ -600,9 +662,10 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 **Fatto** — la Modalità Pilota è navigabile:
 
 - [x] Vite + React + TypeScript + Tailwind, layout orizzontale
-- [x] Hub: Paddock, Pilota, Allenamento, Finanze, Scuderia, Classifiche, Storia
+- [x] Hub: Paddock, Pilota, Allenamento, Calendario, Finanze, Scuderia, Contratti, Classifiche, Storia
 - [x] Ciclo settimanale completo: allenamento → weekend → fine stagione
-- [x] Salvataggio automatico con Zustand `persist`
+- [x] Calendario della stagione con date vere, pause e capienza di allenamento per tipo di settimana
+- [x] Salvataggio automatico con Zustand `persist`, con migrazione dei salvataggi vecchi
 
 - [x] Vista gara: griglia, tracciato SVG, torre dei tempi, striscia dei distacchi, strategia
 
@@ -612,8 +675,7 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 - [ ] Qualifica: le tre decisioni e il giro lanciato
 - [ ] Libere: la direzione di assetto
 - [ ] Mercato dello staff personale (il motore c'è già, manca la schermata)
-- [ ] Contratti e offerte di fine stagione
-- [ ] Slot di salvataggio multipli e migrazioni di versione
+- [ ] Slot di salvataggio multipli
 
 **Poi**:
 
