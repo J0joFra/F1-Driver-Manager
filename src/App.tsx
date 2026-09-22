@@ -25,7 +25,7 @@ export function App() {
   const lastWeek = useGame((s) => s.lastWeek);
   const lastSeason = useGame((s) => s.lastSeason);
   const pendingRace = useGame((s) => s.pendingRace);
-  const offersOpen = (world?.offers.length ?? 0) > 0;
+  const offersOpen = (world?.offers?.length ?? 0) > 0;
   const raceRunning = useGame((s) => s.raceRunning);
   const gridReady = useGame((s) => s.gridReady);
   const openGrid = useGame((s) => s.openGrid);

@@ -17,7 +17,7 @@ export function Contracts() {
   const accept = useGame((s) => s.acceptOffer);
   const me = player(world)!;
   const team = teamOf(world, me);
-  const offers = world.offers;
+  const offers = world.offers ?? [];
 
   const seasonPoints = world.standings[me.id] ?? 0;
   const last = me.history[me.history.length - 1];

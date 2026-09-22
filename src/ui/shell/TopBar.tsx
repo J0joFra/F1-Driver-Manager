@@ -12,7 +12,7 @@ export function TopBar({ onAdvance, busy }: { onAdvance: () => void; busy: boole
   const race = nextRace(world);
   const raceWeek = isRaceWeek(world);
   const seasonOver = world.week >= seasonWeeks;
-  const offersOpen = world.offers.length > 0;
+  const offersOpen = (world.offers?.length ?? 0) > 0;
 
   return (
     <header className="h-[34px] shrink-0 border-b border-line bg-panel flex items-center gap-3 px-3 font-mono text-2xs">

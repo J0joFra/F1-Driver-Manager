@@ -50,7 +50,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 52 test
+npm test                      # 56 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -285,6 +285,33 @@ sedile a vent'anni sarebbe una fine di carriera decisa da un tiro di dado.
 solo dopo due o tre stagioni, quindi il mondo viene fatto avanzare dal motore,
 iniettato nel salvataggio e controllato nell'interfaccia.
 
+## I salvataggi sopravvivono agli aggiornamenti
+
+Il mondo è un oggetto che cresce a ogni funzione nuova: `offers` non esisteva
+prima dei contratti, `talentAnchor` prima dell'anti-inflazione, `short` sulle
+scuderie prima delle colonne strette. Un salvataggio scritto prima non li ha, e
+leggerli manda in crash l'app all'avvio — **schermo nero, senza un modo per
+uscirne**. È successo davvero.
+
+Due difese, entrambe necessarie:
+
+- **`engine/migrate.ts`** riempie i campi mancanti quando il salvataggio viene
+  riletto. Una carriera iniziata con una versione precedente riprende dalla
+  settimana in cui era rimasta, non da zero. Quando il salvataggio è troppo
+  rovinato per essere recuperato la funzione restituisce `null` e l'app riparte
+  dalla creazione della carriera, invece di rompersi.
+- **`ui/shell/ErrorBoundary.tsx`** intercetta qualunque eccezione in fase di
+  render e mostra il messaggio con un pulsante per cancellare il salvataggio.
+  Senza, un'eccezione smonta l'albero di React e lascia una pagina vuota.
+
+Regola che ne segue: **ogni campo nuovo del mondo vuole una riga in
+`migrateWorld` e un incremento di `SAVE_VERSION`.**
+
+`npm run check:migration` riproduce il difetto vero — carica un salvataggio
+senza `offers` e verifica che la carriera riprenda — e controlla anche che la
+rete di sicurezza scatti su un salvataggio corrotto, così non resta codice
+morto.
+
 ## Soldi e staff personale
 
 L'ingaggio non è un numero di vanità: è la risorsa che finanzia la tua crescita. È questo che trasforma la schermata dei contratti nella più importante del gioco.
@@ -414,6 +441,7 @@ engine/
   driver.ts         creazione, newgen, overall, curve di età, ritiro
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   training.ts       sessioni, tetti, scelta del minigioco, applicazione crescita
+  migrate.ts        recupera i salvataggi scritti da versioni precedenti
   race.ts           il modello: formule di gara, gara veloce, qualifica
   liveRace.ts       la stessa gara avanzata a passi, con i comandi del giocatore
   regulations.ts    sviluppo monoposto, handicap, budget cap, prestigio, reset
@@ -424,10 +452,12 @@ engine/
     tracks.ts       12 circuiti di fantasia, parametrizzati sui valori reali
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              52 test: rng, gara, gara live, allenamento, mondo, contratti
+tests/              56 test: rng, gara, gara live, allenamento, mondo,
+                    contratti, migrazione dei salvataggi
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
 tools/check-offers.mjs verifica il flusso delle offerte di contratto
+tools/check-migration.mjs  carica un salvataggio vecchio e uno corrotto
 ```
 
 ### Perché i nomi sono di fantasia
