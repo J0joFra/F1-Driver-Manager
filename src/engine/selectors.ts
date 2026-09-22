@@ -1,7 +1,8 @@
 import type { Driver, SeasonWeek, Team, World } from './types.js';
 import { getTrack } from './data/tracks.js';
 import { driverStandings, SEASON_WEEKS } from './season.js';
-import { raceCountOf, weekendDays, WEEK_LABEL, type WeekKind } from './calendar.js';
+import { dayDate, raceCountOf, weekendDays, WEEK_LABEL, type WeekKind } from './calendar.js';
+import { RACE_DAY } from './days.js';
 
 /** Query di sola lettura sul mondo. Nessuna muta lo stato. */
 
@@ -34,6 +35,17 @@ export function weekKind(world: World): WeekKind {
 
 export function weekLabel(world: World): string {
   return WEEK_LABEL[weekKind(world)];
+}
+
+/** La data di oggi nel mondo: settimana più giorno della settimana. */
+export function today(world: World): Date | null {
+  const week = currentWeek(world);
+  return week ? dayDate(world.year, week, world.dayOfWeek) : null;
+}
+
+/** Oggi si corre. */
+export function isRaceDay(world: World): boolean {
+  return isRaceWeek(world) && world.dayOfWeek === RACE_DAY;
 }
 
 export interface NextRace {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, Flag, Moon, Snowflake, Sun, Wrench } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
@@ -9,7 +9,8 @@ import {
   weekendDays, weekMonday, WEEK_LABEL, WEEK_TRAINING_CAPACITY,
   type SeasonWeek, type WeekKind,
 } from '../../engine/calendar.js';
-import type { Region } from '../../engine/types.js';
+import type { Driver, Region, World } from '../../engine/types.js';
+import { MonthGrid } from '../calendar/MonthGrid.js';
 import { Panel, Stat } from '../components/kit.js';
 
 const KIND_ICON: Record<WeekKind, LucideIcon> = {
@@ -37,16 +38,87 @@ const KIND_COLOUR: Record<WeekKind, string> = {
 };
 
 /**
- * Il calendario della stagione.
+ * Il calendario della stagione, in due viste.
+ *
+ * **Mese** è la griglia a sette colonne dei manageriali: serve a pianificare,
+ * perché il colpo d'occhio dice dove sono i weekend e quanto fiato c'è in
+ * mezzo. **Stagione** è l'anno intero in tabella: serve a cercare.
  *
  * Non è solo una vista: il carattere della settimana decide quanto ci si può
- * allenare. Sei sessioni in un weekend di gara, dodici durante i test, zero
- * nella pausa estiva — dove però si recupera. Vederlo tutto insieme serve a
- * pianificare, non solo a sapere che giorno è.
+ * allenare, e il tempo scorre un giorno alla volta.
  */
 export function Calendar() {
   const world = useGame((s) => s.world)!;
+  const plan = useGame((s) => s.plan);
   const me = player(world)!;
+  const current = world.schedule[world.week];
+  const totalRaces = raceCountOf(world.schedule);
+
+  const [view, setView] = useState<'mese' | 'stagione'>('mese');
+  const [month, setMonth] = useState(() => monthOfToday(world));
+
+  return (
+    <div className="h-full grid grid-cols-[1fr_228px] gap-2 min-h-0">
+      <Panel
+        title={view === 'mese' ? `${monthName(month)} ${world.year}` : `Stagione ${world.year}`}
+        bodyClass="p-0 flex flex-col min-h-0"
+        tag={
+          <div className="flex items-center gap-1">
+            <span className="mr-1">{world.round}/{totalRaces} gare</span>
+            {view === 'mese' && (
+              <>
+                <NavButton label="‹" onClick={() => setMonth((m) => Math.max(0, m - 1))} />
+                <NavButton label="›" onClick={() => setMonth((m) => Math.min(11, m + 1))} />
+                <NavButton label="Oggi" onClick={() => setMonth(monthOfToday(world))} />
+              </>
+            )}
+            <div className="flex rounded border border-line overflow-hidden ml-1">
+              {(['mese', 'stagione'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  className={`px-1.5 py-px font-mono text-[9px] capitalize transition
+                    ${view === v ? 'bg-panel3 text-ink' : 'text-dim hover:text-muted'}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
+        }
+      >
+        {view === 'mese'
+          ? <MonthGrid world={world} month={month} plan={plan} />
+          : <SeasonList world={world} me={me} />}
+      </Panel>
+
+      <SidePanels world={world} current={current} me={me} totalRaces={totalRaces} />
+    </div>
+  );
+}
+
+/** Il mese in cui si trova il mondo adesso; a stagione finita, quello del via. */
+function monthOfToday(world: World): number {
+  const week = world.schedule[world.week] ?? world.schedule[world.schedule.length - 1];
+  return week ? weekMonday(world.year, week).getUTCMonth() : 2;
+}
+
+function NavButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded border border-line px-1.5 py-px font-mono text-[9px]
+        text-dim hover:text-ink hover:border-dim transition"
+    >
+      {label}
+    </button>
+  );
+}
+
+/** L'anno intero in tabella: serve a cercare, dove il mese serve a pianificare. */
+function SeasonList({ world, me }: { world: World; me: Driver }) {
   const scroller = useRef<HTMLDivElement>(null);
   const currentRow = useRef<HTMLDivElement>(null);
 
@@ -55,20 +127,13 @@ export function Calendar() {
     currentRow.current?.scrollIntoView({ block: 'center' });
   }, []);
 
-  const current = world.schedule[world.week];
-  const totalRaces = raceCountOf(world.schedule);
   const resultFor = (round: number | null) =>
     round === null ? null : world.results[round - 1] ?? null;
 
   let lastMonth = -1;
 
   return (
-    <div className="h-full grid grid-cols-[1fr_228px] gap-2 min-h-0">
-      <Panel
-        title={`Stagione ${world.year}`}
-        tag={`${world.round}/${totalRaces} gare corse`}
-        bodyClass="p-0 flex flex-col min-h-0"
-      >
+    <>
         <div className="grid grid-cols-[30px_46px_18px_1fr_86px_40px] gap-1.5 px-3 py-1.5
           border-b border-line shrink-0 field-label">
           <span>Sett.</span>
@@ -149,9 +214,22 @@ export function Calendar() {
             );
           })}
         </div>
-      </Panel>
+    </>
+  );
+}
 
-      <div className="flex flex-col gap-2 min-h-0">
+/**
+ * La colonna di destra: cosa chiede oggi e cosa resta dell'anno. Resta
+ * identica fra le due viste, perché la domanda non cambia con l'impaginazione.
+ */
+function SidePanels({ world, current, me, totalRaces }: {
+  world: World;
+  current: SeasonWeek | undefined;
+  me: Driver;
+  totalRaces: number;
+}) {
+  return (
+    <div className="flex flex-col gap-2 min-h-0">
         <Panel title="Questa settimana" className="shrink-0" bodyClass="p-2.5">
           {current ? (
             <>
@@ -233,10 +311,10 @@ export function Calendar() {
             momento dell'anno in cui la stanchezza scende da sola.
           </p>
         </Panel>
-      </div>
     </div>
   );
 }
+
 
 function nextOf(
   schedule: readonly SeasonWeek[],
