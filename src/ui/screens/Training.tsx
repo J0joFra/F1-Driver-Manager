@@ -2,9 +2,11 @@ import { Dumbbell, RotateCcw } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
 import { isRaceWeek, player } from '../../engine/selectors.js';
 import type { AttributeKey, TrainingCategory } from '../../engine/types.js';
-import { CATEGORY_EFFECTS, TRAINING_CATEGORIES, emptyPlan, pickMinigame, planTotal, trainingLimits } from '../../engine/training.js';
-import { staffGrowthMultiplier } from '../../engine/staff.js';
-import { ageGrowthFactor } from '../../engine/driver.js';
+import {
+  CATEGORY_EFFECTS, MINIGAME_AUTO, TRAINING_CATEGORIES, emptyPlan,
+  pickMinigame, planTotal, trainingLimits,
+} from '../../engine/training.js';
+import { previewTraining } from '../../engine/progression.js';
 import { ATTRIBUTE_COLOURS, Bar, Btn, Note, Panel, Pips } from '../components/kit.js';
 import { ATTR_LABELS, CATEGORY_LABELS, MINIGAME_LABELS } from '../format.js';
 
@@ -39,16 +41,10 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
     setPlan(next);
   };
 
-  // Anteprima della crescita: stessa formula del motore, senza applicarla.
-  const staffMult = staffGrowthMultiplier(me);
-  const ageMult = ageGrowthFactor(me.age);
-  const gainOf = (key: AttributeKey, category: TrainingCategory) => {
-    const weight = CATEGORY_EFFECTS[category][key];
-    if (!weight || plan[category] <= 0) return 0;
-    const gap = me.caps[key] - me.attrs[key];
-    if (gap <= 0) return 0;
-    return 0.135 * weight * plan[category] * staffMult * ageMult * 0.95 * Math.max(0.12, Math.min(1, gap / 15));
-  };
+  // L'anteprima arriva dal motore: è la stessa funzione che poi applica la
+  // crescita, quindi quello che si legge qui è quello che succede davvero.
+  const preview = previewTraining(me, plan, limits.perCategory, limits.total, MINIGAME_AUTO);
+  const gainOf = (key: AttributeKey) => preview.gains[key] ?? 0;
 
   return (
     <div className="h-full grid grid-cols-[264px_1fr] gap-2 min-h-0">
@@ -114,7 +110,7 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
           {TRAINING_CATEGORIES.map((c) => {
             const key = primaryAttribute(c);
             if (!key) return null;
-            const gain = gainOf(key, c);
+            const gain = gainOf(key);
             return (
               <div key={c} className="py-1.5 border-b border-line/50 last:border-0">
                 <div className="flex items-baseline justify-between gap-2">
@@ -136,6 +132,29 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
         </Panel>
 
         <div className="shrink-0 flex flex-col gap-1.5">
+          <div className="panel px-2.5 py-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="field-label">Stanchezza</span>
+              <span className="font-mono text-2xs tnum">
+                <span className={me.fatigue > 70 ? 'text-bad' : me.fatigue > 40 ? 'text-accent' : 'text-primary'}>
+                  {Math.round(me.fatigue)}
+                </span>
+                <span className="text-dim">
+                  {' '}{preview.fatigueGain >= 0 ? '+' : '−'}{Math.abs(preview.fatigueGain).toFixed(0)} questa sett.
+                </span>
+              </span>
+            </div>
+            <div className="mt-1">
+              <Bar
+                value={me.fatigue}
+                colour={me.fatigue > 70 ? '#E8283C' : me.fatigue > 40 ? '#FBBF24' : '#10B981'}
+                height={4}
+              />
+            </div>
+            <p className="font-mono text-[8.5px] text-dim mt-1 leading-relaxed">
+              Oltre l'85% del monte si cresce di meno; la stanchezza fa sbagliare in gara.
+            </p>
+          </div>
           {minigame && (
             <div className="panel px-2.5 py-2 flex items-center justify-between gap-2">
               <div className="min-w-0">
@@ -147,10 +166,6 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
               </span>
             </div>
           )}
-          <Note>
-            Lo staff alza i tetti, non il potenziale: quello è fissato alla nascita. Il minigioco
-            modula la crescita fra 0.85× e 1.30×, ma non la decide.
-          </Note>
           {free > 0 && (
             <Note tone="warn">
               {free} session{free > 1 ? 'i' : 'e'} non assegnate: vanno perse.

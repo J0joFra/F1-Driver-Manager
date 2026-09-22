@@ -13,6 +13,7 @@ import {
   aiTrainingPlan, applyTraining, MINIGAME_AUTO, minigameMultiplier,
   pickMinigame, trainingLimits, validatePlan,
 } from './training.js';
+import { entourageEfficiency } from './staff.js';
 
 /**
  * Il mondo si simula da solo.
@@ -156,9 +157,13 @@ export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
       const mult = opts.minigameScore === undefined
         ? MINIGAME_AUTO
         : minigameMultiplier(opts.minigameScore);
-      applyTraining(d, opts.plan, minigame ? mult : MINIGAME_AUTO);
+      applyTraining(d, opts.plan, minigame ? mult : MINIGAME_AUTO, isRaceWeek);
     } else {
-      applyTraining(d, aiTrainingPlan(d, limits, rng.next()), MINIGAME_AUTO);
+      const team = d.teamId ? world.teams[d.teamId] : null;
+      applyTraining(
+        d, aiTrainingPlan(d, limits, rng.next()), MINIGAME_AUTO, isRaceWeek,
+        entourageEfficiency(team?.prestige ?? 30),
+      );
     }
   }
 
@@ -229,7 +234,7 @@ export function endSeason(world: World): SeasonSummary {
   const retired: string[] = [];
   for (const d of Object.values(world.drivers)) {
     if (d.retired) continue;
-    applyAging(d);
+    applyAging(d, rng);
     if (rng.chance(retirementChance(d))) {
       d.retired = true;
       if (d.teamId) {

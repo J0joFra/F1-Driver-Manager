@@ -16,6 +16,10 @@ describe('salvataggi di versioni precedenti', () => {
     for (const team of Object.values(w.teams as Record<string, Record<string, unknown>>)) {
       delete team.short;
     }
+    for (const d of Object.values(w.drivers as Record<string, Record<string, unknown>>)) {
+      delete d.fatigue;
+      delete d.experience;
+    }
     return w;
   }
 
@@ -27,6 +31,20 @@ describe('salvataggi di versioni precedenti', () => {
     for (const team of Object.values(migrated!.teams)) {
       expect(team.short, team.name).toBeTruthy();
     }
+    for (const d of Object.values(migrated!.drivers)) {
+      expect(typeof d.fatigue, d.name).toBe('number');
+      expect(typeof d.experience, d.name).toBe('number');
+    }
+  });
+
+  it("stima l'esperienza dalle gare già disputate", () => {
+    const w = oldSave();
+    const drivers = w.drivers as Record<string, { career: { starts: number } }>;
+    const veteranId = Object.keys(drivers)[0]!;
+    drivers[veteranId]!.career.starts = 120;
+    const migrated = migrateWorld(w)!;
+    // Un veterano non riparte da zero: l'esperienza è ciò che lo tiene in pista.
+    expect(migrated.drivers[veteranId]!.experience).toBeGreaterThan(300);
   });
 
   it('conserva la carriera: non è un reset mascherato', () => {

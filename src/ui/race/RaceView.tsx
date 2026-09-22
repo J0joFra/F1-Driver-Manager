@@ -47,7 +47,7 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
       ? null
       : underSafetyCar(race)
         ? 'Safety car · finestra box'
-        : me.wear > 84
+        : me.tyre.wear > 84
           ? 'Gomme finite · decidi'
           : gapAhead !== null && gapAhead < 1
             ? 'In zona DRS'
@@ -118,7 +118,7 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
         </span>
         {me && (
           <span className="font-mono text-2xs text-muted tnum">
-            P{myIndex + 1} · {me.compound} {Math.round(me.wear)}%
+            P{myIndex + 1} · {me.tyre.compound} {Math.round(me.tyre.wear)}%
           </span>
         )}
         <span className="flex-1" />

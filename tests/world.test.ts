@@ -186,7 +186,7 @@ describe('proprietà del mondo su più semi', () => {
     const sorted = runs.map((r) => r.drift).sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)]!;
     expect(median).toBeLessThan(3.5);
-    for (const r of runs) expect(r.drift, `seed ${r.seed}`).toBeLessThan(8);
+    for (const r of runs) expect(r.drift, `seed ${r.seed}`).toBeLessThan(7);
   });
 });
 

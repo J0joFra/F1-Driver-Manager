@@ -15,6 +15,31 @@ export const ATTRIBUTE_KEYS: readonly AttributeKey[] = [
   'speed', 'consistency', 'tyres', 'starts', 'wet', 'technical', 'composure',
 ];
 
+/**
+ * Carattere di ogni attributo.
+ *
+ * `peakAge` è l'età in cui smette di crescere e comincia a calare; `physical`
+ * dice se il calo lo tocca davvero. È questa distinzione che dà un senso ai
+ * veterani: a 34 anni i riflessi se ne sono andati, ma il feedback tecnico e
+ * il sangue freddo sono al massimo della carriera.
+ */
+export interface AttributeProfile {
+  peakAge: number;
+  physical: boolean;
+  /** quanto cresce in fretta, a parità di tutto il resto */
+  baseGain: number;
+}
+
+export const ATTRIBUTE_PROFILE: Record<AttributeKey, AttributeProfile> = {
+  speed:       { peakAge: 26, physical: true,  baseGain: 2.6 },
+  starts:      { peakAge: 25, physical: true,  baseGain: 2.2 },
+  consistency: { peakAge: 30, physical: false, baseGain: 1.8 },
+  wet:         { peakAge: 29, physical: false, baseGain: 1.5 },
+  tyres:       { peakAge: 31, physical: false, baseGain: 1.4 },
+  composure:   { peakAge: 32, physical: false, baseGain: 1.2 },
+  technical:   { peakAge: 33, physical: false, baseGain: 1.1 },
+};
+
 export type Compound = 'S' | 'M' | 'H';
 export type EngineMode = 'conserve' | 'normal' | 'push';
 
@@ -85,6 +110,13 @@ export interface Driver {
   form: number;
   /** 0–100: morale */
   morale: number;
+  /** 0–100: stanchezza accumulata. Sale con il carico, scende col riposo. */
+  fatigue: number;
+  /**
+   * 0–1000: esperienza, cresce sempre e non cala mai. È ciò che compensa il
+   * declino fisico e tiene competitivo un veterano.
+   */
+  experience: number;
   teamId: string | null;
   contractYears: number;
   /** ingaggio annuo lordo in euro */
@@ -137,6 +169,8 @@ export interface Track {
   safetyCar: number;
   /** probabilità di pioggia */
   rain: number;
+  /** temperatura media dell'asfalto in °C: decide la finestra termica */
+  trackTemp: number;
 }
 
 export interface RaceResult {

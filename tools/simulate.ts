@@ -10,6 +10,10 @@
 import { createWorld, endSeason, advanceWeek, SEASON_WEEKS } from '../src/engine/index.js';
 import { driverStandings, constructorStandings } from '../src/engine/season.js';
 import { overall, potentialOverall } from '../src/engine/driver.js';
+import {
+  averageMetrics, championTurnover, checkBalance, seasonMetrics, TARGETS,
+  type SeasonMetrics,
+} from '../src/engine/balance.js';
 import type { World } from '../src/engine/types.js';
 
 function arg(name: string, fallback: number): number {
@@ -39,6 +43,7 @@ interface Snapshot {
 }
 
 const log: Snapshot[] = [];
+const allMetrics: SeasonMetrics[] = [];
 const titlesByTeam = new Map<string, number>();
 const t0 = performance.now();
 
@@ -66,6 +71,7 @@ for (let i = 0; i < seasons; i++) {
   const champion = world.drivers[championId];
   const topTeamId = cons[0]?.teamId ?? '';
 
+  allMetrics.push(seasonMetrics(world));
   const summary = endSeason(world);
   titlesByTeam.set(summary.championTeamId, (titlesByTeam.get(summary.championTeamId) ?? 0) + 1);
 
@@ -117,6 +123,27 @@ console.log(`Età media della griglia ............ ${first.meanAge.toFixed(1)} �
 console.log(`Piloti attivi ...................... ${first.activeDrivers} → ${last.activeDrivers}`);
 console.log(`Ritiri per gara .................... ${(avgDnf * 100).toFixed(1)}%`);
 console.log(`Azzeramenti regolamentari .......... ${log.filter((l) => l.reset).length}`);
+const avg = averageMetrics(allMetrics);
+console.log('\nMetriche di bilanciamento (media sulle stagioni):');
+for (const row of checkBalance(avg)) {
+  const value = row.name.includes('Rate') || row.name.includes('Win')
+    ? `${(row.value * 100).toFixed(1)}%`
+    : row.value.toFixed(2);
+  const band = row.name.includes('Rate') || row.name.includes('Win')
+    ? `${(row.target.min * 100).toFixed(0)}–${(row.target.max * 100).toFixed(0)}%`
+    : `${row.target.min}–${row.target.max}`;
+  console.log(
+    `  ${row.ok ? 'ok  ' : 'FUORI'} ${row.name.padEnd(18)} ${value.padStart(8)}   obiettivo ${band}`,
+  );
+}
+const turnover = championTurnover(world);
+const turnoverOk = turnover >= TARGETS.championTurnover!.min;
+console.log(
+  `  ${turnoverOk ? 'ok  ' : 'FUORI'} ${'championTurnover'.padEnd(18)} ${turnover.toFixed(2).padStart(8)}` +
+  `   obiettivo ${TARGETS.championTurnover!.min}–${TARGETS.championTurnover!.max}`,
+);
+console.log(`  ..... centro gruppo      ${avg.midfieldSpread.toFixed(2)}`);
+
 console.log('\nTitoli per scuderia:');
 for (const [teamId, n] of [...titlesByTeam].sort((a, b) => b[1] - a[1])) {
   const name = world.teams[teamId]?.name ?? teamId;

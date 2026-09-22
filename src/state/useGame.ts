@@ -60,7 +60,7 @@ interface GameState {
  * Sale a ogni campo nuovo nel mondo. La `migrate` qui sotto riempie ciò che
  * manca: un salvataggio vecchio deve continuare una carriera, non cancellarla.
  */
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 export const useGame = create<GameState>()(
   persist(

@@ -1,5 +1,8 @@
-import { ATTRIBUTE_KEYS, type AttributeKey, type Attributes, type Driver } from './types.js';
-import { clamp, type Rng } from './rng.js';
+import {
+  ATTRIBUTE_KEYS, ATTRIBUTE_PROFILE, type AttributeKey, type Attributes, type Driver,
+} from './types.js';
+import { type Rng } from './rng.js';
+import { clamp } from './curves.js';
 import { FIRST_NAMES, LAST_NAMES, NATIONALITIES } from './data/names.js';
 
 /** Peso di ogni attributo nel calcolo dell'overall. Somma = 1. */
@@ -20,16 +23,16 @@ export function potentialOverall(d: Driver): number {
 }
 
 /**
- * Curva di crescita per età. Un pilota cresce in fretta fino a ~24, rallenta,
- * e dopo i 32 non cresce più: nessuno staff può cambiarlo.
+ * Esperienza: cresce sempre, con rendimenti decrescenti, e non cala mai.
+ * È ciò che tiene competitivo un veterano quando i riflessi se ne vanno.
  */
-export function ageGrowthFactor(age: number): number {
-  return clamp(1.25 - Math.max(0, age - 20) * 0.1, 0, 1.25);
+export function experienceGain(driver: Driver): number {
+  return 8 * Math.exp(-driver.experience / 400);
 }
 
-/** Punti persi a stagione dopo il picco, sugli attributi fisici. */
-export function ageDecline(age: number): number {
-  return age >= 31 ? (age - 30) * 0.55 : 0;
+/** Il vantaggio dell'esperienza sul passo gara: fino a circa otto centesimi. */
+export function experienceBonus(driver: Driver): number {
+  return (clamp(driver.experience, 0, 1000) / 1000) * 0.08;
 }
 
 /** Estrae un nome non ancora in uso; dopo qualche tentativo si arrende e accetta un omonimo. */
@@ -97,6 +100,8 @@ export function createNewgen(rng: Rng, opts: NewgenOptions): Driver {
     reputation: clamp(8 + rng.normal() * 4, 1, 30),
     form: 50 + rng.normal() * 8,
     morale: 60,
+    fatigue: 0,
+    experience: 0,
     teamId: null,
     contractYears: 0,
     salary: 0,
@@ -137,17 +142,28 @@ export function retirementChance(d: Driver): number {
   return clamp(p, 0, 1);
 }
 
-/** Invecchiamento di fine stagione: gli attributi fisici calano, l'esperienza no. */
-export function applyAging(d: Driver): void {
+/**
+ * Invecchiamento di fine stagione.
+ *
+ * Ogni attributo ha il proprio picco: i riflessi se ne vanno a ventisei anni,
+ * il feedback tecnico continua a crescere fino a trentatré. Un trentaquattrenne
+ * non è un ventiseienne peggiore — è un pilota diverso.
+ */
+export function applyAging(d: Driver, rng: Rng): void {
   d.age += 1;
-  const decline = ageDecline(d.age);
-  if (decline <= 0) return;
-  for (const k of ['speed', 'starts', 'wet'] as const) {
-    d.attrs[k] = clamp(d.attrs[k] - decline, 20, 99);
+
+  for (const k of ATTRIBUTE_KEYS) {
+    const profile = ATTRIBUTE_PROFILE[k];
+    if (!profile.physical || d.age <= profile.peakAge) continue;
+    const yearsPast = d.age - profile.peakAge;
+    // Il calo accelera, ma con calma: a trentatré anni un pilota deve essere
+    // ancora in griglia, altrimenti la carriera dura otto stagioni e il
+    // campionato non ha memoria.
+    const decline = (0.5 + yearsPast * 0.22) * (0.85 + rng.next() * 0.3);
+    d.attrs[k] = clamp(d.attrs[k] - decline, 25, 99);
   }
-  d.attrs.consistency = clamp(d.attrs.consistency - decline * 0.4, 20, 99);
-  // L'esperienza continua a salire anche quando il resto scende.
-  for (const k of ['technical', 'composure'] as const) {
-    d.attrs[k] = clamp(Math.min(d.caps[k], d.attrs[k] + 0.35), 20, 99);
-  }
+
+  d.experience = clamp(d.experience + experienceGain(d) * 24, 0, 1000);
+  // Una stagione lascia il segno, ma l'inverno serve a questo.
+  d.fatigue = clamp(d.fatigue * 0.35, 0, 100);
 }
