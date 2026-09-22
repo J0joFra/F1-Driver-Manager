@@ -17,7 +17,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "shots": "node tools/screenshots.mjs",
-    "check:offers": "node tools/check-offers.mjs"
+    "check:offers": "node tools/check-offers.mjs",
+    "check:migration": "node tools/check-migration.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

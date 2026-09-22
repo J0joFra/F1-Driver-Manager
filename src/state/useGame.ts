@@ -4,6 +4,7 @@ import type { RaceResult, TrainingPlan, World } from '../engine/types.js';
 import { advanceWeek, endSeason, finishPendingRace, takeOffer, type SeasonSummary, type WeekReport } from '../engine/world.js';
 import { startCareer, type StartCareerOptions } from '../engine/career.js';
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
+import { migrateWorld } from '../engine/migrate.js';
 import { beginRace, currentRace, endRace } from './raceSession.js';
 
 /**
@@ -55,7 +56,11 @@ interface GameState {
   dismissSummary: () => void;
 }
 
-const SAVE_VERSION = 1;
+/**
+ * Sale a ogni campo nuovo nel mondo. La `migrate` qui sotto riempie ciò che
+ * manca: un salvataggio vecchio deve continuare una carriera, non cancellarla.
+ */
+const SAVE_VERSION = 2;
 
 export const useGame = create<GameState>()(
   persist(
@@ -91,7 +96,7 @@ export const useGame = create<GameState>()(
       advance: (plan, minigameScore) => {
         const world = get().world;
         if (!world || world.week >= SEASON_WEEKS || get().pendingRace) return null;
-        if (world.offers.length > 0) return null;
+        if ((world.offers?.length ?? 0) > 0) return null;
         // Se il giocatore è in griglia la settimana si ferma prima del via: la
         // gara la corre lui, e sarà `completeRace` a registrarla.
         const racing = world.seat.mode === 'pilota';
@@ -151,6 +156,12 @@ export const useGame = create<GameState>()(
       name: 'f1dm-save-v1',
       version: SAVE_VERSION,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persisted) => {
+        const state = persisted as { world?: unknown } | undefined;
+        const world = migrateWorld(state?.world);
+        // Un salvataggio irrecuperabile riparte pulito invece di rompere l'app.
+        return { ...(state ?? {}), world, pendingRace: null } as never;
+      },
       // La gara in corso non si salva: contiene un generatore casuale, che è
       // una chiusura. Chi chiude l'app in gara la ritrova da rigiocare.
       partialize: (s) => ({ world: s.world, screen: s.screen, pendingRace: s.pendingRace }) as never,
