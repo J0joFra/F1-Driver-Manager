@@ -159,9 +159,13 @@ export interface Team {
   futureFocus: number;
 }
 
+/** Macro-area geografica: decide l'ordine delle tappe nel calendario. */
+export type Region = 'oceania' | 'asia' | 'middleEast' | 'europe' | 'americas';
+
 export interface Track {
   id: string;
   name: string;
+  region: Region;
   /** tempo sul giro di riferimento in secondi per una macchina da 100 */
   baseLap: number;
   laps: number;
@@ -175,6 +179,10 @@ export interface Track {
   rain: number;
   /** temperatura media dell'asfalto in °C: decide la finestra termica */
   trackTemp: number;
+  /** ora di partenza locale, 0–23 */
+  localStart: number;
+  /** fuso del circuito rispetto a UTC, in ore */
+  utcOffset: number;
 }
 
 export interface RaceResult {

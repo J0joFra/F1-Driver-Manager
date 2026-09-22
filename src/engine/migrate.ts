@@ -1,7 +1,7 @@
 import type { World } from './types.js';
 import { POTENTIAL_ANCHOR } from './market.js';
 import { TEAM_SEEDS } from './data/teams.js';
-import { buildCalendar, SEASON_WEEKS } from './calendar.js';
+import { buildCalendar, seasonStartDay, SEASON_WEEKS, type SeasonWeek } from './calendar.js';
 import { createRng, hashSeed } from './rng.js';
 
 /**
@@ -26,12 +26,23 @@ export function migrateWorld(raw: unknown): World | null {
     return null;
   }
 
-  // Il calendario era una lista di id di circuito; ora ogni settimana ha un
-  // carattere e una data. Si ricostruisce mantenendo il numero di gare, e la
-  // settimana corrente si riporta in scala sulla nuova lunghezza.
+  // Il calendario ha cambiato forma due volte: prima era una lista di id di
+  // circuito, poi quaranta settimane ancorate a febbraio, ora quarantaquattro
+  // ancorate al calendario vero. In tutti e tre i casi si ricostruisce
+  // mantenendo il numero di gare, e la settimana corrente si riporta in scala
+  // sulla nuova lunghezza: il giocatore ritrova la stagione al punto in cui
+  // l'aveva lasciata, anche se le date sotto sono cambiate.
   const schedule = w.schedule as unknown[];
-  if (schedule.length > 0 && (typeof schedule[0] === 'string' || schedule[0] === null)) {
-    const races = schedule.filter((x) => typeof x === 'string').length || 20;
+  const first = schedule[0] as Partial<SeasonWeek> | string | null | undefined;
+  const legacyList = schedule.length > 0 && (typeof first === 'string' || first === null);
+  const staleShape = !legacyList && schedule.length > 0
+    && (schedule.length !== SEASON_WEEKS
+      || (first as Partial<SeasonWeek>)?.startDay !== seasonStartDay(w.year));
+
+  if (legacyList || staleShape) {
+    const races = legacyList
+      ? schedule.filter((x) => typeof x === 'string').length || 20
+      : schedule.filter((x) => (x as Partial<SeasonWeek>)?.trackId != null).length || 20;
     const progress = typeof w.week === 'number' ? w.week / Math.max(1, schedule.length) : 0;
     w.schedule = buildCalendar(w.year, races, createRng(hashSeed('calendario', w.seed ?? w.year)));
     w.week = Math.min(SEASON_WEEKS - 1, Math.round(progress * SEASON_WEEKS));

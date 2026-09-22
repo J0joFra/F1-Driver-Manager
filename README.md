@@ -51,7 +51,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 80 test
+npm test                      # 83 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -235,15 +235,16 @@ Quattro sistemi rendono tutto questo possibile, e sono già nel motore:
 In *Soccer Manager* il calendario non è una tabella di consultazione: è
 l'oggetto che fa esistere il tempo. Le partite stanno in giorni veri, le soste
 si vedono, e la programmazione della settimana discende da lì. Qui vale lo
-stesso, con le pause che la Formula 1 ha davvero.
+stesso — ed è ricalcato sul calendario vero della Formula 1, perché la sua
+forma non è arbitraria.
 
-[`engine/calendar.ts`](src/engine/calendar.ts) costruisce le 40 settimane
+[`engine/calendar.ts`](src/engine/calendar.ts) costruisce le 44 settimane
 dell'anno **una volta sola**, quando il mondo nasce, e le salva dentro
 `World.schedule`. Ogni settimana è un oggetto, non un id di circuito:
 
 ```ts
 interface SeasonWeek {
-  index: number;             // 0..39
+  index: number;             // 0..43
   kind: WeekKind;            // testing | race | free | summerBreak | postseason
   startDay: number;          // giorni dal 1° gennaio: il lunedì di quella settimana
   trackId: string | null;
@@ -251,46 +252,112 @@ interface SeasonWeek {
 }
 ```
 
-Le date sono reali. La stagione si ancora al **primo lunedì di febbraio**, e da
-lì `weekMonday(year, week)` e `weekendDays(year, week)` producono giorni che
-cadono nel giorno giusto della settimana: libere venerdì, qualifica sabato,
-gara domenica. Il calendario di un anno bisestile non slitta, perché tutto
-parte da una data e non da un conteggio.
+### Le date vengono prima
+
+Il generatore non conta settimane: calcola **date vere** e poi decide dove
+stanno le gare. Tre àncore, prese dal calendario reale:
+
+| Àncora | Regola | 2026 | 2027 |
+|---|---|---|---|
+| **Apertura** | seconda domenica di marzo | 8 marzo | 14 marzo |
+| **Pausa estiva** | le prime tre domeniche d'agosto | 2–16 agosto | 1–15 agosto |
+| **Finale** | prima domenica di dicembre | 6 dicembre | 5 dicembre |
+
+Sono le stesse date del campionato 2026 vero: apertura l'8 marzo, ultima gara
+prima della pausa il 26 luglio, ripresa il 23 agosto, finale il 6 dicembre.
+Non è una coincidenza cercata — viene fuori da sola una volta che le àncore
+sono quelle giuste.
+
+Ancorare a una data invece che a un conteggio ha una conseguenza pratica:
+`weekendDays(year, week)` produce libere di venerdì, qualifica di sabato e
+gara di domenica **in ogni anno**, bisestile compreso. Un calendario contato a
+settimane sarebbe scivolato di un giorno ogni quattro anni.
 
 | Tipo di settimana | Quando | Sessioni di allenamento | Recupero |
 |---|---|---|---|
-| **Test invernali** | prime 2 settimane | 12 | — |
+| **Test invernali** | le 2 settimane prima del via | 12 | — |
 | **Settimana libera** | fra due gare | 10 | — |
-| **Settimana di gara** | ~20 volte l'anno | 6 | — |
-| **Pausa estiva** | 3 settimane a fine giugno | 0 | 22 punti di stanchezza |
-| **Dopo-stagione** | ultime settimane | 8 | 6 punti |
+| **Settimana di gara** | 24 volte l'anno | 6 | — |
+| **Pausa estiva** | 3 settimane ad agosto | 0 | 22 punti di stanchezza |
+| **Dopo-stagione** | dopo l'ultima gara | 8 | 6 punti |
 
 Le due colonne a destra sono il motivo per cui il calendario sta nel motore e
 non nell'interfaccia: **`WEEK_TRAINING_CAPACITY` e `WEEK_RECOVERY` sono la
 regola**, e [`training.ts`](src/engine/training.ts) le legge invece di avere una
 soglia propria. Una pausa estiva che non insegna niente sarebbe decorazione; qui
-è l'unico momento dell'anno in cui la stanchezza scende davvero, quindi arrivare
-a giugno logori è una scelta con una conseguenza.
+è l'unico momento dell'anno in cui la stanchezza scende davvero, quindi
+arrivare ad agosto logori è una scelta con una conseguenza.
 
-Le gare non sono distribuite a caso e nemmeno a intervalli fissi: il
-generatore riempie le settimane disponibili a passo `slot/gare`, ma **non
-permette più di due gare consecutive** prima di forzare una settimana libera.
-È la vincola che rende il calendario giocabile, perché tre gare di fila
-lascerebbero un pilota senza modo di recuperare. Un test la verifica su quattro
-seed diversi.
+### Il giro del mondo
+
+Le gare non sono sparse a caso. Il generatore segue un **giro**, diviso in due
+metà dalla pausa estiva:
+
+```
+Oceania → Asia ×2 → Medio Oriente ×2 → Americhe ×2 → Europa ×7
+                    ——— pausa estiva ———
+Europa ×2 → Asia ×2 → Americhe ×4 → Medio Oriente ×2
+```
+
+È la struttura del campionato vero: si apre lontano perché in Europa è ancora
+inverno, si passa l'estate in Europa, e si chiude inseguendo la luce verso
+ovest fino alle notturne del Medio Oriente. Senza la regione il generatore
+produrrebbe un calendario legale ma assurdo — una gara europea incastrata fra
+il Brasile e il finale in Medio Oriente, che è esattamente l'errore che
+compariva prima che l'inventario dei circuiti fosse allineato al giro. Un test
+verifica che nessuna regione ricompaia in un terzo blocco separato, che si
+apra in Oceania e si chiuda in Medio Oriente.
+
+I circuiti sono **31 per 24 gare**: ogni regione ha il suo mazzo mescolato e
+qualche autodromo resta fuori ogni anno. Il calendario ruota da solo, come
+quello vero, senza che nessuno decida quali togliere.
+
+### Il ritmo: triple header e pause lunghe
+
+Le gare si raggruppano in blocchi di una, due o tre weekend separati da
+settimane libere. Le **triple header sono normali** — il 2026 vero ne ha tre —
+e sono proprio loro a liberare le settimane che diventano le pause lunghe di
+primavera. Un calendario di gare tutte distanziate sarebbe regolare e irreale.
+
+I blocchi si decidono prima, poi le settimane libere avanzate si distribuiscono
+fra loro: così la prima e l'ultima gara cadono **sempre** esattamente
+sull'apertura e sul finale, qualunque sia il numero di gare. Quattro gare di
+fila non capitano mai, e un test lo verifica su quattro seed.
+
+### A che ora si corre
+
+Ogni circuito porta `localStart` e `utcOffset`, e il calendario calcola l'ora
+italiana tenendo conto dell'ora legale (ultima domenica di marzo → ultima di
+ottobre). È il dato che un tifoso guarda per primo, e con le trasferte lontane
+cambia tutto: Port Haven parte alle 15:00 locali, che in Italia sono le 5 del
+mattino. Le gare che partono dalle 18:00 in poi sono notturne, e nel calendario
+hanno la luna al posto della bandiera.
 
 La schermata **Calendario** mostra l'anno intero in una tabella — settimana,
-data, evento, risultato, sessioni disponibili — con gli stacchi dei mesi e la
-settimana corrente evidenziata e portata in vista da sola. A destra due
-pannelli: cosa succede questa settimana (con i giorni del weekend, se c'è) e
-cosa resta dell'anno (gare corse e rimaste, stanchezza, prossima pausa,
-prossima gara, fine stagione).
+data, evento con l'ora italiana, risultato, sessioni disponibili — con gli
+stacchi dei mesi e la settimana corrente evidenziata e portata in vista da
+sola. A destra due pannelli: cosa succede questa settimana (regione, giorni del
+weekend, ora locale e ora italiana) e cosa resta dell'anno.
+
+### Un difetto che il calendario lungo ha fatto emergere
+
+La stanchezza si calcolava come `totalLoad * 14 - 4`, dove `totalLoad` è la
+frazione di capienza usata. Riempire il piano di una settimana di gara (6
+sessioni) stancava quindi **esattamente quanto** riempirlo in una libera (10):
+il tipo di settimana non contava. Con 40 settimane non si vedeva; con 44 la
+stanchezza si saturava e la griglia perdeva 7 punti di overall in 40 stagioni
+invece di 4.
+
+Ora conta il numero di sessioni: `totalSessions * 1.4 - 4`. È la stessa formula
+di prima per la settimana da dieci sessioni — quella su cui la crescita era
+stata tarata — ma le settimane di gara costano meno. La deriva è tornata a
+−4.1 punti, misurata su cinque seed, meglio dei −4.3 di partenza.
 
 ---
 
 ## La settimana di gioco
 
-Una stagione dura **40 settimane**, di cui ~20 con una gara. `advanceWeek()` fa avanzare il mondo di una settimana; il [calendario](#il-calendario-della-stagione) decide cosa contiene.
+Una stagione dura **44 settimane**, di cui 24 con una gara. `advanceWeek()` fa avanzare il mondo di una settimana; il [calendario](#il-calendario-della-stagione) decide cosa contiene.
 
 | Giorno | Cosa fai | Durata |
 |---|---|---|
@@ -587,10 +654,10 @@ engine/
   season.ts         weekend, classifiche, aggregati storici
   world.ts          createWorld, advanceWeek, endSeason, simulateSeason
   data/
-    tracks.ts       12 circuiti di fantasia, parametrizzati sui valori reali
+    tracks.ts       31 circuiti di fantasia con regione, fuso e ora di partenza
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              80 test: rng, curve e modelli, gara, gara live,
+tests/              83 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -600,7 +667,7 @@ tools/check-migration.mjs  carica un salvataggio vecchio e uno corrotto
 
 ### Perché i nomi sono di fantasia
 
-«Formula 1», i nomi delle scuderie e quelli dei piloti sono marchi protetti. Team e piloti sono inventati; i circuiti sono parametrizzati sui valori reali (giro 74–97 s, 44–70 giri) ma con nomi e disegni propri. È la stessa scelta di *Motorsport Manager*, e permette di pubblicare sugli store senza problemi.
+«Formula 1», i nomi delle scuderie e quelli dei piloti sono marchi protetti. Team e piloti sono inventati; i circuiti sono parametrizzati sui valori reali (giro 70–105 s, 44–71 giri) ma con nomi e disegni propri. È la stessa scelta di *Motorsport Manager*, e permette di pubblicare sugli store senza problemi.
 
 ### La palette delle scuderie
 
@@ -628,7 +695,7 @@ ugualmente distinguibili non esistono — il validatore lo dice chiaramente — 
 ## Comandi
 
 ```bash
-npm test               # vitest, 80 test
+npm test               # vitest, 83 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
@@ -664,7 +731,7 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 - [x] Vite + React + TypeScript + Tailwind, layout orizzontale
 - [x] Hub: Paddock, Pilota, Allenamento, Calendario, Finanze, Scuderia, Contratti, Classifiche, Storia
 - [x] Ciclo settimanale completo: allenamento → weekend → fine stagione
-- [x] Calendario della stagione con date vere, pause e capienza di allenamento per tipo di settimana
+- [x] Calendario ricalcato su quello vero: date reali, giro del mondo per regioni, triple header, pausa d'agosto, orari locali e italiani
 - [x] Salvataggio automatico con Zustand `persist`, con migrazione dei salvataggi vecchi
 
 - [x] Vista gara: griglia, tracciato SVG, torre dei tempi, striscia dei distacchi, strategia
