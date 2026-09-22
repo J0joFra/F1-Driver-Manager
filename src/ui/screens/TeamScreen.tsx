@@ -1,15 +1,12 @@
 import { useGame } from '../../state/useGame.js';
 import { player, teamOf } from '../../engine/selectors.js';
-import { carPace, CAR_KEYS } from '../../engine/regulations.js';
-import { Note, Panel } from '../components/kit.js';
+import { carPace } from '../../engine/regulations.js';
+import { overall } from '../../engine/driver.js';
+import { Bar, Note, Panel, TeamBadge } from '../components/kit.js';
 import { money } from '../format.js';
 
-const CAR_LABELS: Record<string, string> = {
-  aero: 'Aerodinamica', engine: 'Motore', chassis: 'Telaio', reliability: 'Affidabilità',
-};
-
 /**
- * La scuderia in sola lettura.
+ * La scuderia, in sola lettura.
  *
  * In Modalità Pilota vedi le scelte del team e non puoi cambiarle: è
  * frustrazione voluta, ed è la promessa della Modalità Scuderia.
@@ -18,60 +15,115 @@ export function TeamScreen() {
   const world = useGame((s) => s.world)!;
   const me = player(world)!;
   const team = teamOf(world, me);
-  if (!team) return <Panel title="Scuderia"><p className="text-sm text-muted">Sei senza sedile.</p></Panel>;
+  if (!team) {
+    return <Panel title="Scuderia"><p className="text-xs text-muted">Sei senza sedile.</p></Panel>;
+  }
 
-  const rank = Object.values(world.teams)
-    .sort((a, b) => carPace(b.car) - carPace(a.car))
+  const pace = carPace(team.car);
+  const rank = Object.values(world.teams).sort((a, b) => carPace(b.car) - carPace(a.car))
     .findIndex((t) => t.id === team.id) + 1;
 
   return (
-    <div className="h-full grid grid-cols-[1fr_1fr] gap-2 min-h-0">
-      <Panel title={`Monoposto · ${team.name}`} tag={`${rank}ª forza · ${carPace(team.car).toFixed(0)}/100`} bodyClass="p-3 scroll-y">
-        <div className="flex flex-col gap-1.5 opacity-70">
-          {CAR_KEYS.map((k) => (
-            <div key={k} className="grid grid-cols-[86px_1fr_28px] items-center gap-2">
-              <span className="text-xs text-muted">{CAR_LABELS[k]}</span>
-              <div className="h-3 bg-panel2 rounded-sm overflow-hidden">
-                <div className="h-full" style={{ width: `${team.car[k]}%`, background: team.colour, borderRadius: '0 4px 4px 0' }} />
+    <div className="h-full grid grid-cols-[210px_1fr_212px] gap-2 min-h-0">
+      <Panel title="La tua scuderia" bodyClass="p-2.5">
+        <div className="flex items-center gap-2.5">
+          <TeamBadge name={team.name} colour={team.colour} />
+          <div className="min-w-0">
+            <div className="font-sans text-xs font-bold truncate">{team.name}</div>
+            <div className="font-mono text-2xs text-muted">Prestigio {Math.round(team.prestige)}</div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          {[
+            { k: 'Passo auto', v: pace, c: '#3E86F0' },
+            { k: 'Affidabilità', v: team.car.reliability, c: '#12A06E' },
+            { k: 'Budget', v: (team.budget / 135_000_000) * 100, c: '#D4761E', shown: money(team.budget) },
+            { k: 'Prestigio', v: team.prestige, c: '#A06BE0' },
+          ].map((x) => (
+            <div key={x.k} className="py-1.5">
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="font-mono text-2xs text-muted">{x.k}</span>
+                <span className="font-mono text-2xs text-ink tnum">{x.shown ?? Math.round(x.v)}</span>
               </div>
-              <span className="font-mono text-xs text-muted text-right tnum">{Math.round(team.car[k])}</span>
+              <Bar value={x.v} colour={x.c} height={5} />
             </div>
           ))}
         </div>
-        <div className="mt-3">
-          <Note>
-            <b className="font-display tracking-wide text-nordvik">SOLA LETTURA.</b>{' '}
-            Vedi le scelte della tua scuderia ma non puoi cambiarle. In Modalità Scuderia questi cursori sono tuoi.
-          </Note>
+
+        <div className="mt-2 pt-2 border-t border-line">
+          <div className="field-label mb-1">Ordine in griglia</div>
+          <div className="font-mono text-2xs text-muted">
+            {rank}ª forza su {Object.keys(world.teams).length} per passo
+          </div>
         </div>
       </Panel>
 
-      <Panel title="Budget e staff" tag={`${world.year}`} bodyClass="p-3 scroll-y">
-        <div className="flex flex-col gap-1.5 opacity-70">
-          {[
-            { k: 'Dir. tecnico', v: team.crew.technical },
-            { k: 'Ing. di pista', v: team.crew.trackEngineer },
-            { k: 'Pit crew', v: team.crew.pitCrew },
-          ].map((x) => (
-            <div key={x.k} className="grid grid-cols-[86px_1fr_28px] items-center gap-2">
-              <span className="text-xs text-muted">{x.k}</span>
-              <div className="h-3 bg-panel2 rounded-sm overflow-hidden">
-                <div className="h-full bg-muted" style={{ width: `${x.v}%`, borderRadius: '0 4px 4px 0' }} />
+      <Panel title="Piloti" bodyClass="p-2.5 scroll-y">
+        {team.driverIds.map((id, i) => {
+          const d = world.drivers[id];
+          if (!d) return null;
+          const mine = d.id === me.id;
+          return (
+            <div
+              key={id}
+              className={`rounded border px-2.5 py-2 mb-2 last:mb-0 ${
+                mine ? 'border-primary/70 bg-primary/5' : 'border-line bg-panel2'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-sans text-xs font-bold truncate">{d.name}</span>
+                  {mine && (
+                    <span className="font-mono text-[8.5px] text-primary border border-primary/50 rounded px-1 py-px shrink-0">
+                      TU
+                    </span>
+                  )}
+                </div>
+                <span className="font-mono text-[8.5px] text-dim shrink-0">{i + 1}ª guida</span>
               </div>
-              <span className="font-mono text-xs text-muted text-right tnum">{Math.round(x.v)}</span>
+              <div className="grid grid-cols-3 gap-1.5 mt-2">
+                {[
+                  { k: 'OVR', v: Math.round(overall(d.attrs)) },
+                  { k: 'Età', v: d.age },
+                  { k: 'Ingaggio', v: money(d.salary) },
+                ].map((x) => (
+                  <div key={x.k} className="bg-panel border border-line rounded px-2 py-1">
+                    <div className="field-label">{x.k}</div>
+                    <div className="font-mono text-xs text-ink tnum mt-0.5">{x.v}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-col font-mono text-xs">
-          <div className="flex justify-between py-1.5 border-b border-line">
-            <span className="text-muted">Budget cap</span><span className="tnum">{money(team.budget)}</span>
+          );
+        })}
+      </Panel>
+
+      <Panel title="Sviluppo" bodyClass="p-2.5 scroll-y">
+        <Note tone="warn">
+          Modalità Pilota: la scuderia è in sola lettura. Vedi lo sviluppo ma non lo controlli.
+        </Note>
+        <p className="font-sans text-[10.5px] text-muted leading-relaxed mt-2.5">
+          Le scuderie sviluppano la macchina da sole, ogni stagione. Chi vince sviluppa meno —
+          handicap inverso alla classifica, come le ore di galleria del vento in Formula 1 — e ogni
+          4–6 anni un reset regolamentare rimescola la gerarchia.
+        </p>
+        <div className="mt-2.5 pt-2 border-t border-line">
+          <div className="flex items-baseline justify-between py-[3px]">
+            <span className="font-mono text-2xs text-muted">Prossimo reset</span>
+            <span className="font-mono text-2xs text-accent tnum">{world.regulations.nextResetYear}</span>
           </div>
-          <div className="flex justify-between py-1.5 border-b border-line">
-            <span className="text-muted">Prestigio</span><span className="tnum">{Math.round(team.prestige)}/100</span>
+          <div className="flex items-baseline justify-between py-[3px]">
+            <span className="font-mono text-2xs text-muted">Ultimo reset</span>
+            <span className="font-mono text-2xs text-ink tnum">{world.regulations.lastResetYear}</span>
           </div>
-          <div className="flex justify-between py-1.5">
-            <span className="text-muted">Piloti</span>
-            <span className="tnum text-right">{team.driverIds.map((id) => world.drivers[id]?.name).join(' · ')}</span>
+          <div className="flex items-baseline justify-between py-[3px]">
+            <span className="font-mono text-2xs text-muted">Dir. tecnico</span>
+            <span className="font-mono text-2xs text-ink tnum">{Math.round(team.crew.technical)}</span>
+          </div>
+          <div className="flex items-baseline justify-between py-[3px]">
+            <span className="font-mono text-2xs text-muted">Pit crew</span>
+            <span className="font-mono text-2xs text-ink tnum">{Math.round(team.crew.pitCrew)}</span>
           </div>
         </div>
       </Panel>

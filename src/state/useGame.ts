@@ -47,9 +47,6 @@ interface GameState {
   newGame: (opts: StartCareerOptions) => void;
   abandon: () => void;
   goTo: (screen: Screen) => void;
-  /** menu laterale ridotto a sole icone */
-  sidebarCollapsed: boolean;
-  toggleSidebar: () => void;
   advance: (plan: TrainingPlan, minigameScore?: number) => WeekReport | null;
   closeSeason: () => SeasonSummary | null;
   dismissSummary: () => void;
@@ -87,9 +84,6 @@ export const useGame = create<GameState>()(
       },
 
       goTo: (screen) => set({ screen }),
-
-      sidebarCollapsed: false,
-      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
       advance: (plan, minigameScore) => {
         const world = get().world;
@@ -149,10 +143,7 @@ export const useGame = create<GameState>()(
       storage: createJSONStorage(() => localStorage),
       // La gara in corso non si salva: contiene un generatore casuale, che è
       // una chiusura. Chi chiude l'app in gara la ritrova da rigiocare.
-      partialize: (s) => ({
-        world: s.world, screen: s.screen, pendingRace: s.pendingRace,
-        sidebarCollapsed: s.sidebarCollapsed,
-      }) as never,
+      partialize: (s) => ({ world: s.world, screen: s.screen, pendingRace: s.pendingRace }) as never,
     },
   ),
 );

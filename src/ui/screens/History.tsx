@@ -48,13 +48,13 @@ export function History() {
 
       <div className="flex flex-col gap-2 min-h-0">
         <Panel title="Carriera" className="shrink-0">
-          <div className="grid grid-cols-3 gap-y-3">
+          <div className="grid grid-cols-3 gap-y-2.5">
             <Stat value={me.career.starts} label="Gran Premi" />
             <Stat value={me.career.wins} label="Vittorie" />
             <Stat value={me.career.podiums} label="Podi" />
             <Stat value={me.career.poles} label="Pole" />
             <Stat value={me.career.bestFinish === 99 ? '—' : `P${me.career.bestFinish}`} label="Miglior gara" />
-            <Stat value={me.career.titles} label="Titoli" />
+            <Stat value={me.career.titles} label="Titoli" tone="accent" />
           </div>
         </Panel>
 
@@ -66,10 +66,10 @@ export function History() {
               const d = world.drivers[c.driverId];
               const team = world.teams[c.teamId];
               return (
-                <div key={c.year} className="grid grid-cols-[34px_3px_1fr] items-center gap-2 px-3 py-1.5 border-b border-line last:border-0">
+                <div key={c.year} className="grid grid-cols-[30px_10px_1fr] items-center gap-2 px-3 py-[5px] border-b border-line/60 last:border-0">
                   <span className="font-mono text-2xs text-dim tnum">{c.year}</span>
-                  <i className="block w-[3px] h-4 rounded-sm" style={{ background: team?.colour ?? '#5B6672' }} />
-                  <span className={`font-display text-sm font-semibold tracking-wide truncate ${c.driverId === me.id ? 'text-aurora' : ''}`}>
+                  <i className="block w-2 h-2 rounded-full" style={{ background: team?.colour ?? '#5D6C85' }} />
+                  <span className={`font-sans text-xs truncate ${c.driverId === me.id ? 'text-primary font-semibold' : ''}`}>
                     {d?.name ?? '—'}
                   </span>
                 </div>

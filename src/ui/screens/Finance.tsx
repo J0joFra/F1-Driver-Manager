@@ -1,97 +1,116 @@
 import { useGame } from '../../state/useGame.js';
 import { player } from '../../engine/selectors.js';
 import { staffAnnualCost, staffGrowthMultiplier } from '../../engine/staff.js';
-import { Note, Panel, Stat } from '../components/kit.js';
+import { Panel } from '../components/kit.js';
 import { money } from '../format.js';
 
 const ROLE_LABELS: Record<string, string> = {
   coach: 'Coach', trainer: 'Preparatore', physio: 'Fisioterapista', agent: 'Procuratore',
 };
 
+function Line({ label, sub, value, tone }: { label: string; sub?: string; value: string; tone?: 'green' | 'bad' }) {
+  const colour = tone === 'green' ? 'text-primary' : tone === 'bad' ? 'text-bad' : 'text-ink';
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-[7px] border-b border-line/60 last:border-0">
+      <div className="min-w-0">
+        <div className="font-sans text-xs text-ink truncate">{label}</div>
+        {sub && <div className="font-mono text-[8.5px] text-dim truncate">{sub}</div>}
+      </div>
+      <div className={`font-mono text-xs tnum shrink-0 ${colour}`}>{value}</div>
+    </div>
+  );
+}
+
 /**
- * Bilancio e staff personale.
+ * Il bilancio: entrate, uscite, e il netto isolato in una colonna sua.
  *
- * L'ingaggio non è un numero di vanità: finanzia lo staff, e lo staff decide
- * a che età arrivi al tuo tetto. Il mercato dei professionisti arriva col
- * prossimo passo; qui si vedono i conti e gli effetti.
+ * L'ingaggio non è un numero di vanità — finanzia lo staff, e lo staff decide
+ * a che età arrivi al tuo tetto.
  */
 export function Finance() {
   const world = useGame((s) => s.world)!;
   const me = player(world)!;
 
   const points = world.standings[me.id] ?? 0;
-  const bonuses = points * 15_000;
+  const podiums = me.history.reduce((s, h) => s + h.podiums, 0);
+  const wins = me.history.reduce((s, h) => s + h.wins, 0);
+  const bonusPoints = points * 15_000;
+  const bonusPodiums = podiums * 150_000;
+  const bonusWins = wins * 400_000;
   const sponsors = Math.round(me.reputation * 12_000);
-  const income = me.salary + bonuses + sponsors;
-  const staffCost = staffAnnualCost(me);
-  const fixed = Math.round(income * 0.15);
-  const balance = income - staffCost - fixed;
+  const gross = me.salary + bonusPoints + bonusPodiums + bonusWins + sponsors;
 
+  const staffCost = staffAnnualCost(me);
+  const fixed = Math.round(gross * 0.15);
+  const outgoings = staffCost + fixed;
+  const net = gross - outgoings;
   const mult = staffGrowthMultiplier(me);
-  const peak = (28 - (mult - 1) * 11).toFixed(1);
 
   return (
-    <div className="h-full grid grid-cols-[1fr_1fr] gap-2 min-h-0">
-      <Panel title={`Bilancio ${world.year}`} tag={`cassa ${money(me.money)}`} bodyClass="p-3 scroll-y">
-        <div className="flex flex-col font-mono text-xs">
-          {[
-            { k: 'Ingaggio', v: me.salary, sub: `contratto ${me.contractYears} ${me.contractYears === 1 ? 'anno' : 'anni'}`, in: true },
-            { k: 'Bonus risultati', v: bonuses, sub: `${points} punti × 15k`, in: true },
-            { k: 'Sponsor personali', v: sponsors, sub: `reputazione ${Math.round(me.reputation)}`, in: true },
-            { k: 'Staff personale', v: -staffCost, sub: `${me.staff.length} sotto contratto`, in: false },
-            { k: 'Spese fisse', v: -fixed, sub: 'viaggi, tasse, superlicenza', in: false },
-          ].map((r) => (
-            <div key={r.k} className="flex justify-between gap-3 py-1.5 border-b border-line">
-              <div className="min-w-0">
-                <div className="text-muted">{r.k}</div>
-                <div className="text-2xs text-dim truncate">{r.sub}</div>
-              </div>
-              <span className={`tnum shrink-0 ${r.in ? 'text-good' : 'text-muted'}`}>
-                {r.in ? '+' : ''}{money(r.v)}
-              </span>
-            </div>
-          ))}
-          <div className="flex justify-between items-center pt-2.5 mt-1.5 border-t-2 border-line">
-            <span className="font-display text-sm uppercase tracking-[0.1em] font-semibold text-ink">Saldo stagione</span>
-            <b className={`font-display text-lg font-bold tnum ${balance >= 0 ? 'text-good' : 'text-bad'}`}>
-              {balance >= 0 ? '+' : ''}{money(balance)}
-            </b>
-          </div>
+    <div className="h-full grid grid-cols-[1fr_1fr_190px] gap-2 min-h-0">
+      <Panel title="Entrate" bodyClass="px-3 py-1 scroll-y">
+        <Line label="Ingaggio" sub={`contratto ${me.contractYears} ${me.contractYears === 1 ? 'anno' : 'anni'}`} value={money(me.salary)} tone="green" />
+        <Line label="Bonus punti" sub={`${points} pt × 15k`} value={money(bonusPoints)} tone={bonusPoints > 0 ? 'green' : undefined} />
+        <Line label="Bonus podi" sub={`${podiums} podi × 150k`} value={money(bonusPodiums)} tone={bonusPodiums > 0 ? 'green' : undefined} />
+        <Line label="Bonus vittorie" sub={`${wins} vit. × 400k`} value={money(bonusWins)} tone={bonusWins > 0 ? 'green' : undefined} />
+        <Line label="Sponsor personali" sub={`reputazione ${Math.round(me.reputation)}`} value={money(sponsors)} tone="green" />
+        <div className="flex items-baseline justify-between gap-3 pt-2.5 mt-1 border-t border-line">
+          <span className="font-sans text-sm font-semibold">Lordo</span>
+          <b className="font-mono text-sm text-primary tnum">{money(gross)}</b>
         </div>
       </Panel>
 
-      <Panel title="Staff personale" tag="lo staff compra tempo" bodyClass="p-3 scroll-y">
-        {me.staff.length === 0 ? (
-          <div className="border border-dashed border-line rounded-sm p-3 text-center text-xs text-dim mb-3">
-            Nessuno sotto contratto. Stai crescendo da solo.
-          </div>
-        ) : (
-          <div className="flex flex-col mb-3">
+      <Panel title="Uscite" bodyClass="px-3 py-1 scroll-y">
+        <Line
+          label="Staff personale"
+          sub={me.staff.length === 0 ? 'nessuno sotto contratto' : me.staff.map((s) => ROLE_LABELS[s.role]).join(' · ')}
+          value={money(staffCost)}
+          tone={staffCost > 0 ? 'bad' : undefined}
+        />
+        <Line label="Spese fisse (15%)" sub="viaggi, tasse, superlicenza" value={money(fixed)} tone="bad" />
+        <div className="flex items-baseline justify-between gap-3 pt-2.5 mt-1 border-t border-line">
+          <span className="font-sans text-sm font-semibold">Totale uscite</span>
+          <b className="font-mono text-sm text-bad tnum">{money(outgoings)}</b>
+        </div>
+
+        {me.staff.length > 0 && (
+          <div className="mt-3 pt-2 border-t border-line">
+            <div className="field-label mb-1">Sotto contratto</div>
             {me.staff.map((s) => (
-              <div key={s.id} className="flex justify-between items-center gap-3 py-2 border-b border-line last:border-0">
-                <div className="min-w-0">
-                  <div className="text-2xs uppercase tracking-[0.14em] text-dim">{ROLE_LABELS[s.role]}</div>
-                  <div className="font-display text-base font-semibold tracking-wide truncate">{s.name}</div>
-                </div>
-                <div className="text-right shrink-0 font-mono text-xs">
-                  <div className="text-muted tnum">qualità {s.quality}</div>
-                  <div className="text-dim tnum">{s.salaryPct ? `${s.salaryPct}%` : money(s.cost)}</div>
-                </div>
+              <div key={s.id} className="flex items-baseline justify-between gap-2 py-[3px]">
+                <span className="font-mono text-2xs text-muted truncate">
+                  {ROLE_LABELS[s.role]} · {s.name}
+                </span>
+                <span className="font-mono text-2xs text-dim tnum shrink-0">q{s.quality}</span>
               </div>
             ))}
           </div>
         )}
+      </Panel>
 
-        <div className="flex gap-5 mb-3">
-          <Stat value={`${mult.toFixed(2)}×`} label="Velocità crescita" hint="max 1.40×" />
-          <Stat value={peak} label="Età al picco" hint="senza staff: 28.0" />
-          <Stat value={Math.round(me.reputation)} label="Reputazione" hint="apre lo staff top" />
+      <Panel title="Netto" bodyClass="p-3 flex flex-col">
+        <div className="flex-1 grid place-items-center text-center">
+          <div>
+            <div className="field-label">Stagione</div>
+            <b className={`block font-display text-4xl font-bold leading-none tnum mt-1 ${net >= 0 ? 'text-primary' : 'text-bad'}`}>
+              {net >= 0 ? '+' : '−'}{(Math.abs(net) / 1_000_000).toFixed(1).replace('.', ',')}
+            </b>
+            <div className="font-mono text-2xs text-dim mt-1">milioni €</div>
+          </div>
         </div>
-
-        <Note>
-          Il potenziale resta quello con cui sei nato. Lo staff cambia solo a che età ci arrivi — e quante
-          stagioni al massimo ti restano prima della curva discendente.
-        </Note>
+        <div className="border-t border-line pt-2 mt-2">
+          <div className="flex items-baseline justify-between">
+            <span className="font-mono text-2xs text-muted">Cassa</span>
+            <span className="font-mono text-2xs text-ink tnum">{money(me.money)}</span>
+          </div>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="font-mono text-2xs text-muted">Crescita</span>
+            <span className="font-mono text-2xs text-accent tnum">{mult.toFixed(2)}×</span>
+          </div>
+          <p className="font-mono text-[8.5px] text-dim leading-relaxed mt-2">
+            L'ingaggio finanzia la crescita, non è un numero di vanità.
+          </p>
+        </div>
       </Panel>
     </div>
   );

@@ -22,17 +22,16 @@ export function Standings() {
           return (
             <div
               key={row.driverId}
-              className={`grid grid-cols-[22px_3px_1fr_auto] items-center gap-2 px-3 py-1.5 border-b border-line last:border-0 ${
-                mine ? 'bg-aurora/15 border-l-2 border-l-aurora pl-[10px]' : ''
-              }`}
+              className={`grid grid-cols-[22px_10px_1fr_auto] items-center gap-2 px-3 py-[5px]
+                border-b border-line/60 last:border-0 ${mine ? 'bg-primary/10' : ''}`}
             >
-              <span className={`font-display text-sm font-bold text-right tnum ${mine ? 'text-ink' : 'text-dim'}`}>{row.position}</span>
-              <i className="block w-[3px] h-4 rounded-sm" style={{ background: team?.colour ?? '#5B6672' }} />
-              <span className="font-display text-sm font-semibold tracking-wide truncate">
+              <span className="font-mono text-2xs text-dim text-right tnum">{row.position}</span>
+              <i className="block w-2 h-2 rounded-full" style={{ background: team?.colour ?? '#5D6C85' }} />
+              <span className={`font-sans text-xs truncate ${mine ? 'text-primary font-semibold' : ''}`}>
                 {d.name}
-                {mine && <span className="text-aurora ml-1.5 text-2xs">TU</span>}
+                {mine && <span className="ml-1.5 font-mono text-[8.5px] text-primary">TU</span>}
               </span>
-              <span className="font-mono text-xs text-muted tnum">{row.points}</span>
+              <span className="font-mono text-2xs text-accent tnum">{row.points}</span>
             </div>
           );
         })}
@@ -44,12 +43,12 @@ export function Standings() {
             const team = world.teams[c.teamId];
             if (!team) return null;
             return (
-              <div key={c.teamId} className="grid grid-cols-[74px_1fr_40px] items-center gap-2 py-1" title={`${team.name}: ${c.points} punti`}>
-                <span className="font-display text-sm font-semibold tracking-wide truncate">{team.short}</span>
-                <div className="h-3 bg-panel2 rounded-sm overflow-hidden">
-                  <div className="h-full" style={{ width: `${(c.points / maxCons) * 100}%`, background: team.colour, borderRadius: '0 4px 4px 0' }} />
+              <div key={c.teamId} className="grid grid-cols-[78px_1fr_30px] items-center gap-2 py-[5px]" title={`${team.name}: ${c.points} punti`}>
+                <span className="font-sans text-xs truncate">{team.short}</span>
+                <div className="h-[5px] bg-panel3 rounded-sm overflow-hidden">
+                  <div className="h-full rounded-sm" style={{ width: `${(c.points / maxCons) * 100}%`, background: team.colour }} />
                 </div>
-                <span className="font-mono text-xs text-muted text-right tnum">{c.points}</span>
+                <span className="font-mono text-2xs text-accent text-right tnum">{c.points}</span>
               </div>
             );
           })}

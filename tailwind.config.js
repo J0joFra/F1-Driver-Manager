@@ -4,18 +4,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Famiglia navy: fondo profondo, pannelli e bordi a salire.
-        ground: '#0A1128',
-        panel: '#131B33',
-        panel2: '#1A2340',
-        panel3: '#243054',
-        line: '#243054',
+        // Famiglia navy: fondo profondo, schede appena più chiare, bordi tenui.
+        ground: '#0A1120',
+        panel: '#0C1423',
+        panel2: '#121B2E',
+        panel3: '#1A2440',
+        line: '#1C2740',
         ink: '#F1F4F9',
-        muted: '#94A3B8',
-        dim: '#64748B',
+        muted: '#8C9AB0',
+        dim: '#5D6C85',
         // Verde d'azione e giallo di richiamo, separati dai colori scuderia.
         primary: '#10B981',
-        accent: '#FFD60A',
+        accent: '#FBBF24',
         // Colori scuderia: validati per daltonismo, usati anche come palette dei grafici.
         aurora: '#E8283C',
         vantar: '#3E86F0',
