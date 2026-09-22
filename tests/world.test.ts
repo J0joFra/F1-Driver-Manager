@@ -5,6 +5,8 @@ import { SEASON_WEEKS, driverStandings } from '../src/engine/season.js';
 import { overall, potentialOverall } from '../src/engine/driver.js';
 import type { World } from '../src/engine/types.js';
 import { TEAM_SEEDS } from '../src/engine/data/teams.js';
+import { getTrack } from '../src/engine/data/tracks.js';
+import { weekendDays } from '../src/engine/calendar.js';
 
 const SEATS = TEAM_SEEDS.length * 2;
 
@@ -44,14 +46,71 @@ describe('creazione del mondo', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('il calendario non mette mai tre gare di fila', () => {
+  // Le triple header esistono davvero e sono ormai normali; quattro gare di
+  // fila no, perché non lascerebbero modo di recuperare.
+  it('il calendario non mette mai quattro gare di fila', () => {
     for (const seed of [5, 77, 404, 2024]) {
       const w = createWorld({ seed });
       let streak = 0;
       for (const week of w.schedule) {
-        streak = week.trackId ? streak + 1 : 0;
-        expect(streak, `seed ${seed}`).toBeLessThanOrEqual(2);
+        streak = week.kind === 'race' ? streak + 1 : 0;
+        expect(streak, `seed ${seed}`).toBeLessThanOrEqual(3);
       }
+    }
+  });
+
+  it('la stagione apre a marzo, chiude a dicembre e si ferma ad agosto', () => {
+    for (const seed of [1, 42, 999]) {
+      for (const year of [2031, 2032, 2033, 2036]) {
+        const w = createWorld({ seed, year });
+        const races = w.schedule.filter((x) => x.kind === 'race');
+        const sunday = (week: (typeof races)[number]) => weekendDays(year, week).race;
+
+        const opener = sunday(races[0]!);
+        expect(opener.getUTCMonth(), `apertura seed ${seed} ${year}`).toBe(2); // marzo
+        expect(opener.getUTCDate()).toBeGreaterThanOrEqual(8);
+        expect(opener.getUTCDate()).toBeLessThanOrEqual(14);
+
+        const finale = sunday(races[races.length - 1]!);
+        expect(finale.getUTCMonth(), `finale seed ${seed} ${year}`).toBe(11); // dicembre
+        expect(finale.getUTCDate()).toBeLessThanOrEqual(7);
+
+        // Ad agosto le fabbriche chiudono: tre settimane senza gare.
+        const breakWeeks = w.schedule.filter((x) => x.kind === 'summerBreak');
+        expect(breakWeeks).toHaveLength(3);
+        for (const week of breakWeeks) {
+          expect(sunday(week).getUTCMonth(), `pausa seed ${seed} ${year}`).toBe(7); // agosto
+        }
+      }
+    }
+  });
+
+  it('il giro del mondo non torna indietro fra continenti lontani', () => {
+    for (const seed of [2, 31, 500, 7777]) {
+      const w = createWorld({ seed });
+      const regions = w.schedule
+        .filter((x) => x.trackId)
+        .map((x) => getTrack(x.trackId!).region);
+
+      // Ogni regione compare in un solo blocco contiguo per metà stagione:
+      // se l'Europa ricomparisse a novembre sarebbe un calendario assurdo.
+      const runs: string[] = [];
+      for (const r of regions) if (runs[runs.length - 1] !== r) runs.push(r);
+      for (const region of new Set(regions)) {
+        const appearances = runs.filter((r) => r === region).length;
+        expect(appearances, `${region}, seed ${seed}`).toBeLessThanOrEqual(2);
+      }
+
+      // Si apre lontano e si chiude in Medio Oriente, come il campionato vero.
+      expect(regions[0], `apertura seed ${seed}`).toBe('oceania');
+      expect(regions[regions.length - 1], `finale seed ${seed}`).toBe('middleEast');
+    }
+  });
+
+  it('nessun circuito corre due volte nella stessa stagione', () => {
+    for (const seed of [3, 88, 1234]) {
+      const ids = createWorld({ seed }).schedule.filter((x) => x.trackId).map((x) => x.trackId);
+      expect(new Set(ids).size, `seed ${seed}`).toBe(ids.length);
     }
   });
 

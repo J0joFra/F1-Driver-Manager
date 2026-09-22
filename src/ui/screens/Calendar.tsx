@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { CalendarDays, Flag, Snowflake, Sun, Wrench } from 'lucide-react';
+import { CalendarDays, Flag, Moon, Snowflake, Sun, Wrench } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
 import { player } from '../../engine/selectors.js';
-import { getTrack } from '../../engine/data/tracks.js';
+import { getTrack, isNightRace } from '../../engine/data/tracks.js';
 import {
-  formatDay, formatShortDay, monthName, raceCountOf, weekendDays, weekMonday,
-  WEEK_LABEL, WEEK_TRAINING_CAPACITY, type SeasonWeek, type WeekKind,
+  formatDay, formatHour, formatShortDay, monthName, raceCountOf, raceHourInItaly,
+  weekendDays, weekMonday, WEEK_LABEL, WEEK_TRAINING_CAPACITY,
+  type SeasonWeek, type WeekKind,
 } from '../../engine/calendar.js';
+import type { Region } from '../../engine/types.js';
 import { Panel, Stat } from '../components/kit.js';
 
 const KIND_ICON: Record<WeekKind, LucideIcon> = {
@@ -16,6 +18,14 @@ const KIND_ICON: Record<WeekKind, LucideIcon> = {
   free: CalendarDays,
   summerBreak: Sun,
   postseason: Snowflake,
+};
+
+const REGION_LABEL: Record<Region, string> = {
+  oceania: 'Oceania',
+  asia: 'Asia',
+  middleEast: 'Medio Oriente',
+  europe: 'Europa',
+  americas: 'Americhe',
 };
 
 const KIND_COLOUR: Record<WeekKind, string> = {
@@ -73,13 +83,22 @@ export function Calendar() {
           {world.schedule.map((week) => {
             const isCurrent = week.index === world.week;
             const past = week.index < world.week;
+            const result = resultFor(week.round);
+            // Per una gara già corsa vale il circuito del risultato: se il
+            // calendario è stato rigenerato da un salvataggio vecchio, la
+            // storia resta quella vera.
+            const trackId = result?.trackId ?? week.trackId;
+            const track = trackId ? getTrack(trackId) : null;
+            const days = weekendDays(world.year, week);
+
+            // Una settimana si raggruppa sotto il mese della data che mostra,
+            // che per un weekend di gara è la domenica: altrimenti una gara
+            // del 6 aprile finisce sotto l'intestazione di marzo.
             const monday = weekMonday(world.year, week);
-            const month = monday.getUTCMonth();
+            const shown = track ? days.race : monday;
+            const month = shown.getUTCMonth();
             const showMonth = month !== lastMonth;
             lastMonth = month;
-
-            const track = week.trackId ? getTrack(week.trackId) : null;
-            const result = resultFor(week.round);
             const mine = result?.race.find((r) => r.driverId === me.id);
             const Icon = KIND_ICON[week.kind];
 
@@ -98,15 +117,22 @@ export function Calendar() {
                     ${past && !isCurrent ? 'opacity-55' : ''}`}
                 >
                   <span className="text-dim">{week.index + 1}</span>
-                  <span className="text-muted">{formatShortDay(monday)}</span>
-                  <span className={KIND_COLOUR[week.kind]}>
-                    <Icon className="w-3 h-3" strokeWidth={2} />
+                  <span className="text-muted">
+                    {formatShortDay(shown)}
+                  </span>
+                  <span className={track && isNightRace(track) ? 'text-accent' : KIND_COLOUR[week.kind]}>
+                    {track && isNightRace(track)
+                      ? <Moon className="w-3 h-3" strokeWidth={2} />
+                      : <Icon className="w-3 h-3" strokeWidth={2} />}
                   </span>
                   <span className="truncate">
                     {track ? (
                       <>
                         <span className="text-accent">R{week.round}</span>{' '}
-                        <span className="font-sans text-xs text-ink">{track.name}</span>
+                        <span className="font-sans text-xs text-ink">{track.name}</span>{' '}
+                        <span className="text-dim">
+                          {formatHour(raceHourInItaly(track.localStart, track.utcOffset, days.race))}
+                        </span>
                       </>
                     ) : (
                       <span className="text-dim">{WEEK_LABEL[week.kind]}</span>
@@ -142,30 +168,39 @@ export function Calendar() {
                 dal {formatDay(weekMonday(world.year, current))}
               </div>
 
-              {current.trackId && (
-                <div className="mt-2 pt-2 border-t border-line">
-                  <div className="font-sans text-xs font-bold truncate">
-                    {getTrack(current.trackId).name}
+              {current.trackId && (() => {
+                const track = getTrack(current.trackId);
+                const days = weekendDays(world.year, current);
+                const italy = raceHourInItaly(track.localStart, track.utcOffset, days.race);
+                return (
+                  <div className="mt-2 pt-2 border-t border-line">
+                    <div className="font-sans text-xs font-bold truncate">{track.name}</div>
+                    <div className="font-mono text-2xs text-dim flex items-center gap-1">
+                      {REGION_LABEL[track.region]}
+                      {isNightRace(track) && <Moon className="w-2.5 h-2.5 text-accent" strokeWidth={2} />}
+                    </div>
+                    <div className="mt-1.5 flex flex-col gap-[3px]">
+                      {([
+                        ['Libere', days.practice],
+                        ['Qualifica', days.qualifying],
+                        ['Gara', days.race],
+                      ] as const).map(([label, date]) => (
+                        <div key={label} className="flex justify-between font-mono text-2xs">
+                          <span className="text-muted">{label}</span>
+                          <span className="text-ink tnum">{formatDay(date)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-1.5 pt-1.5 border-t border-line/50 flex justify-between font-mono text-2xs">
+                      <span className="text-muted">Via alle</span>
+                      <span className="tnum">
+                        <span className="text-dim">{formatHour(track.localStart)} loc</span>{' '}
+                        <span className="text-accent">{formatHour(italy)} ITA</span>
+                      </span>
+                    </div>
                   </div>
-                  {(() => {
-                    const days = weekendDays(world.year, current);
-                    return (
-                      <div className="mt-1.5 flex flex-col gap-[3px]">
-                        {[
-                          ['Libere', days.practice],
-                          ['Qualifica', days.qualifying],
-                          ['Gara', days.race],
-                        ].map(([label, date]) => (
-                          <div key={label as string} className="flex justify-between font-mono text-2xs">
-                            <span className="text-muted">{label as string}</span>
-                            <span className="text-ink tnum">{formatDay(date as Date)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+                );
+              })()}
 
               <div className="mt-2 pt-2 border-t border-line flex justify-between font-mono text-2xs">
                 <span className="text-muted">Sessioni disponibili</span>
@@ -215,7 +250,8 @@ function nextOf(
     <div key={kind} className="flex justify-between font-mono text-2xs">
       <span className="text-muted">{label}</span>
       <span className="text-ink tnum">
-        {found ? formatShortDay(weekMonday(year, found)) : '—'}
+        {/* La domenica, non il lunedì: è il giorno che il giocatore aspetta. */}
+        {found ? formatShortDay(weekendDays(year, found).race) : '—'}
       </span>
     </div>
   );

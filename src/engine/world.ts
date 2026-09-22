@@ -42,7 +42,7 @@ export function createWorld(opts: CreateWorldOptions): World {
     round: 0,
     drivers: {},
     teams: {},
-    schedule: buildCalendar(year, opts.races ?? 22, rng),
+    schedule: buildCalendar(year, opts.races ?? 24, rng),
     regulations: { lastResetYear: year, nextResetYear: year + rng.int(4, 6) },
     seat: opts.seat ?? { mode: 'osservatore' },
     academy: [],

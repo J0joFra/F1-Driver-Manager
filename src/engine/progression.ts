@@ -143,7 +143,15 @@ export function previewTraining(
     reputationGain: plan.media * 0.6 * minigame,
     // Le settimane pesanti si pagano: la stanchezza è il freno naturale
     // all'ottimo "tutto al massimo, sempre".
-    fatigueGain: totalLoad * 14 - 4,
+    //
+    // Conta il numero di sessioni, non la percentuale della capienza: sei
+    // sessioni in un weekend di gara stancano meno di dieci in una settimana
+    // libera, anche se entrambe riempiono il piano. Normalizzare sulla
+    // capienza rendeva ogni settimana ugualmente faticosa, e con un
+    // calendario lungo la stanchezza si saturava a fine stagione.
+    // Il fattore 1.4 lascia invariata la settimana da dieci sessioni, che è
+    // quella su cui la crescita era stata tarata.
+    fatigueGain: totalSessions * 1.4 - 4,
     load: totalLoad,
   };
 }
