@@ -1,5 +1,6 @@
 import type { Driver, StaffMember, StaffRole } from './types.js';
-import { clamp, type Rng } from './rng.js';
+import { type Rng } from './rng.js';
+import { clamp, diminishing } from './curves.js';
 
 /**
  * Lo staff personale compra tempo, non talento.
@@ -20,18 +21,46 @@ export const ROLE_GROWTH_WEIGHT: Record<StaffRole, number> = {
 
 export const MAX_GROWTH_MULTIPLIER = 1 + 0.20 + 0.12 + 0.08; // 1.40 con tutti a 100
 
-/** Moltiplicatore di crescita derivato dallo staff sotto contratto: 1.00 → 1.40. */
-export function staffGrowthMultiplier(d: Driver): number {
-  let bonus = 0;
+/**
+ * Efficienza dello staff sulla crescita.
+ *
+ * I contributi si sommano ma passano da una curva a rendimenti decrescenti:
+ * tre professionisti eccellenti non valgono tre volte uno solo, altrimenti
+ * l'unica strategia sensata sarebbe accumulare staff finché il budget regge.
+ */
+export function staffEfficiency(d: Driver): number {
   const best: Partial<Record<StaffRole, number>> = {};
   for (const s of d.staff) {
     const cur = best[s.role];
     if (cur === undefined || s.quality > cur) best[s.role] = s.quality;
   }
+
+  let raw = 1;
   for (const [role, q] of Object.entries(best)) {
-    bonus += ROLE_GROWTH_WEIGHT[role as StaffRole] * ((q ?? 0) / 100);
+    raw += ROLE_GROWTH_WEIGHT[role as StaffRole] * ((q ?? 0) / 100) * 2.4;
   }
-  return 1 + bonus;
+  return clamp(diminishing(raw, 0.6), 1, MAX_GROWTH_MULTIPLIER);
+}
+
+/** Nome storico, mantenuto perché l'interfaccia lo mostra come "velocità di crescita". */
+export const staffGrowthMultiplier = staffEfficiency;
+
+/**
+ * L'entourage di un pilota gestito dal computer.
+ *
+ * Non ha uno staff esplicito da gestire, ma non si allena nemmeno da solo:
+ * attorno a lui c'è la struttura della sua scuderia. Il prestigio del team fa
+ * da proxy, e ne esce un gradiente che il giocatore sente — un sedile in un
+ * top team non porta solo una macchina migliore, porta anche chi ti fa
+ * crescere più in fretta.
+ */
+export function entourageEfficiency(teamPrestige: number): number {
+  return clamp(1 + (clamp(teamPrestige, 0, 100) / 100) * 0.22, 1, MAX_GROWTH_MULTIPLIER);
+}
+
+/** Qualità del fisioterapista: decide quanto in fretta si recupera. */
+export function physioQuality(d: Driver): number {
+  return d.staff.filter((s) => s.role === 'physio').reduce((best, s) => Math.max(best, s.quality), 0);
 }
 
 export function staffAnnualCost(d: Driver): number {

@@ -1,8 +1,7 @@
 import type { AttributeKey, Driver, MinigameKind, TrainingCategory, TrainingPlan } from './types.js';
-import { ATTRIBUTE_KEYS } from './types.js';
-import { clamp } from './rng.js';
-import { ageGrowthFactor } from './driver.js';
-import { staffGrowthMultiplier } from './staff.js';
+import { commitTraining, previewTraining, recover } from './progression.js';
+import { physioQuality } from './staff.js';
+import { clamp } from './curves.js';
 
 /**
  * La settimana del pilota.
@@ -104,51 +103,40 @@ export function minigameMultiplier(score: number): number {
   return MINIGAME_MIN + clamp(score, 0, 1) * (MINIGAME_MAX - MINIGAME_MIN);
 }
 
-const WEEK_GROWTH_BASE = 0.135;
-
 export interface TrainingOutcome {
   gains: Partial<Record<AttributeKey, number>>;
   reputationGain: number;
-  growthMultiplier: number;
+  fatigueGain: number;
+  load: number;
 }
 
 /**
  * Applica una settimana di allenamento.
  *
- * La crescita è sempre frenata da `(cap - attuale)`: al proprio tetto si
- * azzera da sola, qualunque sia lo staff e qualunque sia il punteggio del
- * minigioco.
+ * Il calcolo vive in `progression.ts`; qui restano i vincoli della settimana
+ * — i tetti per categoria — e il ponte verso il resto del motore. Anteprima e
+ * applicazione passano dalla stessa funzione, così quello che il giocatore
+ * legge è esattamente quello che succede.
  */
 export function applyTraining(
   d: Driver,
   plan: TrainingPlan,
   minigameMult = MINIGAME_AUTO,
+  isRaceWeek = false,
+  efficiency?: number,
 ): TrainingOutcome {
-  const staffMult = staffGrowthMultiplier(d);
-  const ageMult = ageGrowthFactor(d.age);
-  const gains: Partial<Record<AttributeKey, number>> = {};
-
-  for (const category of TRAINING_CATEGORIES) {
-    const sessions = plan[category];
-    if (sessions <= 0) continue;
-    for (const [key, weight] of Object.entries(CATEGORY_EFFECTS[category]) as [AttributeKey, number][]) {
-      const gap = d.caps[key] - d.attrs[key];
-      if (gap <= 0) continue;
-      const gapFactor = clamp(gap / 15, 0.12, 1);
-      const delta = WEEK_GROWTH_BASE * weight * sessions * staffMult * ageMult * minigameMult * gapFactor;
-      gains[key] = (gains[key] ?? 0) + delta;
-    }
-  }
-
-  for (const k of ATTRIBUTE_KEYS) {
-    const g = gains[k];
-    if (g) d.attrs[k] = clamp(d.attrs[k] + g, 1, d.caps[k]);
-  }
-
-  const reputationGain = plan.media * 0.6 * (minigameMult / MINIGAME_AUTO);
-  d.reputation = clamp(d.reputation + reputationGain, 0, 100);
-
-  return { gains, reputationGain, growthMultiplier: staffMult * ageMult * minigameMult };
+  const limits = trainingLimits(d, isRaceWeek);
+  const preview = previewTraining(
+    d, plan, limits.perCategory, limits.total, minigameMult, 1, efficiency,
+  );
+  commitTraining(d, preview);
+  recover(d, physioQuality(d));
+  return {
+    gains: preview.gains,
+    reputationGain: preview.reputationGain,
+    fatigueGain: preview.fatigueGain,
+    load: preview.load,
+  };
 }
 
 /** Piano usato dai piloti gestiti dal computer: equilibrato, con un po' di carattere. */

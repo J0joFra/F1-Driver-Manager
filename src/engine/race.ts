@@ -1,5 +1,15 @@
-import type { Compound, EngineMode, QualifyingResult, RaceResult, Track } from './types.js';
-import { clamp, type Rng } from './rng.js';
+import type { EngineMode, QualifyingResult, RaceResult, Track } from './types.js';
+import { type Rng } from './rng.js';
+import { clamp } from './curves.js';
+import {
+  COMPOUND_PACE, freshTyre, tyreLapPenalty, updateTemperature,
+  wearPerLap as tyreWearPerLap, type TyreState,
+} from './tyres.js';
+import { DRS_RANGE, overtakeChance as overtakeProbability } from './overtaking.js';
+import { driverErrorChance, mechanicalFailureChance, safetyCarChancePerLap } from './incidents.js';
+
+export { COMPOUND_PACE, COMPOUND_WEAR } from './tyres.js';
+export { ATTACK_RANGE, DRS_RANGE } from './overtaking.js';
 
 /**
  * Il modello di gara.
@@ -19,6 +29,8 @@ export interface RaceEntry {
   /** 0–100, prestazione complessiva della monoposto */
   carPace: number;
   reliability: number;
+  /** 0–1: quanto l'esperienza riduce gli errori e affina il passo */
+  experience?: number;
   speed: number;
   consistency: number;
   tyres: number;
@@ -29,9 +41,6 @@ export interface RaceEntry {
   pitCrew: number;
   grid: number;
 }
-
-export const COMPOUND_PACE: Record<Compound, number> = { S: -0.78, M: 0, H: 0.68 };
-export const COMPOUND_WEAR: Record<Compound, number> = { S: 1.6, M: 1.0, H: 0.62 };
 
 export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const MIN_GAP = 0.42;
@@ -52,8 +61,7 @@ export function driverSkillOf(e: RaceEntry, wet: boolean): number {
 export interface LapContext {
   track: Track;
   lap: number;
-  compound: Compound;
-  wear: number;
+  tyre: TyreState;
   wet: boolean;
   dirtyAir: boolean;
   mode: EngineMode;
@@ -73,34 +81,42 @@ export function lapTimeFor(e: RaceEntry, ctx: LapContext, rng: Rng): number {
   // La monoposto pesa circa il doppio del pilota: è la Formula 1, non i kart.
   t += (100 - e.carPace) * 0.092;
   t += (100 - driverSkillOf(e, ctx.wet)) * 0.03;
-  t += COMPOUND_PACE[ctx.compound];
-  t += Math.pow(ctx.wear / 100, 2) * 3.4 * track.tyreWear;
+  t += COMPOUND_PACE[ctx.tyre.compound];
+  t += tyreLapPenalty(ctx.tyre, e.tyres, track);
   t += (track.laps - ctx.lap) * 0.046;
   t += MODE_PACE[ctx.mode];
   if (ctx.dirtyAir) t += 0.22;
   if (ctx.wet) t += 7.5 + (100 - e.wet) * 0.05;
+  // L'esperienza non rende più veloci: fa sbagliare meno, e sul giro si vede.
+  t -= (e.experience ?? 0) * 0.08;
   t += noise;
   return t;
 }
 
-/** Degrado per giro percorso. I piloti dolci sulle gomme ne consumano meno. */
-export function wearPerLap(e: RaceEntry, compound: Compound, track: Track, mode: EngineMode, attacking = false): number {
-  return (
-    COMPOUND_WEAR[compound] * track.tyreWear * MODE_WEAR[mode] * (attacking ? 1.5 : 1) *
-    (100 / (60 + e.tyres * 0.45)) * 1.9
-  );
+/** Degrado per giro percorso, con la spinta della modalità motore. */
+export function wearPerLap(
+  e: RaceEntry, tyre: TyreState, track: Track, mode: EngineMode, attacking = false,
+): number {
+  return tyreWearPerLap(tyre, e.tyres, track, MODE_WEAR[mode] * (attacking ? 1.5 : 1));
 }
 
-/** Probabilità di sorpasso per secondo, quando si è entro MIN_GAP. */
-export function overtakeChance(paceDelta: number, track: Track, attacking: boolean): number {
-  return (paceDelta * 0.55 + 0.04) * track.overtaking + (attacking ? 0.3 : 0);
-}
+export { overtakeProbability as overtakeChance };
 
 /** Probabilità di ritiro per giro: guasto meccanico più errore del pilota. */
-export function retirementChancePerLap(e: RaceEntry, wear: number, wet: boolean): number {
-  const mech = ((100 - e.reliability) / 100) * 0.0109;
-  const human = ((100 - e.consistency) / 100) * 0.0016 * (wet ? 2.4 : 1) * (wear > 100 ? 2 : 1);
-  return mech + human;
+export function retirementChancePerLap(
+  e: RaceEntry, tyre: TyreState, wet: boolean, fatigue = 0, underPressure = false,
+): number {
+  return (
+    driverErrorChance({
+      consistency: e.consistency,
+      fatigue,
+      tyreWear: tyre.wear,
+      wetness: wet ? 1 : 0,
+      wetSkill: e.wet,
+      underPressure,
+      reliability: e.reliability,
+    }) + mechanicalFailureChance(e.reliability)
+  );
 }
 
 /** Tempo perso ai box, safety car compresa. */
@@ -121,8 +137,7 @@ export interface Car {
   e: RaceEntry;
   time: number;
   lastLap: number;
-  compound: Compound;
-  wear: number;
+  tyre: TyreState;
   stops: number;
   plan: number[];
   dnf: boolean;
@@ -154,8 +169,7 @@ export function simulateRace(
     // Le vetture partono distanziate come sulla griglia reale.
     time: e.grid * 0.28,
     lastLap: track.baseLap,
-    compound: track.tyreWear > 1.2 ? 'M' : rng.chance(0.4) ? 'S' : 'M',
-    wear: 0,
+    tyre: freshTyre(track.tyreWear > 1.2 ? 'M' : rng.chance(0.4) ? 'S' : 'M'),
     stops: 0,
     plan: pitStrategy(track, rng),
     dnf: false,
@@ -170,7 +184,9 @@ export function simulateRace(
   }
 
   let safetyCars = opts.safetyCars ?? 0;
-  if (opts.safetyCars === undefined && rng.chance(track.safetyCar * (wet ? 1.6 : 1))) safetyCars = 1;
+  if (opts.safetyCars === undefined && rng.chance(safetyCarChancePerLap(track, wet ? 1 : 0) * track.laps)) {
+    safetyCars = 1;
+  }
   const scLap = safetyCars > 0 ? rng.int(4, track.laps - 6) : -1;
 
   for (let lap = 1; lap <= track.laps; lap++) {
@@ -181,7 +197,7 @@ export function simulateRace(
       const e = c.e;
 
       const lapTime = lapTimeFor(e, {
-        track, lap, compound: c.compound, wear: c.wear, wet,
+        track, lap, tyre: c.tyre, wet,
         dirtyAir: c.dirty, mode: 'normal', underSafetyCar: underSC,
       }, rng);
 
@@ -189,19 +205,20 @@ export function simulateRace(
       c.time += lapTime;
       if (!underSC && lapTime < c.best) c.best = lapTime;
 
-      const wearRate = wearPerLap(e, c.compound, track, 'normal');
-      c.wear = Math.min(150, c.wear + (underSC ? wearRate * 0.16 : wearRate));
+      const wearRate = wearPerLap(e, c.tyre, track, 'normal');
+      c.tyre.wear = Math.min(150, c.tyre.wear + (underSC ? wearRate * 0.16 : wearRate));
+      c.tyre.age += 1;
+      c.tyre.temperature = updateTemperature(c.tyre, underSC ? 0.5 : 1, track.trackTemp, 1);
 
       // Sosta ai box
       if (c.plan.includes(lap)) {
         const loss = pitLossFor(e, underSC);
         c.time += loss;
-        c.wear = 0;
         c.stops += 1;
-        c.compound = c.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S';
+        c.tyre = freshTyre(c.tyre.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S');
       }
 
-      if (rng.chance(retirementChancePerLap(e, c.wear, wet))) c.dnf = true;
+      if (rng.chance(retirementChancePerLap(e, c.tyre, wet))) c.dnf = true;
     }
 
     // --- posizioni, aria sporca e sorpassi ---
@@ -213,8 +230,17 @@ export function simulateRace(
       fol.dirty = gap < 1.0;
       if (gap >= MIN_GAP || underSC) continue;
 
-      const p = overtakeChance(lead.lastLap - fol.lastLap, track, false);
-      if (p > 0 && rng.chance(p)) {
+      const p = overtakeProbability(track, {
+        gap,
+        attackSkill: fol.e.speed + fol.e.composure,
+        defenceSkill: lead.e.speed + lead.e.consistency,
+        paceDelta: lead.lastLap - fol.lastLap,
+        tyreAdvantage: lead.tyre.wear - fol.tyre.wear,
+        drs: gap < DRS_RANGE,
+        attacking: false,
+      });
+      // Una probabilità per secondo, applicata al tempo di un giro.
+      if (p > 0 && rng.chance(1 - Math.pow(1 - p, track.baseLap))) {
         const swap = lead.time;
         lead.time = fol.time + 0.3;
         fol.time = swap - 0.3;

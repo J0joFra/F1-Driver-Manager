@@ -51,6 +51,13 @@ export function migrateWorld(raw: unknown): World | null {
     if (!Array.isArray(driver.staff)) driver.staff = [];
     if (!Array.isArray(driver.history)) driver.history = [];
     if (typeof driver.money !== 'number') driver.money = 0;
+    // Arrivati con il modello di progressione: stanchezza e esperienza.
+    if (typeof driver.fatigue !== 'number') driver.fatigue = 0;
+    if (typeof driver.experience !== 'number') {
+      // Si stima dalle gare già disputate, così un veterano non riparte da
+      // zero: l'esperienza è ciò che lo tiene competitivo.
+      driver.experience = Math.min(1000, (driver.career?.starts ?? 0) * 4);
+    }
   }
 
   return w as World;

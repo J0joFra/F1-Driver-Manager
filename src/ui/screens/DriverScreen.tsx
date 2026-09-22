@@ -47,6 +47,12 @@ export function DriverScreen() {
             value={me.career.bestFinish === 99 ? '—' : `P${me.career.bestFinish}`}
           />
           <KeyRow label="Reputazione" value={Math.round(me.reputation)} />
+          <KeyRow label="Esperienza" value={`${Math.round(me.experience / 10)}%`} />
+          <KeyRow
+            label="Stanchezza"
+            value={Math.round(me.fatigue)}
+            {...(me.fatigue > 70 ? { tone: 'bad' as const } : {})}
+          />
         </Panel>
       </div>
 

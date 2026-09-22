@@ -32,7 +32,7 @@ export function GridScreen() {
 
   const choose = (c: Compound) => {
     setCompound(c);
-    if (me) me.compound = c;
+    if (me) me.tyre.compound = c;
   };
 
   const simulate = () => {

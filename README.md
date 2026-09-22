@@ -50,7 +50,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 56 test
+npm test                      # 77 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -372,7 +372,74 @@ Gli eventi di gara sono **dati, non frasi**: il motore emette `{kind, drivers}`
 e l'interfaccia compone il testo. La simulazione non conosce i nomi dei piloti
 né la lingua.
 
-## Il modello di gara
+## Il modello, a livelli
+
+Le formule non stanno più dentro la simulazione: vivono in moduli che si
+leggono, si testano e si tarano uno alla volta.
+
+```
+curves.ts       sigmoidi, curve di età, rendimenti decrescenti
+   ↓
+progression.ts  crescita settimanale del pilota
+tyres.ts        degrado a tre fasi e finestra termica
+overtaking.ts   probabilità di sorpasso, modello logistico
+incidents.ts    errore del pilota e guasto, contati separatamente
+   ↓
+race.ts         mette insieme il tempo sul giro
+   ↓
+simulateRace()  a risoluzione di giro   ·   liveRace.ts  a risoluzione di tick
+   ↓
+balance.ts      le metriche per sapere se tutto questo funziona
+```
+
+### Crescita del pilota
+
+Un prodotto di fattori indipendenti, ognuno con un solo compito, così il
+bilanciamento si fa spostando un numero alla volta:
+
+```
+crescita = baseGain(attributo)
+         × difficoltàMarginale(gap)     ← gap^1.6: gli ultimi punti sono proibitivi
+         × curvaEtà(età, picco)         ← un picco per attributo, non uno solo
+         × efficienzaStaff              ← con rendimenti decrescenti
+         × carico × penalitàSovrallenamento
+         × penalitàStanchezza × morale
+         × minigioco × rumore
+```
+
+**Ogni attributo ha il proprio picco.** I riflessi se ne vanno a ventisei anni,
+il feedback tecnico cresce fino a trentatré. Un trentaquattrenne non è un
+ventiseienne peggiore: è un pilota diverso, e l'**esperienza** — che sale sempre
+e non cala mai — gli restituisce fino a otto centesimi al giro.
+
+Il tetto non è un `if`: emerge da `difficoltàMarginale`, che a un decimo dal
+potenziale vale già un quarantesimo. Nessuno raggiunge davvero il proprio
+potenziale — ci si avvicina, e quanto ci si avvicina lo decide lo staff.
+
+La scala è tarata sulla curva di carriera, non a occhio: **un diciottenne con
+potenziale 91 arriva a 81 da solo e a 87 con uno staff di livello**, in entrambi
+i casi attorno ai ventisette anni. Quei sei punti sono ciò che lo staff vale.
+
+Anche i piloti gestiti dal computer hanno chi li segue: non uno staff da
+gestire, ma l'`entourage` della loro scuderia, proporzionato al prestigio. Ne
+esce un gradiente che il giocatore sente — un sedile in un top team non porta
+solo una macchina migliore.
+
+### Gomme: tre fasi e un crollo
+
+Il degrado non è una parabola. È piatto fino al 40% di usura, quadratico fino
+al 70%, poi **crolla**. È quel crollo a rendere la scelta di quando fermarsi una
+decisione invece di un calcolo. La finestra termica (60–80 °C) è il gancio del
+minigioco "banda termica": lì il giocatore pilota a mano la stessa variabile.
+
+### Sorpassi: modello logistico
+
+La formulazione additiva precedente poteva produrre probabilità negative o
+maggiori di uno. Una sigmoide sta sempre fra 0 e 1 e ha coefficienti che si
+leggono uno per uno: il distacco pesa più di tutto, poi il passo, poi la
+differenza di abilità; la difficoltà del circuito sottrae.
+
+## La gara, due cadenze
 
 Un solo modello, due cadenze. `race.ts` definisce le formule — tempo sul giro,
 degrado, sorpasso, ritiro, sosta — e le usano sia `simulateRace()` a
@@ -415,6 +482,9 @@ Ognuna nasce da un problema osservato, non da un'intuizione.
 | 7 | Ancoraggio del potenziale | i record delle prime stagioni devono continuare a valere | `market.ts` |
 | 8 | Reset regolamentare ogni 4–6 anni | rimescola la gerarchia; senza, il gioco muore entro la decima stagione | `regulations.ts` |
 | 9 | Anti-inflazione a controllo integrale | una correzione proporzionale lascia un errore permanente: al volante arrivano i migliori del bacino | `market.ts` |
+| 10 | Difficoltà marginale `gap^1.6` | il potenziale è un asintoto, non una destinazione | `curves.ts` |
+| 11 | Sovrallenamento e stanchezza | senza, l'ottimo è sempre "tutto al massimo, tutte le settimane" | `progression.ts` |
+| 12 | Entourage dei piloti IA | altrimenti solo il giocatore cresce, e la griglia si svuota di talento | `staff.ts` |
 
 Le regole 2–6 sono state aggiunte **dopo** la prima simulazione a 40 stagioni, che aveva dato 29 titoli su 40 a una sola scuderia. Il test `nessuna scuderia monopolizza il campionato` impedisce alla regressione di tornare.
 
@@ -441,6 +511,12 @@ engine/
   driver.ts         creazione, newgen, overall, curve di età, ritiro
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   training.ts       sessioni, tetti, scelta del minigioco, applicazione crescita
+  curves.ts         sigmoidi, curve di età, rendimenti decrescenti
+  progression.ts    crescita settimanale, sovrallenamento, stanchezza
+  tyres.ts          degrado a tre fasi, finestra termica
+  overtaking.ts     probabilità di sorpasso a modello logistico
+  incidents.ts      errore del pilota e guasto meccanico
+  balance.ts        metriche di bilanciamento con bande obiettivo
   migrate.ts        recupera i salvataggi scritti da versioni precedenti
   race.ts           il modello: formule di gara, gara veloce, qualifica
   liveRace.ts       la stessa gara avanzata a passi, con i comandi del giocatore
@@ -452,8 +528,8 @@ engine/
     tracks.ts       12 circuiti di fantasia, parametrizzati sui valori reali
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              56 test: rng, gara, gara live, allenamento, mondo,
-                    contratti, migrazione dei salvataggi
+tests/              77 test: rng, curve e modelli, gara, gara live,
+                    allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
 tools/check-offers.mjs verifica il flusso delle offerte di contratto

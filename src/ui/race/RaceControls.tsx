@@ -32,7 +32,7 @@ export function RaceControls({
   const attacking = isAttacking(race, car);
   const cooling = race.t < attackReadyAt;
   const canAttack = gapAhead !== null && gapAhead < 1 && !cooling && !attacking && !car.dnf;
-  const wear = Math.min(100, car.wear);
+  const wear = Math.min(100, car.tyre.wear);
   const wearColour = wear > 80 ? '#E8283C' : wear > 55 ? '#F5C518' : '#2FD98A';
 
   return (
@@ -58,7 +58,7 @@ export function RaceControls({
             ))}
           </div>
           <span className="font-mono text-2xs text-dim tnum">
-            {car.compound} · {Math.round(car.wear)}%
+            {car.tyre.compound} · {Math.round(car.tyre.wear)}%
           </span>
         </div>
         <div className="h-1.5 bg-panel2 rounded-sm overflow-hidden">

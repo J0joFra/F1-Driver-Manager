@@ -4,6 +4,9 @@ import {
   MIN_GAP, POINTS, lapTimeFor, overtakeChance, pitLossFor, pitStrategy,
   retirementChancePerLap, wearPerLap, type RaceEntry,
 } from './race.js';
+import { DRS_RANGE } from './overtaking.js';
+import { safetyCarChancePerLap } from './incidents.js';
+import { freshTyre, updateTemperature, type TyreState } from './tyres.js';
 
 /**
  * La gara che il giocatore guarda.
@@ -25,8 +28,8 @@ export interface LiveCar {
   lap: number;
   lastLap: number;
   bestLap: number;
-  compound: Compound;
-  wear: number;
+  /** stato del treno di gomme montato: mescola, usura, temperatura, giri */
+  tyre: TyreState;
   stops: number;
   mode: EngineMode;
   /** mescola da montare alla prossima sosta; null = non si entra */
@@ -106,8 +109,7 @@ export function createLiveRace(
       lap: 1,
       lastLap: track.baseLap,
       bestLap: Infinity,
-      compound: startCompound,
-      wear: 0,
+      tyre: freshTyre(startCompound),
       stops: 0,
       mode: 'normal',
       pitArmed: null,
@@ -209,8 +211,7 @@ export function stepRace(race: LiveRace, dt: number): void {
     const lapTime = lapTimeFor(c.entry, {
       track,
       lap: c.lap,
-      compound: c.compound,
-      wear: c.wear,
+      tyre: c.tyre,
       wet: race.wet,
       dirtyAir: c.dirtyAir,
       mode: c.mode,
@@ -221,11 +222,17 @@ export function stepRace(race: LiveRace, dt: number): void {
     const before = Math.floor(c.progress);
     const fraction = dt / lapTime;
     c.progress += fraction;
-    c.wear = Math.min(150, c.wear + wearPerLap(c.entry, c.compound, track, c.mode, attacking) * fraction * (sc ? 0.16 : 1));
+    const push = sc ? 0.5 : attacking ? 1.35 : c.mode === 'push' ? 1.2 : c.mode === 'conserve' ? 0.85 : 1;
+    c.tyre.wear = Math.min(
+      150,
+      c.tyre.wear + wearPerLap(c.entry, c.tyre, track, c.mode, attacking) * fraction * (sc ? 0.16 : 1),
+    );
+    c.tyre.age += fraction;
+    c.tyre.temperature = updateTemperature(c.tyre, push, track.trackTemp, fraction);
     if (!sc && lapTime < c.bestLap) c.bestLap = lapTime;
 
     // Ritiro: la probabilità per giro, riscalata sulla frazione percorsa.
-    if (rng.chance(retirementChancePerLap(c.entry, c.wear, race.wet) * fraction)) {
+    if (rng.chance(retirementChancePerLap(c.entry, c.tyre, race.wet, 0, c.dirtyAir) * fraction)) {
       c.dnf = true;
       log(race, { kind: 'retire', drivers: [c.entry.driverId], key: c.entry.driverId === race.playerId });
       continue;
@@ -241,20 +248,19 @@ export function stepRace(race: LiveRace, dt: number): void {
       }
       // L'IA decide da sé quando fermarsi; il giocatore arma la sosta a mano.
       if (c.entry.driverId !== race.playerId && c.pitArmed === null && c.stops === 0 && !sc) {
-        if (c.lap >= (c.plan[0] ?? Infinity) || c.wear > 82) {
-          c.pitArmed = c.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S';
+        if (c.lap >= (c.plan[0] ?? Infinity) || c.tyre.wear > 82) {
+          c.pitArmed = c.tyre.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S';
         }
       }
       if (c.pitArmed) {
         const loss = pitLossFor(c.entry, sc);
         c.progress -= loss / track.baseLap;
-        c.compound = c.pitArmed;
+        c.tyre = freshTyre(c.pitArmed);
         c.pitArmed = null;
-        c.wear = 0;
         c.stops += 1;
         c.pitUntil = race.t + PIT_STATIONARY;
         log(race, {
-          kind: 'pit', drivers: [c.entry.driverId], compound: c.compound,
+          kind: 'pit', drivers: [c.entry.driverId], compound: c.tyre.compound,
           key: c.entry.driverId === race.playerId,
         });
       }
@@ -270,7 +276,15 @@ export function stepRace(race: LiveRace, dt: number): void {
     fol.dirtyAir = gap < 1.0;
     if (gap >= MIN_GAP || sc) continue;
 
-    const p = overtakeChance(lead.lastLap - fol.lastLap, track, isAttacking(race, fol));
+    const p = overtakeChance(track, {
+      gap,
+      attackSkill: fol.entry.speed + fol.entry.composure,
+      defenceSkill: lead.entry.speed + lead.entry.consistency,
+      paceDelta: lead.lastLap - fol.lastLap,
+      tyreAdvantage: lead.tyre.wear - fol.tyre.wear,
+      drs: gap < DRS_RANGE,
+      attacking: isAttacking(race, fol),
+    });
     if (p > 0 && rng.chance(p * dt)) {
       fol.progress = lead.progress + 0.3 / track.baseLap;
       lead.progress -= 0.3 / track.baseLap;
@@ -287,7 +301,7 @@ export function stepRace(race: LiveRace, dt: number): void {
   // Safety car
   if (sc && race.t + dt >= race.safetyCarUntil) log(race, { kind: 'safetyCarIn', drivers: [], key: false });
   else if (!sc && race.safetyCarsUsed === 0 && race.lap > 3 && race.lap < track.laps - 3) {
-    if (rng.chance(track.safetyCar * (race.wet ? 1.6 : 1) * (dt / (track.baseLap * track.laps)))) {
+    if (rng.chance(safetyCarChancePerLap(track, race.wet ? 1 : 0) * (dt / track.baseLap))) {
       race.safetyCarUntil = race.t + 50;
       race.safetyCarsUsed += 1;
       log(race, { kind: 'safetyCarOut', drivers: [], key: true });

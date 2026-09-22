@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createRng } from '../src/engine/rng.js';
 import { getTrack } from '../src/engine/data/tracks.js';
 import type { RaceEntry } from '../src/engine/race.js';
-import { simulateRace } from '../src/engine/race.js';
+import { POINTS, simulateRace } from '../src/engine/race.js';
 import {
   armPit, carOf, createLiveRace, fastForward, gapBetween, liveResults,
   order, setMode, startAttack, stepRace,
@@ -75,14 +75,14 @@ describe('gara live', () => {
     const race = createLiveRace(track, field(), createRng(5));
     const me = carOf(race, 'd0')!;
     for (let i = 0; i < 400; i++) stepRace(race, 1);
-    const wornDown = me.wear;
+    const wornDown = me.tyre.wear;
     expect(wornDown).toBeGreaterThan(0);
     armPit(me, 'H');
     const progressBefore = me.progress;
     for (let i = 0; i < 200; i++) stepRace(race, 1);
     expect(me.stops).toBe(1);
-    expect(me.compound).toBe('H');
-    expect(me.wear).toBeLessThan(wornDown);
+    expect(me.tyre.compound).toBe('H');
+    expect(me.tyre.wear).toBeLessThan(wornDown);
     expect(me.progress - progressBefore).toBeLessThan(200 / track.baseLap);
   });
 
@@ -97,7 +97,7 @@ describe('gara live', () => {
     const push = build('push');
     const conserve = build('conserve');
     expect(push.progress).toBeGreaterThan(conserve.progress);
-    expect(push.wear).toBeGreaterThan(conserve.wear);
+    expect(push.tyre.wear).toBeGreaterThan(conserve.tyre.wear);
   });
 
   it("l'attacco aumenta le probabilità di sorpasso", () => {
@@ -164,7 +164,11 @@ describe('gara live', () => {
     expect(live).toHaveLength(fast.results.length);
     const fastPoints = fast.results.reduce((s, r) => s + r.points, 0);
     const livePoints = live.reduce((s, r) => s + r.points, 0);
-    // Stesso monte punti: cambia la cadenza della simulazione, non le regole.
-    expect(livePoints).toBe(fastPoints);
+    // Stessa scala di punti: cambia la cadenza della simulazione, non le
+    // regole. Il monte può differire di un punto perché il giro veloce lo
+    // assegna solo se chi lo firma chiude nei primi dieci, e a cadenze diverse
+    // può essere un pilota diverso.
+    expect(Math.abs(livePoints - fastPoints)).toBeLessThanOrEqual(1);
+    expect(livePoints).toBeGreaterThanOrEqual(POINTS.reduce((s, p) => s + p, 0));
   });
 });

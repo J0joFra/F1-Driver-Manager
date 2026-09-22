@@ -52,7 +52,10 @@ export function updateTalentAnchor(world: World): number {
   const active = Object.values(world.drivers).filter((d) => !d.retired && d.teamId);
   if (active.length === 0) return world.talentAnchor;
   const mean = active.reduce((s, d) => s + potentialOverall(d), 0) / active.length;
-  const corrected = world.talentAnchor - (mean - POTENTIAL_ANCHOR) * 0.5;
+  // Guadagno basso di proposito: le carriere durano quindici stagioni, quindi
+  // il parco piloti cambia lentamente e una correzione decisa arriverebbe
+  // sempre in ritardo, facendo oscillare il livello invece di stabilizzarlo.
+  const corrected = world.talentAnchor - (mean - POTENTIAL_ANCHOR) * 0.3;
   world.talentAnchor = clamp(corrected, POTENTIAL_ANCHOR - 12, POTENTIAL_ANCHOR + 12);
   return world.talentAnchor;
 }
