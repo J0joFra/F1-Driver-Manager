@@ -4,8 +4,9 @@ import { createNewgen, overall } from '../src/engine/driver.js';
 import { createStaffMember, staffGrowthMultiplier, MAX_GROWTH_MULTIPLIER } from '../src/engine/staff.js';
 import {
   applyTraining, emptyPlan, MINIGAME_AUTO, minigameMultiplier, pickMinigame,
-  trainingLimits, validatePlan, MAX_PER_CATEGORY,
+  trainingLimits, validatePlan, clampPlan, planTotal,
 } from '../src/engine/training.js';
+import { WEEK_TRAINING_CAPACITY } from '../src/engine/calendar.js';
 
 const plan = (sim: number, fit: number, eng: number, med: number) =>
   ({ simulator: sim, fitness: fit, engineering: eng, media: med });
@@ -13,26 +14,41 @@ const plan = (sim: number, fit: number, eng: number, med: number) =>
 describe('allenamento settimanale', () => {
   it('impone il tetto per categoria e quello totale', () => {
     const d = createNewgen(createRng(1), { potentialAnchor: 76 });
-    const limits = trainingLimits(d, false);
-    expect(limits.total).toBe(10);
-    expect(limits.perCategory.simulator).toBe(MAX_PER_CATEGORY);
-    expect(validatePlan(plan(4, 3, 2, 1), limits)).toEqual([]);
-    expect(validatePlan(plan(5, 0, 0, 0), limits).length).toBeGreaterThan(0);
-    expect(validatePlan(plan(4, 4, 4, 4), limits).length).toBeGreaterThan(0);
+    const limits = trainingLimits(d, WEEK_TRAINING_CAPACITY.free);
+    expect(limits.total).toBe(2);
+    expect(validatePlan(plan(1, 1, 0, 0), limits)).toEqual([]);
+    expect(validatePlan(plan(3, 0, 0, 0), limits).length).toBeGreaterThan(0);
+    expect(validatePlan(plan(1, 1, 1, 0), limits).length).toBeGreaterThan(0);
   });
 
-  it('la settimana di gara concede meno sessioni', () => {
+  it('la settimana di gara concede una sola sessione', () => {
     const d = createNewgen(createRng(2), { potentialAnchor: 76 });
-    expect(trainingLimits(d, true).total).toBe(6);
+    expect(trainingLimits(d, WEEK_TRAINING_CAPACITY.race).total).toBe(1);
+  });
+
+  it('una settimana di riposo forzato non concede niente, nemmeno allo staff', () => {
+    const d = createNewgen(createRng(2), { potentialAnchor: 76 });
+    d.staff.push(createStaffMember(createRng(9), 'trainer', 90));
+    expect(trainingLimits(d, 0).total).toBe(0);
   });
 
   it('lo staff alza i tetti, non i punteggi', () => {
     const d = createNewgen(createRng(3), { potentialAnchor: 76 });
     d.staff.push(createStaffMember(createRng(4), 'coach', 80));
     d.staff.push(createStaffMember(createRng(5), 'trainer', 70));
-    const limits = trainingLimits(d, false);
-    expect(limits.perCategory.simulator).toBe(MAX_PER_CATEGORY + 1);
-    expect(limits.total).toBe(12);
+    const limits = trainingLimits(d, WEEK_TRAINING_CAPACITY.free);
+    expect(limits.perCategory.simulator).toBe(WEEK_TRAINING_CAPACITY.free + 1);
+    expect(limits.total).toBe(WEEK_TRAINING_CAPACITY.free + 1);
+  });
+
+  it('un piano troppo grande per la settimana viene riportato nei limiti', () => {
+    const d = createNewgen(createRng(6), { potentialAnchor: 76 });
+    const limits = trainingLimits(d, WEEK_TRAINING_CAPACITY.race);
+    const clamped = clampPlan(plan(2, 2, 1, 1), limits);
+    expect(planTotal(clamped)).toBe(limits.total);
+    expect(validatePlan(clamped, limits)).toEqual([]);
+    // Anche in una settimana senza allenamento: si svuota, non esplode.
+    expect(planTotal(clampPlan(plan(2, 2, 1, 1), trainingLimits(d, 0)))).toBe(0);
   });
 
   it('il minigioco dipende dalla categoria più investita e non si ripete', () => {

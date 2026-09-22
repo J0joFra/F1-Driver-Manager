@@ -1,7 +1,6 @@
 import type { AttributeKey, Driver, MinigameKind, TrainingCategory, TrainingPlan } from './types.js';
 import { commitTraining, previewTraining, recover } from './progression.js';
 import { physioQuality } from './staff.js';
-import { WEEK_TRAINING_CAPACITY, type WeekKind } from './calendar.js';
 import { clamp } from './curves.js';
 
 /**
@@ -47,15 +46,12 @@ export interface TrainingLimits {
  * staff alza i tetti. Un ingaggio che cambia una regola vale più di uno che
  * cambia un numero.
  */
-export function trainingLimits(d: Driver, week: WeekKind | boolean): TrainingLimits {
-  // Accetta ancora il booleano di prima per non rompere i richiami esistenti.
-  const kind: WeekKind = typeof week === 'boolean' ? (week ? 'race' : 'free') : week;
-  const base = WEEK_TRAINING_CAPACITY[kind];
+export function trainingLimits(d: Driver, base: number): TrainingLimits {
   const hasCoach = d.staff.some((s) => s.role === 'coach');
   const hasTrainer = d.staff.some((s) => s.role === 'trainer');
   const perCategory = Math.min(MAX_PER_CATEGORY, base);
   return {
-    total: base > 0 ? base + (hasTrainer ? 2 : 0) : 0,
+    total: base > 0 ? base + (hasTrainer ? 1 : 0) : 0,
     perCategory: {
       simulator: perCategory + (hasCoach && base > 0 ? 1 : 0),
       fitness: perCategory,
@@ -63,6 +59,26 @@ export function trainingLimits(d: Driver, week: WeekKind | boolean): TrainingLim
       media: perCategory,
     },
   };
+}
+
+/**
+ * Riporta un piano dentro i limiti della settimana.
+ *
+ * Serve perché il piano del giocatore sopravvive da una settimana all'altra,
+ * e le settimane non hanno la stessa capienza: un piano da due sessioni
+ * arriva intatto al weekend di gara, che ne concede una. Senza questo,
+ * avanzare di un giorno lancerebbe un'eccezione e la schermata resterebbe
+ * nera — l'ho già visto succedere una volta.
+ */
+export function clampPlan(plan: TrainingPlan, limits: TrainingLimits): TrainingPlan {
+  const out = emptyPlan();
+  let left = limits.total;
+  for (const c of TRAINING_CATEGORIES) {
+    const take = Math.max(0, Math.min(plan[c], limits.perCategory[c], left));
+    out[c] = take;
+    left -= take;
+  }
+  return out;
 }
 
 export function emptyPlan(): TrainingPlan {
@@ -132,10 +148,10 @@ export function applyTraining(
   d: Driver,
   plan: TrainingPlan,
   minigameMult = MINIGAME_AUTO,
-  week: WeekKind | boolean = false,
+  capacity = 0,
   efficiency?: number,
 ): TrainingOutcome {
-  const limits = trainingLimits(d, week);
+  const limits = trainingLimits(d, capacity);
   const preview = previewTraining(
     d, plan, limits.perCategory, limits.total, minigameMult, 1, efficiency,
   );
@@ -149,6 +165,18 @@ export function applyTraining(
   };
 }
 
+/**
+ * Priorità di una settimana di allenamento, dalla più alla meno probabile.
+ *
+ * Con una sola sessione a settimana la prima voce non può essere sempre la
+ * stessa: un pilota che allena il simulatore ventiquattro volte di fila non
+ * tocca mai la freddezza né le partenze, e l'insieme dei suoi attributi si
+ * squilibra. Queste quote dicono quanto spesso ogni categoria si prende la
+ * sessione, e sono la ragione per cui un campionato di piloti IA resta
+ * composto da piloti completi.
+ */
+const PRIORITY_SHARE = [0.4, 0.3, 0.2, 0.1] as const;
+
 /** Piano usato dai piloti gestiti dal computer: equilibrato, con un po' di carattere. */
 export function aiTrainingPlan(d: Driver, limits: TrainingLimits, bias: number): TrainingPlan {
   const plan = emptyPlan();
@@ -157,12 +185,23 @@ export function aiTrainingPlan(d: Driver, limits: TrainingLimits, bias: number):
   const order: TrainingCategory[] = d.age < 25
     ? ['simulator', 'fitness', 'engineering', 'media']
     : ['engineering', 'simulator', 'media', 'fitness'];
-  if (bias > 0.6) order.reverse();
-  for (const c of order) {
-    const take = Math.min(limits.perCategory[c], left, c === 'media' ? 2 : limits.perCategory[c]);
+
+  // Da dove parte il giro di questa settimana. Con dieci sessioni si finiva
+  // per coprire tutto comunque; con una, il punto di partenza è la scelta.
+  let start = 0;
+  let roll = bias;
+  for (let i = 0; i < PRIORITY_SHARE.length; i++) {
+    if (roll < PRIORITY_SHARE[i]!) { start = i; break; }
+    roll -= PRIORITY_SHARE[i]!;
+    start = i + 1;
+  }
+  start = Math.min(start, order.length - 1);
+
+  for (let i = 0; i < order.length && left > 0; i++) {
+    const c = order[(start + i) % order.length]!;
+    const take = Math.min(limits.perCategory[c], left);
     plan[c] = take;
     left -= take;
-    if (left <= 0) break;
   }
   return plan;
 }

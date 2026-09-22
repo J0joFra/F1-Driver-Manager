@@ -34,7 +34,7 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
   const week = currentWeek(world);
   const kind = week?.kind ?? 'free';
   const raceWeek = kind === 'race';
-  const limits = trainingLimits(me, kind);
+  const limits = trainingLimits(me, week?.training ?? 0);
   const resting = limits.total === 0;
   const free = limits.total - planTotal(plan);
   const minigame = pickMinigame(plan, world.lastMinigame);

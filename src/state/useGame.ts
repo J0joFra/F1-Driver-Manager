@@ -115,7 +115,9 @@ export const useGame = create<GameState>()(
     (set, get) => ({
       world: null,
       screen: 'paddock',
-      plan: { simulator: 3, fitness: 2, engineering: 1, media: 0 },
+      // Una sola sessione: è quanto concede una settimana di gara, che è
+      // dove una carriera comincia.
+      plan: { simulator: 1, fitness: 0, engineering: 0, media: 0 },
       setPlan: (plan) => set({ plan }),
       lastWeek: null,
       lastDay: null,

@@ -132,9 +132,7 @@ function buildRows(world: World, month: number, plan: TrainingPlan | null) {
   const rows: { label: string; cells: Cell[]; busy: boolean }[] = [];
   for (let monday = start; monday <= last; monday = new Date(monday.getTime() + 7 * DAY_MS)) {
     const week = byMonday.get(monday.getTime()) ?? null;
-    const activities = week
-      ? weekActivities(week.kind, plan, week.trackId !== null)
-      : null;
+    const activities = week ? weekActivities(week, plan) : null;
 
     const cells: Cell[] = [];
     for (let d = 0; d < DAYS_IN_WEEK; d++) {

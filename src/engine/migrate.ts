@@ -1,7 +1,9 @@
 import type { World } from './types.js';
 import { POTENTIAL_ANCHOR } from './market.js';
 import { TEAM_SEEDS } from './data/teams.js';
-import { buildCalendar, seasonStartDay, SEASON_WEEKS, type SeasonWeek } from './calendar.js';
+import {
+  buildCalendar, capacityOf, seasonStartDay, SEASON_WEEKS, type SeasonWeek,
+} from './calendar.js';
 import { createRng, hashSeed } from './rng.js';
 
 /**
@@ -46,6 +48,20 @@ export function migrateWorld(raw: unknown): World | null {
     const progress = typeof w.week === 'number' ? w.week / Math.max(1, schedule.length) : 0;
     w.schedule = buildCalendar(w.year, races, createRng(hashSeed('calendario', w.seed ?? w.year)));
     w.week = Math.min(SEASON_WEEKS - 1, Math.round(progress * SEASON_WEEKS));
+  }
+
+  // La capienza di allenamento è diventata una proprietà della settimana
+  // quando le pause hanno preso l'alternanza. Un salvataggio più vecchio non
+  // ce l'ha: si ricalcola dal tipo e dalla posizione dentro il blocco di
+  // pausa, senza rigenerare il calendario e perdere il punto della stagione.
+  const schedule2 = w.schedule as SeasonWeek[];
+  if (schedule2.some((week) => typeof week?.training !== 'number')) {
+    let offset = 0;
+    for (let i = 0; i < schedule2.length; i++) {
+      const week = schedule2[i]!;
+      offset = schedule2[i - 1]?.kind === week.kind ? offset + 1 : 0;
+      week.training = capacityOf(week.kind, offset);
+    }
   }
 
   if (!Array.isArray(w.offers)) w.offers = [];

@@ -3,6 +3,7 @@ import { clamp, createRng, hashSeed, type Rng } from './rng.js';
 import { getTrack } from './data/tracks.js';
 import { carPace } from './regulations.js';
 import { simulateQualifying, simulateRace, type RaceEntry } from './race.js';
+import { RACE_FATIGUE } from './progression.js';
 
 // La lunghezza della stagione la decide il calendario: qui si riespone perché
 // mezzo motore la usa come limite del ciclo settimanale.
@@ -92,6 +93,9 @@ export function commitWeekend(
 
     d.career.starts += 1;
     d.career.points += r.points;
+    // Correre stanca più che allenarsi: due ore al limite, con il collo e il
+    // fiato di un weekend intero dietro.
+    d.fatigue = clamp(d.fatigue + RACE_FATIGUE, 0, 100);
     if (!r.dnf) {
       if (r.position === 1) d.career.wins += 1;
       if (r.position <= 3) d.career.podiums += 1;

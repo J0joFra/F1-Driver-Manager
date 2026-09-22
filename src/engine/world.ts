@@ -1,8 +1,8 @@
 import type { MinigameKind, Seat, TrainingPlan, World } from './types.js';
 import { createRng, hashSeed } from './rng.js';
 import { TEAM_SEEDS } from './data/teams.js';
-import { buildCalendar, raceCountOf, WEEK_RECOVERY, type WeekKind } from './calendar.js';
-import { COMMIT_DAY, DAYS_IN_WEEK, RACE_DAY, type DayActivity, weekActivities } from './days.js';
+import { buildCalendar, raceCountOf, WEEK_RECOVERY, type SeasonWeek, type WeekKind } from './calendar.js';
+import { commitDay, DAYS_IN_WEEK, RACE_DAY, type DayActivity, weekActivities } from './days.js';
 import { applyAging, createVeteran, overall, retirementChance } from './driver.js';
 import {
   acceptOffer as marketAcceptOffer, intakeNewgens, POTENTIAL_ANCHOR,
@@ -11,8 +11,8 @@ import {
 import { developCars, maybeReset, updatePrestige, updateTeamResources } from './regulations.js';
 import { constructorStandings, driverStandings, rngFor, runWeekend, SEASON_WEEKS, seasonTotalsFor } from './season.js';
 import {
-  aiTrainingPlan, applyTraining, MINIGAME_AUTO, minigameMultiplier,
-  pickMinigame, trainingLimits, validatePlan,
+  aiTrainingPlan, applyTraining, clampPlan, MINIGAME_AUTO, minigameMultiplier,
+  pickMinigame, trainingLimits,
 } from './training.js';
 import { entourageEfficiency } from './staff.js';
 
@@ -144,7 +144,9 @@ export interface DayReport {
  * una settimana intera — e non aggiungerebbe niente: il giocatore decide il
  * piano una volta a settimana, non una volta al giorno.
  */
-function commitWeekWork(world: World, kind: WeekKind, opts: WeekOptions): MinigameKind | null {
+function commitWeekWork(world: World, week: SeasonWeek | undefined, opts: WeekOptions): MinigameKind | null {
+  const kind: WeekKind = week?.kind ?? 'free';
+  const capacity = week?.training ?? 0;
   const rng = rngFor(world, 'week');
   const player = playerDriver(world);
   let minigame: MinigameKind | null = null;
@@ -155,20 +157,21 @@ function commitWeekWork(world: World, kind: WeekKind, opts: WeekOptions): Miniga
     if (WEEK_RECOVERY[kind] > 0) {
       d.fatigue = Math.max(0, d.fatigue - WEEK_RECOVERY[kind]);
     }
-    const limits = trainingLimits(d, kind);
+    const limits = trainingLimits(d, capacity);
 
     if (d === player && opts.plan) {
-      const errs = validatePlan(opts.plan, limits);
-      if (errs.length > 0) throw new Error(`Piano di allenamento non valido: ${errs.join('; ')}`);
-      minigame = pickMinigame(opts.plan, world.lastMinigame);
+      // Il piano sopravvive da una settimana all'altra, le capienze no: si
+      // riporta dentro i limiti invece di rifiutarlo.
+      const plan = clampPlan(opts.plan, limits);
+      minigame = pickMinigame(plan, world.lastMinigame);
       const mult = opts.minigameScore === undefined
         ? MINIGAME_AUTO
         : minigameMultiplier(opts.minigameScore);
-      applyTraining(d, opts.plan, minigame ? mult : MINIGAME_AUTO, kind);
+      applyTraining(d, plan, minigame ? mult : MINIGAME_AUTO, capacity);
     } else {
       const team = d.teamId ? world.teams[d.teamId] : null;
       applyTraining(
-        d, aiTrainingPlan(d, limits, rng.next()), MINIGAME_AUTO, kind,
+        d, aiTrainingPlan(d, limits, rng.next()), MINIGAME_AUTO, capacity,
         entourageEfficiency(team?.prestige ?? 30),
       );
     }
@@ -198,12 +201,11 @@ function advanceCursor(world: World): void {
 export function advanceDay(world: World, opts: WeekOptions = {}): DayReport {
   const week = world.schedule[world.week];
   const trackId = week?.trackId ?? null;
-  const kind = week?.kind ?? 'free';
   const day = world.dayOfWeek;
-  const activities = weekActivities(kind, opts.plan ?? null, trackId !== null)[day] ?? [];
+  const activities = week ? weekActivities(week, opts.plan ?? null)[day] ?? [] : [];
 
-  const trainingApplied = day === COMMIT_DAY[kind];
-  const minigame = trainingApplied ? commitWeekWork(world, kind, opts) : null;
+  const trainingApplied = day === commitDay(week?.training ?? 0);
+  const minigame = trainingApplied ? commitWeekWork(world, week, opts) : null;
 
   const raceToday = trackId !== null && day === RACE_DAY;
   if (raceToday && opts.deferRace) {
