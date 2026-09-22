@@ -42,16 +42,20 @@
 }
 
 @layer components {
-  /* Le schede sono l'unità di base dell'interfaccia: bordo tenue, angoli
-     morbidi, intestazione con un titolo condensato in maiuscolo. */
+  /* Le schede sono l'unità di base: fondo appena più chiaro della pagina,
+     bordo tenue, intestazione con etichetta piccola e spaziata. */
   .panel {
-    @apply bg-panel2 border border-line rounded-lg shadow-sm;
+    @apply bg-panel border border-line rounded-md;
   }
   .panel-head {
-    @apply flex items-center justify-between gap-2 px-3 py-2 border-b border-line;
+    @apply flex items-center justify-between gap-2 px-3 py-[7px] border-b border-line shrink-0;
   }
   .panel-title {
-    @apply font-display text-sm tracking-[0.12em] uppercase text-ink font-bold;
+    @apply font-sans text-2xs tracking-[0.16em] uppercase text-muted font-semibold;
+  }
+  /* Etichetta di campo: minuscola, spaziata, sopra un valore grande. */
+  .field-label {
+    @apply font-sans text-[8.5px] tracking-[0.16em] uppercase text-dim font-medium;
   }
   .scroll-y {
     @apply overflow-y-auto;

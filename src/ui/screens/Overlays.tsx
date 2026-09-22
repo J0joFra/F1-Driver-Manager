@@ -41,12 +41,18 @@ export function WeekendOverlay() {
             <h2 className="font-display text-2xl font-bold leading-tight mt-1">{getTrack(weekend.trackId).name.toUpperCase()}</h2>
           </div>
           <div className="flex gap-5">
-            <Stat value={mine ? (mine.dnf ? 'RIT' : `P${mine.position}`) : '—'} label="Arrivo"
-              accent={mine?.dnf ? '#E8283C' : mine && mine.position <= 3 ? '#2FD98A' : undefined} />
+            <Stat
+              value={mine ? (mine.dnf ? 'RIT' : `P${mine.position}`) : '—'}
+              label="Arrivo"
+              {...(mine && !mine.dnf && mine.position <= 3 ? { tone: 'green' as const } : {})}
+            />
             <Stat value={grid ? `P${grid}` : '—'} label="Griglia" />
-            <Stat value={mine?.points ?? 0} label="Punti" />
-            <Stat value={delta > 0 ? `+${delta}` : delta || '—'} label="Guadagnate"
-              accent={delta > 0 ? '#2FD98A' : delta < 0 ? '#E8283C' : undefined} />
+            <Stat value={mine?.points ?? 0} label="Punti" tone="accent" />
+            <Stat
+              value={delta > 0 ? `+${delta}` : delta || '—'}
+              label="Guadagnate"
+              {...(delta > 0 ? { tone: 'green' as const } : {})}
+            />
           </div>
           <div className="font-mono text-2xs text-dim leading-relaxed">
             {mine?.dnf

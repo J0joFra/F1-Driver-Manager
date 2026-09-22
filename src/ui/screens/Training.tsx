@@ -1,127 +1,162 @@
+import { Dumbbell, RotateCcw } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
 import { isRaceWeek, player } from '../../engine/selectors.js';
-import { ATTRIBUTE_KEYS, type AttributeKey, type TrainingCategory } from '../../engine/types.js';
-import {
-  CATEGORY_EFFECTS, TRAINING_CATEGORIES, planTotal, trainingLimits,
-} from '../../engine/training.js';
+import type { AttributeKey, TrainingCategory } from '../../engine/types.js';
+import { CATEGORY_EFFECTS, TRAINING_CATEGORIES, emptyPlan, pickMinigame, planTotal, trainingLimits } from '../../engine/training.js';
 import { staffGrowthMultiplier } from '../../engine/staff.js';
 import { ageGrowthFactor } from '../../engine/driver.js';
-import { pickMinigame } from '../../engine/training.js';
-import { Note, Panel } from '../components/kit.js';
+import { ATTRIBUTE_COLOURS, Bar, Btn, Note, Panel, Pips } from '../components/kit.js';
 import { ATTR_LABELS, CATEGORY_LABELS, MINIGAME_LABELS } from '../format.js';
 
+/** L'attributo su cui ogni categoria pesa di più: è quello che il giocatore vede muoversi. */
+function primaryAttribute(category: TrainingCategory): AttributeKey | null {
+  const entries = Object.entries(CATEGORY_EFFECTS[category]) as [AttributeKey, number][];
+  if (entries.length === 0) return null;
+  return entries.sort((a, b) => b[1] - a[1])[0]![0];
+}
+
 /**
- * La settimana di lavoro. Il tetto per categoria è il vincolo che tiene viva
- * la scelta: con 10 sessioni e un massimo di 4 devi toccarne almeno tre.
+ * Il piano settimanale.
+ *
+ * A sinistra si distribuiscono le sessioni, a destra si vede su cosa vanno a
+ * finire. Il tetto per categoria è il vincolo che tiene viva la scelta: con
+ * dieci sessioni e un massimo di quattro devi toccarne almeno tre.
  */
-export function Training() {
+export function Training({ onAdvance }: { onAdvance: () => void }) {
   const world = useGame((s) => s.world)!;
   const plan = useGame((s) => s.plan);
   const setPlan = useGame((s) => s.setPlan);
   const me = player(world)!;
 
-  const limits = trainingLimits(me, isRaceWeek(world));
-  const used = planTotal(plan);
-  const free = limits.total - used;
+  const raceWeek = isRaceWeek(world);
+  const limits = trainingLimits(me, raceWeek);
+  const free = limits.total - planTotal(plan);
   const minigame = pickMinigame(plan, world.lastMinigame);
 
   const bump = (c: TrainingCategory, delta: number) => {
     const next = { ...plan, [c]: plan[c] + delta };
-    if (next[c] < 0 || next[c] > limits.perCategory[c]) return;
-    if (planTotal(next) > limits.total) return;
+    if (next[c] < 0 || next[c] > limits.perCategory[c] || planTotal(next) > limits.total) return;
     setPlan(next);
   };
 
   // Anteprima della crescita: stessa formula del motore, senza applicarla.
   const staffMult = staffGrowthMultiplier(me);
   const ageMult = ageGrowthFactor(me.age);
-  const gains: Partial<Record<AttributeKey, number>> = {};
-  for (const c of TRAINING_CATEGORIES) {
-    if (plan[c] <= 0) continue;
-    for (const [key, weight] of Object.entries(CATEGORY_EFFECTS[c]) as [AttributeKey, number][]) {
-      const gap = me.caps[key] - me.attrs[key];
-      if (gap <= 0) continue;
-      const gapFactor = Math.max(0.12, Math.min(1, gap / 15));
-      gains[key] = (gains[key] ?? 0) + 0.135 * weight * plan[c] * staffMult * ageMult * 0.95 * gapFactor;
-    }
-  }
-  const ranked = ATTRIBUTE_KEYS.filter((k) => (gains[k] ?? 0) > 0).sort((a, b) => (gains[b] ?? 0) - (gains[a] ?? 0));
+  const gainOf = (key: AttributeKey, category: TrainingCategory) => {
+    const weight = CATEGORY_EFFECTS[category][key];
+    if (!weight || plan[category] <= 0) return 0;
+    const gap = me.caps[key] - me.attrs[key];
+    if (gap <= 0) return 0;
+    return 0.135 * weight * plan[category] * staffMult * ageMult * 0.95 * Math.max(0.12, Math.min(1, gap / 15));
+  };
 
   return (
-    <div className="h-full grid grid-cols-[1.3fr_1fr] gap-2 min-h-0">
+    <div className="h-full grid grid-cols-[264px_1fr] gap-2 min-h-0">
       <Panel
-        title={isRaceWeek(world) ? 'Settimana di gara' : 'Settimana libera'}
-        tag={<span className={free > 0 ? 'text-warn' : 'text-dim'}>{free} / {limits.total} libere</span>}
-        bodyClass="p-3 scroll-y"
+        title="Piano settimanale"
+        tag={<span className={free > 0 ? 'text-accent' : 'text-primary'}>{free}/{limits.total} libere</span>}
+        bodyClass="p-2.5 flex flex-col min-h-0"
       >
-        <div className="flex flex-col">
+        <div className="flex items-baseline justify-between pb-1.5 border-b border-line">
+          <span className="font-mono text-2xs text-muted">
+            {raceWeek ? 'Settimana di gara' : 'Settimana libera'}
+          </span>
+          <span className="font-mono text-2xs text-dim">max {limits.perCategory.simulator} per categoria</span>
+        </div>
+
+        <div className="flex-1 min-h-0 scroll-y -mx-0.5 px-0.5">
           {TRAINING_CATEGORIES.map((c) => {
-            const atMax = plan[c] >= limits.perCategory[c];
+            const key = primaryAttribute(c);
             return (
-              <div key={c} className="flex items-center justify-between gap-3 py-2 border-b border-line last:border-0">
-                <div className="min-w-0">
-                  <div className="font-display text-base font-semibold tracking-wide">{CATEGORY_LABELS[c]!.name}</div>
-                  <div className="text-2xs text-dim truncate">{CATEGORY_LABELS[c]!.hint}</div>
+              <div key={c} className="bg-panel2 border border-line rounded mt-1.5 px-2.5 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-sans text-xs font-semibold truncate">{CATEGORY_LABELS[c]!.name}</div>
+                    <div className="font-mono text-[8.5px] text-dim truncate">
+                      {key ? `Allena: ${ATTR_LABELS[key]}` : 'Allena: reputazione'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button" aria-label={`Meno ${CATEGORY_LABELS[c]!.name}`}
+                      onClick={() => bump(c, -1)} disabled={plan[c] <= 0}
+                      className="w-6 h-6 rounded bg-panel3 border border-line text-ink font-mono text-sm leading-none disabled:opacity-25"
+                    >−</button>
+                    <span className="font-display text-base font-bold w-4 text-center tnum">{plan[c]}</span>
+                    <button
+                      type="button" aria-label={`Più ${CATEGORY_LABELS[c]!.name}`}
+                      onClick={() => bump(c, 1)} disabled={free <= 0 || plan[c] >= limits.perCategory[c]}
+                      className="w-6 h-6 rounded bg-panel3 border border-line text-ink font-mono text-sm leading-none disabled:opacity-25"
+                    >+</button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button" aria-label={`Meno ${CATEGORY_LABELS[c]!.name}`}
-                    onClick={() => bump(c, -1)} disabled={plan[c] <= 0}
-                    className="w-8 h-8 rounded-sm bg-panel2 border border-line text-ink font-mono text-lg leading-none disabled:opacity-30"
-                  >−</button>
-                  <span className="font-display text-xl font-bold w-6 text-center tnum">{plan[c]}</span>
-                  <button
-                    type="button" aria-label={`Più ${CATEGORY_LABELS[c]!.name}`}
-                    onClick={() => bump(c, 1)} disabled={free <= 0 || atMax}
-                    className="w-8 h-8 rounded-sm bg-panel2 border border-line text-ink font-mono text-lg leading-none disabled:opacity-30"
-                  >+</button>
+                <div className="mt-1.5">
+                  <Pips filled={plan[c]} total={limits.perCategory[c]} colour={key ? ATTRIBUTE_COLOURS[key] : '#10B981'} />
                 </div>
               </div>
             );
           })}
         </div>
-        <div className="font-mono text-2xs text-dim mt-2 leading-relaxed">
-          Massimo {limits.perCategory.simulator} per categoria
-          {limits.perCategory.simulator > 4 && ' (il coach alza il tetto del simulatore)'}.
+
+        <div className="flex items-center gap-2 pt-2 mt-1 border-t border-line shrink-0">
+          <Btn onClick={() => setPlan(emptyPlan())} className="px-2.5">
+            <RotateCcw className="w-3 h-3" />Azzera
+          </Btn>
+          <Btn variant="green" onClick={onAdvance} className="flex-1" testId="train-advance">
+            <Dumbbell className="w-3.5 h-3.5" />
+            {raceWeek ? 'Allena e vai alla gara' : 'Allena e avanza'}
+          </Btn>
         </div>
       </Panel>
 
       <div className="flex flex-col gap-2 min-h-0">
-        <Panel title="Crescita prevista" tag="al prossimo weekend" bodyClass="p-3 scroll-y" className="flex-1">
-          {ranked.length === 0 ? (
-            <p className="text-xs text-dim">Nessuna sessione assegnata: questa settimana non cresci.</p>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {ranked.map((k) => (
-                <div key={k} className="flex justify-between font-mono text-xs">
-                  <span className="text-muted">{ATTR_LABELS[k]}</span>
-                  <b className="text-good font-medium tnum">+{(gains[k] ?? 0).toFixed(2)}</b>
+        <Panel title="Attributi allenati" tag="al prossimo weekend" className="flex-1" bodyClass="px-3 py-1.5 scroll-y">
+          {TRAINING_CATEGORIES.map((c) => {
+            const key = primaryAttribute(c);
+            if (!key) return null;
+            const gain = gainOf(key, c);
+            return (
+              <div key={c} className="py-1.5 border-b border-line/50 last:border-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-sans text-xs text-ink truncate">
+                    {CATEGORY_LABELS[c]!.name} <span className="text-dim">→</span> {ATTR_LABELS[key]}
+                  </span>
+                  <span className="flex items-baseline gap-2 shrink-0">
+                    {gain > 0 && <span className="font-mono text-2xs text-primary">+{gain.toFixed(2)}</span>}
+                    <b className="font-display text-base font-bold tnum leading-none">{Math.round(me.attrs[key])}</b>
+                  </span>
                 </div>
-              ))}
-              {plan.media > 0 && (
-                <div className="flex justify-between font-mono text-xs border-t border-line pt-1 mt-1">
-                  <span className="text-muted">Reputazione</span>
-                  <b className="text-good font-medium tnum">+{(plan.media * 0.6).toFixed(1)}</b>
+                <div className="mt-1">
+                  <Bar value={me.attrs[key]} colour={ATTRIBUTE_COLOURS[key]} height={5} />
                 </div>
-              )}
-            </div>
-          )}
+                <div className="font-mono text-[8.5px] text-dim mt-[3px]">Potenziale: {Math.round(me.caps[key])}</div>
+              </div>
+            );
+          })}
         </Panel>
 
-        <Panel title="Minigioco della settimana" className="shrink-0">
-          {minigame ? (
-            <div className="flex flex-col gap-1.5">
-              <div className="font-display text-lg font-bold text-vantar">{MINIGAME_LABELS[minigame]}</div>
-              <p className="text-2xs text-dim leading-relaxed">
-                Assegnato dalla categoria in cui hai investito di più. Non può ripetersi due settimane di fila.
-              </p>
+        <div className="shrink-0 flex flex-col gap-1.5">
+          {minigame && (
+            <div className="panel px-2.5 py-2 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="field-label">Minigioco della settimana</div>
+                <div className="font-sans text-xs font-semibold text-vantar truncate">{MINIGAME_LABELS[minigame]}</div>
+              </div>
+              <span className="font-mono text-[8.5px] text-dim text-right shrink-0 leading-tight">
+                dalla categoria<br />più investita
+              </span>
             </div>
-          ) : (
-            <p className="text-xs text-dim">Nessun minigioco: settimana di soli media, oppure sessioni non assegnate.</p>
           )}
-        </Panel>
-
-        {free > 0 && <Note tone="warn">Hai {free} session{free > 1 ? 'i' : 'e'} non assegnate. Vanno perse: il tempo è la risorsa che non torna.</Note>}
+          <Note>
+            Lo staff alza i tetti, non il potenziale: quello è fissato alla nascita. Il minigioco
+            modula la crescita fra 0.85× e 1.30×, ma non la decide.
+          </Note>
+          {free > 0 && (
+            <Note tone="warn">
+              {free} session{free > 1 ? 'i' : 'e'} non assegnate: vanno perse.
+            </Note>
+          )}
+        </div>
       </div>
     </div>
   );

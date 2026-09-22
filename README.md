@@ -91,27 +91,40 @@ Quello che questi numeri dicono: il mondo **non si congela** (cinque scuderie di
 
 ## Lo stile
 
-L'impaginazione prende spunto da **[OpenFoot Manager](https://github.com/openfootmanager/openfootmanager)**,
+Guscio e impaginazione sono disegnati su mockup concordati, nella stessa
+famiglia di **[OpenFoot Manager](https://github.com/openfootmanager/openfootmanager)**,
 che condivide quasi tutto lo stack (React, TypeScript, Tailwind, Zustand,
 Recharts, lucide-react) e ha risolto bene lo stesso problema: un gestionale
 denso che resta leggibile.
 
-Cosa è stato ripreso, adattato all'orizzontale:
-
 | Elemento | Come |
 |---|---|
-| **Menu laterale per gruppi** | *Carriera* e *Mondo*, etichette in maiuscolo condensato, riducibile a sole icone |
-| **Intestazione a due righe** | titolo grande della schermata, sotto la riga di contesto con data e prossima gara, a destra i comandi |
-| **Schede** | bordo tenue, angoli morbidi, intestazione con titolo condensato |
-| **Palette navy** | fondo `#0A1128`, pannelli `#131B33`, superfici `#1A2340`, verde d'azione e giallo di richiamo |
-| **Tipografia** | Barlow Condensed per i titoli, Inter per il testo |
+| **Barra delle sezioni** | sole icone, 48 px sul bordo sinistro, tacca verde sulla voce attiva |
+| **Riga di stato** | 34 px: nome, anno, settimana, prossima gara in giallo, e il comando che fa passare il tempo |
+| **Schede** | fondo appena più chiaro della pagina, bordo tenue, etichetta piccola e spaziata |
+| **Colonne** | due o tre per schermata: in orizzontale la larghezza è ciò che abbonda |
+| **Palette navy** | pagina `#0A1120`, schede `#0C1423`, superfici `#121B2E`; verde d'azione, giallo di richiamo |
+| **Tipografia** | Barlow Condensed per i numeri grandi, Inter per il testo, IBM Plex Mono per le cifre in colonna |
 | **Icone** | `lucide-react` |
 
-La differenza sta nei vincoli: OpenFoot Manager è un'app desktop con una barra
-laterale da 256 px e un'intestazione da 56 px. Qui il telefono in orizzontale
-lascia 390 px di altezza, quindi il menu sta in 146 px (52 se ridotto) e
-l'intestazione in 42. Il monospace per le cifre è un'aggiunta nostra: in una
-torre dei tempi i numeri devono incolonnarsi.
+Ogni attributo del pilota ha la propria tinta, presa dalla stessa scala
+validata per daltonismo dei colori scuderia. Il colore non identifica nulla da
+solo: il nome dell'attributo è sempre accanto alla barra.
+
+I vincoli restano diversi da quelli di un'app desktop: 390 px di altezza
+significa che l'intestazione non può avere due righe e che il menu non può
+permettersi le etichette. Il monospace per le cifre è un'aggiunta nostra — in
+una torre dei tempi i numeri devono incolonnarsi.
+
+### Le schermate
+
+| Schermata | Impaginazione |
+|---|---|
+| **Paddock** | tre colonne: il tuo pilota e il contratto · il prossimo weekend e la classifica piloti · la scuderia e la classifica costruttori |
+| **Pilota** | profilo e carriera a sinistra, i sette attributi per esteso a destra, ognuno con il proprio tetto |
+| **Allenamento** | piano settimanale a sinistra con i pip di allocazione, a destra gli attributi che si muovono |
+| **Finanze** | entrate · uscite · il netto isolato in una colonna sua |
+| **Scuderia** | la squadra · i piloti in schede · lo sviluppo, in sola lettura |
 
 ## L'interfaccia è orizzontale per costruzione
 
@@ -127,10 +140,14 @@ risorsa scarsa, non la larghezza, e questo decide tutto il resto:
 | **Scala tipografica compatta** (base 13 px) | densità da muretto box, non da sito web |
 | `padding-left/right: env(safe-area-inset-*)` | in orizzontale la tacca del telefono sta sui lati |
 
-`tools/screenshots.mjs` cattura tutte le schermate a 844×390 e **verifica che la
-pagina non scorra in verticale e che nessun pannello sbordi dal viewport**: sono
-regressioni facili da introdurre e invisibili su desktop — un pannello che
-sfora non fa scorrere nulla, si vede solo tagliato.
+`tools/screenshots.mjs` cattura tutte le schermate a 844×390 e verifica tre
+cose che su desktop non si vedono mai:
+
+1. la pagina non scorre in verticale;
+2. nessun pannello sborda dal viewport;
+3. **nessun contenuto è tagliato dentro il proprio pannello** senza poter
+   scorrere — il difetto che ricompare a ogni schermata nuova, perché non fa
+   scorrere niente: si vede solo troncato.
 
 ```bash
 npm run build && npm run preview &

@@ -82,9 +82,9 @@ export function App() {
         <div className="flex-1 min-w-0 flex flex-col relative">
           <TopBar onAdvance={onAdvance} busy={busy} />
           <main className="flex-1 min-h-0 p-2">
-            {screen === 'paddock' && <Paddock />}
+            {screen === 'paddock' && <Paddock onAdvance={onAdvance} />}
             {screen === 'pilota' && <DriverScreen />}
-            {screen === 'allenamento' && <Training />}
+            {screen === 'allenamento' && <Training onAdvance={onAdvance} />}
             {screen === 'finanze' && <Finance />}
             {screen === 'scuderia' && <TeamScreen />}
             {screen === 'classifiche' && <Standings />}

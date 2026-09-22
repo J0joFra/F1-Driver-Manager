@@ -48,6 +48,19 @@ async function noVerticalScroll(where) {
         break;
       }
     }
+    // Contenuto più alto del proprio contenitore, che però non può scorrere:
+    // si vede tagliato e non c'è modo di raggiungerlo. È il difetto che
+    // ricompare a ogni schermata nuova, quindi lo cerchiamo a ogni cattura.
+    for (const el of root.querySelectorAll('.panel *')) {
+      if (el.scrollHeight - el.clientHeight <= 4) continue;
+      const overflow = getComputedStyle(el).overflowY;
+      if (overflow === 'auto' || overflow === 'scroll') continue;
+      const label = el.className?.baseVal ?? String(el.className ?? '');
+      found.push(
+        `contenuto tagliato di ${el.scrollHeight - el.clientHeight}px in "${label.slice(0, 48)}"`,
+      );
+      break;
+    }
     return found;
   });
   if (problems.length) throw new Error(`${where}: ${problems.join(' · ')}`);

@@ -1,79 +1,65 @@
 import { useGame } from '../../state/useGame.js';
-import { player, seasonResults, teamOf } from '../../engine/selectors.js';
+import { player, teamOf } from '../../engine/selectors.js';
 import { overall } from '../../engine/driver.js';
 import { ATTRIBUTE_KEYS } from '../../engine/types.js';
-import { Panel, Stat } from '../components/kit.js';
+import { ATTRIBUTE_COLOURS, AttrRow, DriverBadge, KeyRow, Panel, Stat } from '../components/kit.js';
 import { ATTR_LABELS } from '../format.js';
 
-/** Scheda del pilota: attributi con il tetto stimato e la stagione in corso. */
+/**
+ * La scheda del pilota.
+ *
+ * A destra gli attributi per esteso, ciascuno con il proprio tetto: la
+ * distanza dal potenziale è l'informazione che guida ogni scelta di
+ * allenamento, quindi è scritta sotto ogni barra e non va cercata.
+ */
 export function DriverScreen() {
   const world = useGame((s) => s.world)!;
   const me = player(world)!;
   const team = teamOf(world, me);
-  const results = seasonResults(world, me.id);
 
   return (
-    <div className="h-full grid grid-cols-[1fr_1fr] gap-2 min-h-0">
-      <Panel title="Attributi" tag="│ = tetto stimato" bodyClass="p-3 scroll-y">
-        <div className="flex flex-col">
-          {ATTRIBUTE_KEYS.map((k) => {
-            const v = me.attrs[k];
-            const cap = me.caps[k];
-            return (
-              <div key={k} className="grid grid-cols-[1fr_28px_72px] items-center gap-2 py-1.5">
-                <span className="text-xs text-muted truncate">{ATTR_LABELS[k]}</span>
-                <span className="font-display text-base font-bold text-right tnum">{Math.round(v)}</span>
-                <div className="relative h-2 bg-panel2 rounded-sm overflow-hidden">
-                  <div className="absolute inset-y-0 left-0 bg-ink" style={{ width: `${v}%`, borderRadius: '0 4px 4px 0' }} />
-                  <div className="absolute inset-y-0 w-0.5 bg-dim" style={{ left: `${cap}%` }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="flex gap-5 mt-3 pt-3 border-t border-line">
-          <Stat value={Math.round(overall(me.attrs))} label="Overall" />
-          <Stat value={Math.round(overall(me.caps))} label="Potenziale" />
-          <Stat value={me.age} label="Età" />
-        </div>
-      </Panel>
-
-      <Panel
-        title="Stagione in corso"
-        tag={`${me.career.starts} GP in carriera`}
-        bodyClass="p-0 scroll-y"
-      >
-        {results.length === 0 ? (
-          <p className="text-xs text-dim p-3">Nessuna gara corsa quest'anno.</p>
-        ) : (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-panel">
-              <tr className="text-2xs uppercase tracking-[0.12em] text-dim">
-                <th className="text-left font-semibold px-3 py-1.5">Circuito</th>
-                <th className="text-right font-semibold px-1 py-1.5">Gri</th>
-                <th className="text-right font-semibold px-1 py-1.5">Fin</th>
-                <th className="text-right font-semibold px-3 py-1.5">Pt</th>
-              </tr>
-            </thead>
-            <tbody className="font-mono tnum">
-              {results.map((r, i) => (
-                <tr key={i} className="border-t border-line">
-                  <td className="px-3 py-1.5 text-muted truncate max-w-[130px]">{r.trackName}</td>
-                  <td className="px-1 py-1.5 text-right text-dim">{r.grid || '—'}</td>
-                  <td className={`px-1 py-1.5 text-right ${r.race?.dnf ? 'text-bad' : r.race && r.race.position <= 3 ? 'text-good' : 'text-ink'}`}>
-                    {r.race ? (r.race.dnf ? 'RIT' : r.race.position) : '—'}
-                  </td>
-                  <td className="px-3 py-1.5 text-right">{r.race?.points || ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {team && (
-          <div className="px-3 py-2 border-t border-line font-mono text-2xs text-dim">
-            {team.name} · ingaggio {(me.salary / 1_000_000).toFixed(2).replace('.', ',')}M · contratto {me.contractYears} {me.contractYears === 1 ? 'anno' : 'anni'}
+    <div className="h-full grid grid-cols-[216px_1fr] gap-2 min-h-0">
+      <div className="flex flex-col gap-2 min-h-0">
+        <Panel title="Profilo" className="shrink-0" bodyClass="p-2.5">
+          <div className="flex flex-col items-center">
+            <DriverBadge name={me.name} colour={team?.colour ?? '#5D6C85'} size={46} />
+            <div className="font-sans text-xs font-bold mt-1.5 text-center leading-tight">{me.name}</div>
+            <div className="font-mono text-2xs text-muted">{team?.name}</div>
           </div>
-        )}
+          {/* Quattro numeri su una riga sola: in 390 px di altezza una griglia
+              2×2 costerebbe trenta pixel che servono alla lista sotto. */}
+          <div className="grid grid-cols-4 gap-2 mt-2 pt-2 border-t border-line">
+            <Stat value={Math.round(overall(me.attrs))} label="OVR" tone="green" />
+            <Stat value={Math.round(overall(me.caps))} label="POT" tone="accent" />
+            <Stat value={me.age} label="Età" />
+            <Stat value={me.history.length} label="Stag." />
+          </div>
+        </Panel>
+
+        <Panel title="Carriera" className="flex-1" bodyClass="p-2.5 scroll-y">
+          <KeyRow label="Titoli" value={me.career.titles} tone="accent" />
+          <KeyRow label="Vittorie" value={me.career.wins} />
+          <KeyRow label="Podi" value={me.career.podiums} />
+          <KeyRow label="Pole" value={me.career.poles} />
+          <KeyRow label="Gare disputate" value={me.career.starts} />
+          <KeyRow
+            label="Miglior arrivo"
+            value={me.career.bestFinish === 99 ? '—' : `P${me.career.bestFinish}`}
+          />
+          <KeyRow label="Reputazione" value={Math.round(me.reputation)} />
+        </Panel>
+      </div>
+
+      <Panel title="Attributi" tag={`potenziale ${Math.round(overall(me.caps))}`} bodyClass="px-3 py-1 scroll-y">
+        {ATTRIBUTE_KEYS.map((k) => (
+          <AttrRow
+            key={k}
+            label={ATTR_LABELS[k]!}
+            value={me.attrs[k]}
+            cap={me.caps[k]}
+            colour={ATTRIBUTE_COLOURS[k]}
+          />
+        ))}
       </Panel>
     </div>
   );

@@ -34,11 +34,16 @@ export const ATTR_LABELS: Record<string, string> = {
   composure: 'Sangue freddo',
 };
 
+/**
+ * Nome breve e descrizione. Il nome sta in una colonna da 264 px, quindi
+ * "Lavoro con gli ingegneri" diventa "Ingegneria" e la frase intera passa
+ * nella descrizione, dove c'è spazio.
+ */
 export const CATEGORY_LABELS: Record<string, { name: string; hint: string }> = {
   simulator: { name: 'Simulatore', hint: 'Ripeti i giri del prossimo circuito' },
-  fitness: { name: 'Preparazione fisica', hint: 'Collo, resistenza, recupero' },
-  engineering: { name: 'Lavoro con gli ingegneri', hint: 'Assetto e lettura dei dati' },
-  media: { name: 'Media e sponsor', hint: 'Interviste, eventi, immagine' },
+  fitness: { name: 'Preparazione', hint: 'Collo, resistenza, recupero' },
+  engineering: { name: 'Ingegneria', hint: 'Assetto e lettura dei dati' },
+  media: { name: 'Media', hint: 'Interviste, eventi, immagine' },
 };
 
 export const MINIGAME_LABELS: Record<string, string> = {

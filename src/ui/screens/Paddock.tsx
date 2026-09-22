@@ -1,97 +1,185 @@
+import { Flag } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
-import { championshipPosition, headToHead, isRaceWeek, nextRace, player, teamOf, teammateOf } from '../../engine/selectors.js';
+import { championshipPosition, isRaceWeek, nextRace, player, teamOf } from '../../engine/selectors.js';
+import { constructorStandings, driverStandings } from '../../engine/season.js';
 import { overall } from '../../engine/driver.js';
-import { carPace } from '../../engine/regulations.js';
-import { Bar, Note, Panel, Stat } from '../components/kit.js';
+import { getTrack } from '../../engine/data/tracks.js';
+import { ATTRIBUTE_KEYS } from '../../engine/types.js';
+import { ATTRIBUTE_COLOURS, AttrRow, Bar, DriverBadge, KeyRow, Panel, Stat, TeamDot } from '../components/kit.js';
+import { ATTR_LABELS, money } from '../format.js';
 
-/** Schermata iniziale: dove sei, cosa ti aspetta, come stai andando. */
-export function Paddock() {
+/**
+ * Il cruscotto: a sinistra chi sei, al centro cosa ti aspetta e come va il
+ * campionato, a destra la tua scuderia. Tre colonne perché in orizzontale la
+ * larghezza è ciò che abbonda.
+ */
+export function Paddock({ onAdvance }: { onAdvance: () => void }) {
   const world = useGame((s) => s.world)!;
   const me = player(world)!;
   const team = teamOf(world, me);
-  const mate = teammateOf(world, me);
   const race = nextRace(world);
-  const h2h = mate ? headToHead(world, me.id, mate.id) : null;
+  const track = race ? getTrack(race.trackId) : null;
   const pos = championshipPosition(world, me.id);
-  const myPoints = world.standings[me.id] ?? 0;
-  const matePoints = mate ? world.standings[mate.id] ?? 0 : 0;
+  const drivers = driverStandings(world).slice(0, 10);
+  const teams = constructorStandings(world);
 
   return (
-    <div className="h-full grid grid-cols-[1.25fr_1fr] gap-2 min-h-0">
+    <div className="h-full grid grid-cols-[200px_1fr_208px] gap-2 min-h-0">
+      {/* ---- il pilota ---- */}
       <div className="flex flex-col gap-2 min-h-0">
-        <Panel title={isRaceWeek(world) ? 'Weekend di gara' : 'Prossimo weekend'} tag={race ? `round ${race.round}/${race.totalRounds}` : ''} className="flex-1">
-          {race ? (
-            <div className="flex flex-col gap-2">
-              <h3 className="font-display text-2xl font-bold leading-none">{race.trackName.toUpperCase()}</h3>
-              <div className="font-mono text-2xs text-muted leading-relaxed">
-                {race.weeksAway === 0 ? 'Si corre questa settimana' : `Fra ${race.weeksAway} settimane`}
-                {team && ` · monoposto ${carPace(team.car).toFixed(0)}/100 · affidabilità ${team.car.reliability.toFixed(0)}`}
-              </div>
-              <div className="flex gap-6 mt-1">
-                <Stat value={pos > 0 ? `P${pos}` : '—'} label="Campionato" />
-                <Stat value={myPoints} label="Punti" />
-                <Stat value={Math.round(overall(me.attrs))} label="Overall" />
-                <Stat value={Math.round(me.reputation)} label="Reputazione" />
-              </div>
+        {/* Intestazione fissa, elenco attributi scorrevole: a 390 px di altezza
+            i sette attributi non entrano tutti sotto la riga dei numeri. */}
+        <Panel title="Il tuo pilota" className="flex-1" bodyClass="p-2.5 flex flex-col min-h-0">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <DriverBadge name={me.name} colour={team?.colour ?? '#5D6C85'} />
+            <div className="min-w-0">
+              <div className="font-sans text-xs font-bold truncate">{me.name}</div>
+              <div className="font-mono text-2xs text-muted truncate">{team?.name}</div>
             </div>
-          ) : (
-            <p className="text-sm text-muted">Il calendario è finito. Chiudi l'anno per passare alla stagione successiva.</p>
-          )}
-        </Panel>
+          </div>
 
-        <Panel title="Stato" tag="pre-gara" className="shrink-0">
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { k: 'Forma', v: me.form, c: '#2FD98A' },
-              { k: 'Morale', v: me.morale, c: '#F5C518' },
-              { k: 'Reputazione', v: me.reputation, c: '#3E86F0' },
-            ].map((x) => (
-              <div key={x.k} className="flex flex-col gap-1">
-                <div className="flex justify-between text-2xs">
-                  <span className="text-muted">{x.k}</span>
-                  <span className="font-mono text-dim tnum">{Math.round(x.v)}</span>
-                </div>
-                <Bar value={x.v} colour={x.c} height={6} />
-              </div>
+          <div className="grid grid-cols-3 gap-1 mt-2.5 pt-2.5 border-t border-line shrink-0">
+            <Stat value={Math.round(overall(me.attrs))} label="Overall" />
+            <Stat value={me.age} label="Età" />
+            <Stat value={pos > 0 ? `P${pos}` : '—'} label="Pos." tone="accent" />
+          </div>
+
+          <div className="mt-2 pt-1.5 border-t border-line flex-1 min-h-0 scroll-y">
+            {ATTRIBUTE_KEYS.map((k) => (
+              <AttrRow key={k} compact label={ATTR_LABELS[k]!} value={me.attrs[k]} colour={ATTRIBUTE_COLOURS[k]} />
             ))}
           </div>
         </Panel>
+
+        <Panel title="Contratto" className="shrink-0">
+          <KeyRow label="Ingaggio" value={`${money(me.salary)}/anno`} />
+          <KeyRow label="Anni residui" value={me.contractYears} />
+          <KeyRow label="Ruolo" value={me.contractYears > 0 ? 'Seconda guida' : 'Svincolato'} />
+          <KeyRow label="Vittorie" value={me.career.wins} />
+          <KeyRow label="Podi" value={me.career.podiums} />
+        </Panel>
       </div>
 
-      <Panel title="Il compagno di squadra" tag={mate ? `${Math.round(overall(mate.attrs))} ovr` : ''} bodyClass="p-3 scroll-y">
-        {mate ? (
-          <div className="flex flex-col gap-3">
-            <div>
-              <div className="font-display text-xl font-bold leading-none">{mate.name}</div>
-              <div className="font-mono text-2xs text-dim mt-1">
-                {mate.age} anni · {mate.nationality} · {mate.career.wins} vittorie in carriera
+      {/* ---- il weekend e il campionato ---- */}
+      <div className="flex flex-col gap-2 min-h-0">
+        <Panel
+          title="Prossimo weekend"
+          tag={race ? `Round ${race.round}` : ''}
+          className="shrink-0"
+          bodyClass="p-3"
+        >
+          {race && track ? (
+            <div className="text-center">
+              <div className="font-sans text-[9px] tracking-[0.2em] uppercase text-muted">
+                {isRaceWeek(world) ? 'Settimana di gara' : `Fra ${race.weeksAway} settiman${race.weeksAway === 1 ? 'a' : 'e'}`}
               </div>
+              <h2 className="font-sans text-lg font-bold mt-1 leading-tight">{track.name}</h2>
+              <div className="font-mono text-2xs text-muted mt-0.5">
+                {track.laps} giri · {(track.baseLap * track.laps / 60).toFixed(0)} min
+              </div>
+
+              <div className="flex justify-center gap-8 mt-3">
+                <Stat className="items-center" value={track.laps} label="Giri" />
+                <Stat className="items-center" value={`${track.baseLap.toFixed(1)}s`} label="Giro base" />
+                <Stat className="items-center" value={`${Math.round(track.overtaking * 100)}%`} label="Sorpasso" />
+              </div>
+
+              <button
+                type="button"
+                onClick={onAdvance}
+                className="mt-3 inline-flex items-center gap-1.5 rounded bg-primary px-4 py-1.5 text-xs
+                  font-sans font-semibold text-[#04231A] hover:brightness-110 transition"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                {isRaceWeek(world) ? 'Vai alla gara' : 'Avanza la settimana'}
+              </button>
             </div>
+          ) : (
+            <p className="text-center text-xs text-muted py-4">
+              Il calendario è finito. Chiudi l'anno per passare alla stagione successiva.
+            </p>
+          )}
+        </Panel>
 
-            {h2h && (
-              <div className="flex flex-col">
-                {[
-                  { k: 'Qualifiche', a: h2h.qualiA, b: h2h.qualiB },
-                  { k: 'Gare', a: h2h.raceA, b: h2h.raceB },
-                  { k: 'Punti', a: myPoints, b: matePoints },
-                ].map((r) => (
-                  <div key={r.k} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 py-2 border-b border-line last:border-0">
-                    <div className={`font-mono text-sm text-right tnum ${r.a > r.b ? 'text-aurora font-semibold' : 'text-muted'}`}>{r.a}</div>
-                    <div className="text-2xs uppercase tracking-[0.13em] text-dim text-center min-w-[74px]">{r.k}</div>
-                    <div className={`font-mono text-sm tnum ${r.b > r.a ? 'text-ink' : 'text-muted'}`}>{r.b}</div>
-                  </div>
-                ))}
+        <Panel title="Classifica piloti" className="flex-1" bodyClass="p-0 scroll-y">
+          {drivers.map((row) => {
+            const d = world.drivers[row.driverId];
+            if (!d) return null;
+            const t = d.teamId ? world.teams[d.teamId] : null;
+            const mine = d.id === me.id;
+            return (
+              <div
+                key={row.driverId}
+                className={`grid grid-cols-[22px_10px_1fr_auto] items-center gap-2 px-3 py-[5px]
+                  border-b border-line/60 last:border-0 ${mine ? 'bg-primary/10' : ''}`}
+              >
+                <span className="font-mono text-2xs text-dim text-right tnum">{row.position}</span>
+                <TeamDot colour={t?.colour ?? '#5D6C85'} />
+                <span className={`font-sans text-xs truncate ${mine ? 'text-primary font-semibold' : ''}`}>{d.name}</span>
+                <span className="font-mono text-2xs text-accent tnum">{row.points}</span>
               </div>
-            )}
+            );
+          })}
+        </Panel>
+      </div>
 
-            <Note>
-              Stessa macchina, nessun alibi. A fine stagione è questo il confronto che le altre scuderie guarderanno per prime.
-            </Note>
-          </div>
-        ) : (
-          <p className="text-sm text-muted">Nessun compagno di squadra.</p>
+      {/* ---- la scuderia ---- */}
+      <div className="flex flex-col gap-2 min-h-0">
+        {team && (
+          <Panel title="La tua scuderia" className="shrink-0">
+            <div className="flex items-center gap-2">
+              <TeamDot colour={team.colour} />
+              <span className="font-sans text-xs font-bold truncate">{team.name}</span>
+            </div>
+            <div className="mt-2">
+              {team.driverIds.map((id) => {
+                const d = world.drivers[id];
+                if (!d) return null;
+                return (
+                  <KeyRow
+                    key={id}
+                    label={<span className={d.id === me.id ? 'text-ink font-semibold' : ''}>{d.name}</span>}
+                    value={Math.round(overall(d.attrs))}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-2 pt-2 border-t border-line">
+              <div className="field-label mb-1.5">Auto</div>
+              {[
+                { k: 'Passo', v: (team.car.aero * 0.38 + team.car.engine * 0.34 + team.car.chassis * 0.28), c: '#3E86F0' },
+                { k: 'Affidabilità', v: team.car.reliability, c: '#12A06E' },
+              ].map((x) => (
+                <div key={x.k} className="grid grid-cols-[72px_1fr_24px] items-center gap-2 py-[3px]">
+                  <span className="font-mono text-2xs text-muted">{x.k}</span>
+                  <Bar value={x.v} colour={x.c} height={5} />
+                  <span className="font-mono text-2xs text-ink tnum text-right">{Math.round(x.v)}</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
         )}
-      </Panel>
+
+        <Panel title="Classifica scuderie" className="flex-1" bodyClass="p-0 scroll-y">
+          {teams.map((c, i) => {
+            const t = world.teams[c.teamId];
+            if (!t) return null;
+            const mine = c.teamId === team?.id;
+            return (
+              <div
+                key={c.teamId}
+                className={`grid grid-cols-[16px_10px_1fr_auto] items-center gap-2 px-3 py-[5px]
+                  border-b border-line/60 last:border-0 ${mine ? 'bg-primary/10' : ''}`}
+              >
+                <span className="font-mono text-2xs text-dim text-right tnum">{i + 1}</span>
+                <TeamDot colour={t.colour} />
+                <span className={`font-sans text-xs truncate ${mine ? 'text-primary font-semibold' : ''}`}>{t.name}</span>
+                <span className="font-mono text-2xs text-accent tnum">{c.points}</span>
+              </div>
+            );
+          })}
+        </Panel>
+      </div>
     </div>
   );
 }
