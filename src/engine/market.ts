@@ -1,4 +1,4 @@
-import type { Driver, World } from './types.js';
+import type { ContractOffer, Driver, World } from './types.js';
 import { clamp, type Rng } from './rng.js';
 import { createNewgen, overall, potentialOverall } from './driver.js';
 import { agentBonus, staffAnnualCost } from './staff.js';
@@ -99,8 +99,13 @@ export function runTransferMarket(world: World, rng: Rng): void {
     }
   }
 
+  // Il giocatore non viene assegnato d'ufficio: se è senza sedile riceve
+  // offerte e sceglie lui. Il suo posto resta vuoto finché non risponde.
+  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
+  const playerFree = playerId ? !world.drivers[playerId]?.teamId && !world.drivers[playerId]?.retired : false;
+
   const available = Object.values(world.drivers)
-    .filter((d) => !d.retired && !d.teamId)
+    .filter((d) => !d.retired && !d.teamId && d.id !== (playerFree ? playerId : null))
     .sort((a, b) => marketValue(b) - marketValue(a));
 
   // Il prestigio decide chi sceglie per primo, ma non da solo: un progetto
@@ -109,8 +114,15 @@ export function runTransferMarket(world: World, rng: Rng): void {
     .map((t) => ({ t, rank: t.prestige + rng.normal() * 14 }))
     .sort((a, b) => b.rank - a.rank)
     .map((x) => x.t);
+  // Le scuderie interessate al giocatore tengono un posto libero: senza
+  // questo, quando arriva a rispondere non ci sarebbe più nessun sedile.
+  const reserved = playerFree && playerId
+    ? new Set(candidateTeams(world, world.drivers[playerId]!).map((c) => c.teamId))
+    : new Set<string>();
+
   for (const team of teams) {
-    while (team.driverIds.length < SEATS_PER_TEAM) {
+    const cap = SEATS_PER_TEAM - (reserved.has(team.id) ? 1 : 0);
+    while (team.driverIds.length < cap) {
       const idx = available.findIndex((d) => {
         // Una scuderia di coda non convince un top driver, e viceversa.
         const v = marketValue(d);
@@ -125,8 +137,77 @@ export function runTransferMarket(world: World, rng: Rng): void {
     }
   }
 
+  world.offers = playerFree && playerId ? candidateTeams(world, world.drivers[playerId]!, rng) : [];
+
   world.academy = world.academy.filter((id) => {
     const d = world.drivers[id];
     return !!d && !d.retired && !d.teamId;
   });
+}
+
+/**
+ * Le scuderie disposte a ingaggiare il giocatore, dalla più interessata alla
+ * meno. Una di coda offre sempre: restare senza sedile a vent'anni sarebbe
+ * una fine di carriera decisa da un tiro di dado, non da una scelta.
+ */
+export function candidateTeams(world: World, driver: Driver, rng?: Rng): ContractOffer[] {
+  const value = marketValue(driver);
+  const scored = Object.values(world.teams).map((team) => {
+    // Le squadre forti guardano il valore, quelle di coda guardano il potenziale.
+    const fit = value - (team.prestige * 0.55 + 42);
+    const interest = clamp(62 + fit * 2.4 + (team.prestige < 55 ? 14 : 0), 0, 100);
+    return { team, interest };
+  });
+
+  const wanted = scored.filter((s) => s.interest >= 45).sort((a, b) => b.interest - a.interest);
+  const fallback = scored.sort((a, b) => a.team.prestige - b.team.prestige)[0];
+  const chosen = (wanted.length > 0 ? wanted : fallback ? [fallback] : []).slice(0, 3);
+
+  return chosen.map(({ team, interest }) => ({
+    teamId: team.id,
+    years: rng ? rng.int(1, 3) : 2,
+    salary: rng
+      ? offeredSalary(driver, team.budget, rng)
+      : Math.round(team.budget * 0.05),
+    // Prima guida solo dove sei chiaramente il migliore dei due.
+    role: interest >= 78 || team.prestige < 50 ? ('prima' as const) : ('seconda' as const),
+    interest: Math.round(interest),
+  }));
+}
+
+/** Accetta un'offerta: il giocatore prende il sedile, il resto del mercato si chiude. */
+export function acceptOffer(world: World, offer: ContractOffer, rng: Rng): boolean {
+  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
+  const driver = playerId ? world.drivers[playerId] : null;
+  const team = world.teams[offer.teamId];
+  if (!driver || !team || team.driverIds.length >= SEATS_PER_TEAM) return false;
+
+  driver.teamId = team.id;
+  driver.contractYears = offer.years;
+  driver.salary = offer.salary;
+  team.driverIds.push(driver.id);
+  world.offers = [];
+
+  // I posti tenuti liberi dalle altre pretendenti si riempiono adesso.
+  fillEmptySeats(world, rng);
+  return true;
+}
+
+/** Riempie i sedili rimasti vuoti attingendo ai piloti senza contratto. */
+export function fillEmptySeats(world: World, rng: Rng): void {
+  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
+  const pool = Object.values(world.drivers)
+    .filter((d) => !d.retired && !d.teamId && d.id !== playerId)
+    .sort((a, b) => marketValue(b) - marketValue(a));
+
+  for (const team of Object.values(world.teams)) {
+    while (team.driverIds.length < SEATS_PER_TEAM) {
+      const pick = pool.shift();
+      if (!pick) break;
+      pick.teamId = team.id;
+      pick.contractYears = rng.int(1, 3);
+      pick.salary = offeredSalary(pick, team.budget, rng);
+      team.driverIds.push(pick.id);
+    }
+  }
 }

@@ -12,6 +12,7 @@ export function TopBar({ onAdvance, busy }: { onAdvance: () => void; busy: boole
   const race = nextRace(world);
   const raceWeek = isRaceWeek(world);
   const seasonOver = world.week >= seasonWeeks;
+  const offersOpen = world.offers.length > 0;
 
   return (
     <header className="h-[34px] shrink-0 border-b border-line bg-panel flex items-center gap-3 px-3 font-mono text-2xs">
@@ -19,7 +20,9 @@ export function TopBar({ onAdvance, busy }: { onAdvance: () => void; busy: boole
       <span className="text-muted tnum">{world.year}</span>
       <span className="text-muted tnum">Sett. {Math.min(world.week + 1, seasonWeeks)}/{seasonWeeks}</span>
       <span className="truncate">
-        {seasonOver ? (
+        {offersOpen ? (
+          <span className="text-accent">CONTRATTO SCADUTO · scegli dove correre</span>
+        ) : seasonOver ? (
           <span className="text-accent">STAGIONE CONCLUSA</span>
         ) : race ? (
           <>
@@ -37,12 +40,12 @@ export function TopBar({ onAdvance, busy }: { onAdvance: () => void; busy: boole
         type="button"
         data-testid="advance"
         onClick={onAdvance}
-        disabled={busy}
+        disabled={busy || offersOpen}
         className="shrink-0 inline-flex items-center gap-1.5 rounded bg-primary px-3 py-1 text-[11px]
           font-sans font-semibold text-[#04231A] disabled:opacity-40 hover:brightness-110 transition"
       >
         <ChevronsRight className="w-3.5 h-3.5" />
-        {seasonOver ? 'Chiudi anno' : raceWeek ? 'Vai alla gara' : 'Avanza'}
+        {offersOpen ? 'Firma un contratto' : seasonOver ? 'Chiudi anno' : raceWeek ? 'Vai alla gara' : 'Avanza'}
       </button>
     </header>
   );

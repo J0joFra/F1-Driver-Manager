@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createWorld, endSeason, advanceWeek } from '../src/engine/world.js';
+import { createWorld, endSeason, advanceWeek, takeOffer } from '../src/engine/world.js';
+import { startCareer } from '../src/engine/career.js';
 import { SEASON_WEEKS, driverStandings } from '../src/engine/season.js';
 import { overall, potentialOverall } from '../src/engine/driver.js';
 import type { World } from '../src/engine/types.js';
@@ -186,5 +187,75 @@ describe('proprietà del mondo su più semi', () => {
     const median = sorted[Math.floor(sorted.length / 2)]!;
     expect(median).toBeLessThan(3.5);
     for (const r of runs) expect(r.drift, `seed ${r.seed}`).toBeLessThan(8);
+  });
+});
+
+/**
+ * Le offerte di contratto: il giocatore non viene assegnato d'ufficio a una
+ * scuderia come gli altri piloti, sceglie lui. Finché non risponde il suo
+ * sedile resta vuoto, e questo non deve lasciare buchi nella griglia.
+ */
+describe('offerte di contratto al giocatore', () => {
+  function careerWorld(seed: number) {
+    const w = startCareer({ seed, name: 'L. Marchetti', nationality: 'ITA' });
+    return w;
+  }
+
+  function seasonsUntilOffers(w: World, max = 6): number {
+    for (let i = 0; i < max; i++) {
+      runSeasons(w, 1);
+      if (w.offers.length > 0) return i + 1;
+    }
+    return -1;
+  }
+
+  it('arrivano quando il contratto scade, e non prima', () => {
+    const w = careerWorld(11);
+    expect(w.offers).toHaveLength(0);
+    const after = seasonsUntilOffers(w);
+    expect(after).toBeGreaterThan(0);
+    expect(w.offers.length).toBeGreaterThan(0);
+    expect(w.offers.length).toBeLessThanOrEqual(3);
+  });
+
+  it('il sedile resta vuoto finché non si risponde', () => {
+    const w = careerWorld(12);
+    seasonsUntilOffers(w);
+    const me = w.drivers['player']!;
+    expect(me.teamId).toBeNull();
+    // Una scuderia fra quelle che offrono tiene il posto libero.
+    const withSpace = w.offers.filter((o) => w.teams[o.teamId]!.driverIds.length < 2);
+    expect(withSpace.length).toBeGreaterThan(0);
+  });
+
+  it('accettare riempie il sedile e chiude il mercato', () => {
+    const w = careerWorld(13);
+    seasonsUntilOffers(w);
+    const offer = w.offers[0]!;
+    expect(takeOffer(w, offer.teamId)).toBe(true);
+
+    const me = w.drivers['player']!;
+    expect(me.teamId).toBe(offer.teamId);
+    expect(me.contractYears).toBe(offer.years);
+    expect(me.salary).toBe(offer.salary);
+    expect(w.offers).toHaveLength(0);
+    // Nessun buco in griglia: i posti tenuti liberi si riempiono subito.
+    for (const t of Object.values(w.teams)) expect(t.driverIds).toHaveLength(2);
+  });
+
+  it('offre sempre almeno un sedile: la carriera non finisce per sfortuna', () => {
+    for (const seed of [21, 22, 23, 24]) {
+      const w = careerWorld(seed);
+      if (seasonsUntilOffers(w) < 0) continue;
+      expect(w.offers.length, `seed ${seed}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('accettare un id inesistente non cambia nulla', () => {
+    const w = careerWorld(14);
+    seasonsUntilOffers(w);
+    const before = w.offers.length;
+    expect(takeOffer(w, 'scuderia-che-non-esiste')).toBe(false);
+    expect(w.offers).toHaveLength(before);
   });
 });

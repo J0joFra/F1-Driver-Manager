@@ -1,4 +1,4 @@
-import { BookOpen, CalendarDays, FileText, Flag, Gauge, Trophy, User, Wrench } from 'lucide-react';
+import { BookOpen, Building2, CalendarDays, FileText, Flag, Gauge, Trophy, User } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useGame, type Screen } from '../../state/useGame.js';
 
@@ -14,9 +14,10 @@ const ITEMS: { id: Screen; label: string; icon: LucideIcon }[] = [
   { id: 'pilota', label: 'Pilota', icon: User },
   { id: 'allenamento', label: 'Allenamento', icon: Flag },
   { id: 'finanze', label: 'Finanze', icon: CalendarDays },
-  { id: 'scuderia', label: 'Scuderia', icon: Wrench },
-  { id: 'classifiche', label: 'Classifiche', icon: FileText },
-  { id: 'storia', label: 'Storia', icon: Trophy },
+  { id: 'scuderia', label: 'Scuderia', icon: Building2 },
+  { id: 'contratti', label: 'Contratti', icon: FileText },
+  { id: 'classifiche', label: 'Classifiche', icon: Trophy },
+  { id: 'storia', label: 'Storia', icon: BookOpen },
 ];
 
 export function Sidebar() {
@@ -46,10 +47,6 @@ export function Sidebar() {
           </button>
         );
       })}
-      <span className="flex-1" />
-      <div className="text-dim/60" title="F1 Driver Manager">
-        <BookOpen className="w-[17px] h-[17px]" strokeWidth={1.7} />
-      </div>
     </nav>
   );
 }

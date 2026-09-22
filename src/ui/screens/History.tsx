@@ -1,80 +1,121 @@
 import { useGame } from '../../state/useGame.js';
 import { player } from '../../engine/selectors.js';
-import { Panel, Stat } from '../components/kit.js';
+import { getTrack } from '../../engine/data/tracks.js';
+import { Panel } from '../components/kit.js';
 
-/** Archivio: le tue stagioni e l'albo d'oro del mondo. */
+/**
+ * L'archivio del mondo: chi ha vinto, e com'è finita l'ultima gara.
+ * È il premio di chi gioca a lungo, quindi cresce invece di consumarsi.
+ */
 export function History() {
   const world = useGame((s) => s.world)!;
   const me = player(world)!;
-  const maxPoints = Math.max(1, ...me.history.map((h) => h.points));
+  const champions = [...world.champions].reverse();
+
+  const byTeam = new Map<string, number>();
+  for (const c of world.champions) byTeam.set(c.teamId, (byTeam.get(c.teamId) ?? 0) + 1);
+  const titles = [...byTeam].sort((a, b) => b[1] - a[1]);
+  const maxTitles = titles[0]?.[1] ?? 1;
+
+  const lastRace = world.results[world.results.length - 1];
 
   return (
-    <div className="h-full grid grid-cols-[1.25fr_1fr] gap-2 min-h-0">
-      <Panel title="Le tue stagioni" tag="punti per anno" bodyClass="p-0 scroll-y">
-        {me.history.length === 0 ? (
-          <p className="text-xs text-dim p-3">La prima stagione è ancora in corso.</p>
+    <div className="h-full grid grid-cols-[1fr_276px] gap-2 min-h-0">
+      <Panel title="Albo d'oro" tag={champions.length > 0 ? `${champions.length} stagioni` : ''} bodyClass="p-0 flex flex-col min-h-0">
+        {champions.length === 0 ? (
+          <p className="font-mono text-2xs text-dim p-3">Nessun campione ancora. Gioca la prima stagione.</p>
         ) : (
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-panel">
-              <tr className="text-2xs uppercase tracking-[0.12em] text-dim">
-                <th className="text-left font-semibold px-3 py-1.5">Anno</th>
-                <th className="text-left font-semibold px-1 py-1.5">Scuderia</th>
-                <th className="text-right font-semibold px-1 py-1.5">Pos</th>
-                <th className="text-left font-semibold px-2 py-1.5 w-[34%]">Punti</th>
-                <th className="text-right font-semibold px-3 py-1.5">V</th>
-              </tr>
-            </thead>
-            <tbody className="font-mono tnum">
-              {me.history.map((h) => {
-                const team = world.teams[h.teamId];
+          <>
+            <div className="grid grid-cols-[40px_14px_1fr_110px_44px] gap-1.5 px-3 py-1.5
+              border-b border-line shrink-0 field-label">
+              <span>Anno</span>
+              <span />
+              <span>Campione</span>
+              <span>Scuderia</span>
+              <span className="text-right">Punti</span>
+            </div>
+            <div className="flex-1 min-h-0 scroll-y">
+              {champions.map((c) => {
+                const d = world.drivers[c.driverId];
+                const t = world.teams[c.teamId];
+                const season = d?.history.find((h) => h.year === c.year);
+                const mine = c.driverId === me.id;
                 return (
-                  <tr key={h.year} className="border-t border-line">
-                    <td className="px-3 py-1.5 text-ink">{h.year}</td>
-                    <td className="px-1 py-1.5 text-muted truncate max-w-[90px]">{team?.short ?? '—'}</td>
-                    <td className="px-1 py-1.5 text-right font-display text-base font-bold">P{h.championshipPos}</td>
-                    <td className="px-2 py-1.5" title={`${h.year}: ${h.points} punti`}>
-                      <div className="h-2.5 bg-panel2 rounded-sm overflow-hidden">
-                        <div className="h-full" style={{ width: `${(h.points / maxPoints) * 100}%`, background: team?.colour ?? '#5B6672', borderRadius: '0 4px 4px 0' }} />
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 text-right text-muted">{h.wins}</td>
-                  </tr>
+                  <div
+                    key={c.year}
+                    className={`grid grid-cols-[40px_14px_1fr_110px_44px] gap-1.5 px-3 py-[5px]
+                      border-b border-line/50 last:border-0 font-mono text-2xs tnum ${mine ? 'bg-primary/10' : ''}`}
+                  >
+                    <span className="text-muted">{c.year}</span>
+                    <i className="block w-2 h-2 rounded-full self-center" style={{ background: t?.colour ?? '#5D6C85' }} />
+                    <span className={`font-sans text-xs truncate ${mine ? 'text-primary font-bold' : 'text-ink'}`}>
+                      {d?.name ?? '—'}
+                    </span>
+                    <span className="truncate" style={{ color: t?.colour ?? '#5D6C85' }}>{t?.name ?? '—'}</span>
+                    <span className="text-right text-accent">{season?.points ?? '—'}</span>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </Panel>
 
       <div className="flex flex-col gap-2 min-h-0">
-        <Panel title="Carriera" className="shrink-0">
-          <div className="grid grid-cols-3 gap-y-2.5">
-            <Stat value={me.career.starts} label="Gran Premi" />
-            <Stat value={me.career.wins} label="Vittorie" />
-            <Stat value={me.career.podiums} label="Podi" />
-            <Stat value={me.career.poles} label="Pole" />
-            <Stat value={me.career.bestFinish === 99 ? '—' : `P${me.career.bestFinish}`} label="Miglior gara" />
-            <Stat value={me.career.titles} label="Titoli" tone="accent" />
-          </div>
-        </Panel>
-
-        <Panel title="Albo d'oro del mondo" tag={`dal ${world.champions[0]?.year ?? world.year}`} bodyClass="p-0 scroll-y" className="flex-1">
-          {world.champions.length === 0 ? (
-            <p className="text-xs text-dim p-3">Nessun campionato ancora assegnato.</p>
+        <Panel title="Titoli per scuderia" className="shrink-0" bodyClass="p-2.5">
+          {titles.length === 0 ? (
+            <p className="font-mono text-2xs text-dim">—</p>
           ) : (
-            [...world.champions].reverse().map((c) => {
-              const d = world.drivers[c.driverId];
-              const team = world.teams[c.teamId];
+            titles.map(([teamId, n]) => {
+              const t = world.teams[teamId];
               return (
-                <div key={c.year} className="grid grid-cols-[30px_10px_1fr] items-center gap-2 px-3 py-[5px] border-b border-line/60 last:border-0">
-                  <span className="font-mono text-2xs text-dim tnum">{c.year}</span>
-                  <i className="block w-2 h-2 rounded-full" style={{ background: team?.colour ?? '#5D6C85' }} />
-                  <span className={`font-sans text-xs truncate ${c.driverId === me.id ? 'text-primary font-semibold' : ''}`}>
-                    {d?.name ?? '—'}
-                  </span>
+                <div key={teamId} className="grid grid-cols-[78px_1fr_18px] items-center gap-2 py-[3px]">
+                  <span className="font-sans text-xs truncate">{t?.short ?? '—'}</span>
+                  <div className="h-[5px] bg-panel3 rounded-sm overflow-hidden">
+                    <div className="h-full rounded-sm" style={{ width: `${(n / maxTitles) * 100}%`, background: t?.colour ?? '#5D6C85' }} />
+                  </div>
+                  <span className="font-mono text-2xs text-accent tnum text-right">{n}</span>
                 </div>
               );
             })
+          )}
+        </Panel>
+
+        <Panel
+          title="Ultima gara"
+          tag={lastRace ? `${world.year} R${lastRace.round + 1}` : ''}
+          className="flex-1"
+          bodyClass="p-0 flex flex-col min-h-0"
+        >
+          {!lastRace ? (
+            <p className="font-mono text-2xs text-dim p-3">Nessuna gara corsa.</p>
+          ) : (
+            <>
+              <div className="px-3 py-1.5 border-b border-line shrink-0 font-mono text-2xs text-muted truncate">
+                {getTrack(lastRace.trackId).name}
+              </div>
+              <div className="flex-1 min-h-0 scroll-y">
+                {lastRace.race.slice(0, 10).map((r) => {
+                  const d = world.drivers[r.driverId];
+                  const t = d?.teamId ? world.teams[d.teamId] : null;
+                  const mine = r.driverId === me.id;
+                  return (
+                    <div
+                      key={r.driverId}
+                      className={`grid grid-cols-[20px_14px_1fr_26px] gap-1.5 px-3 py-[5px]
+                        border-b border-line/50 last:border-0 font-mono text-2xs tnum ${mine ? 'bg-primary/10' : ''}`}
+                    >
+                      <span className="text-dim text-right">{r.position}</span>
+                      <i className="block w-2 h-2 rounded-full self-center" style={{ background: t?.colour ?? '#5D6C85' }} />
+                      <span className={`font-sans text-xs truncate ${mine ? 'text-primary font-semibold' : 'text-ink'}`}>
+                        {d?.name ?? r.driverId}
+                      </span>
+                      <span className={`text-right ${r.points > 0 ? 'text-accent' : 'text-dim'}`}>{r.points || ''}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </Panel>
       </div>
