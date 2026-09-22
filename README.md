@@ -51,7 +51,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 90 test
+npm test                      # 94 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -275,11 +275,22 @@ settimane sarebbe scivolato di un giorno ogni quattro anni.
 
 | Tipo di settimana | Quando | Sessioni di allenamento | Recupero |
 |---|---|---|---|
-| **Test invernali** | le 2 settimane prima del via | 12 | — |
-| **Settimana libera** | fra due gare | 10 | — |
-| **Settimana di gara** | 24 volte l'anno | 6 | — |
-| **Pausa estiva** | 3 settimane ad agosto | 0 | 22 punti di stanchezza |
-| **Dopo-stagione** | dopo l'ultima gara | 8 | 6 punti |
+| **Test invernali** | le 2 settimane prima del via | 3 | — |
+| **Settimana libera** | fra due gare | 2 | — |
+| **Settimana di gara** | 24 volte l'anno | **1** | — |
+| **Pausa estiva** | 3 settimane ad agosto | 2, a settimane alterne | 22 punti di stanchezza |
+| **Dopo-stagione** | dopo l'ultima gara | 2, a settimane alterne | 6 punti |
+
+Sono poche sessioni di proposito. Un pilota non si allena dieci volte nella
+settimana di un Gran Premio: prepara, viaggia, corre. Una sessione quando si
+corre e due quando non si corre è il ritmo vero, e rende ogni singola sessione
+una scelta invece che una riga di un monte ore.
+
+Nelle pause ci si allena **una settimana sì e una no**: in vacanza, ma senza
+perdere la forma. Per questo la capienza non sta sul *tipo* di settimana ma
+sulla settimana stessa, in `SeasonWeek.training` — due settimane di pausa
+estiva hanno lo stesso `kind` e capienza diversa, e il calendario resta
+l'unica fonte di verità su cosa si può fare quando.
 
 Le due colonne a destra sono il motivo per cui il calendario sta nel motore e
 non nell'interfaccia: **`WEEK_TRAINING_CAPACITY` e `WEEK_RECOVERY` sono la
@@ -391,7 +402,7 @@ mondo di ventiquattro ore.
 
 | Giorno | Cosa succede | Durata |
 |---|---|---|
-| Lun–Gio | **Allenamento**: sessioni secondo il tipo di settimana (12 nei test, 10 se libera, 6 se c'è la gara), **max 4 per categoria** | 30 s |
+| Mar (e Gio) | **Allenamento**: una sessione se nel weekend c'è la gara, due se non c'è | 30 s |
 | Mer | **Il minigioco della settimana**, una sola partita | 40 s |
 | Gio | **Trasferta** verso il circuito | — |
 | Ven | **Libere**: scegli una direzione di assetto | 20 s |
@@ -429,9 +440,23 @@ succede qualcosa.
 
 ### Allenamento
 
-Quattro categorie — `simulator`, `fitness`, `engineering`, `media` — e un tetto di 4 sessioni ciascuna. Con 10 sessioni da distribuire e un massimo di 4, sei **costretto** a toccarne almeno tre: la scelta resta viva invece di collassare sempre sullo stesso ottimo.
+Quattro categorie — `simulator`, `fitness`, `engineering`, `media` — e **una o due sessioni a settimana**, decise dal calendario. Con una sola sessione in un weekend di gara, sceglierne una significa rinunciare alle altre tre: è la forma più pura che può prendere questa decisione.
 
-Lo staff non regala punti: **alza i tetti**. Il coach porta il simulatore da 4 a 5, il preparatore porta il monte totale da 10 a 12. Un ingaggio che cambia una regola vale dieci volte uno che cambia un numero.
+Lo staff non regala punti: **alza i tetti**. Il coach aggiunge una sessione di simulatore, il preparatore una sessione al monte totale. Un ingaggio che cambia una regola vale più di uno che cambia un numero.
+
+#### Cosa è cambiato quando le sessioni sono passate da dieci a una
+
+Ridurle ha rotto tre cose, tutte trovate misurando e non leggendo.
+
+**L'IA allenava sempre la stessa cosa.** `aiTrainingPlan` riempiva le categorie in ordine di preferenza finché il monte reggeva. Con dieci sessioni ne copriva tre e nessuno se ne accorgeva; con una, un pilota giovane allenava il simulatore ventiquattro settimane di fila e non toccava **mai** freddezza e partenze. La griglia si riempiva di piloti squilibrati e l'overall medio crollava di dieci punti in quarant'anni. Ora la sessione ruota con quote fisse (40/30/20/10 sulla lista di preferenza): il punto di partenza del giro è la scelta della settimana.
+
+**La stanchezza era diventata un meccanismo morto.** Con una o due sessioni nessuno si stancava più, e una settimana di gara risultava la più riposante dell'anno — l'esatto contrario della realtà. Mancava il pezzo ovvio: **correre stanca**. Ora un Gran Premio costa `RACE_FATIGUE`, ed è quel numero a rendere la pausa estiva una cosa che si aspetta invece di una riga sul calendario.
+
+**Il piano del giocatore poteva far crashare il gioco.** Il piano sopravvive da una settimana all'altra, le capienze no: un piano da due sessioni arrivava intatto al weekend di gara, che ne concede una, e `validatePlan` lanciava un'eccezione — schermo nero. Ora `clampPlan` lo riporta dentro i limiti invece di rifiutarlo.
+
+Dopo le tre correzioni la scala di crescita è stata ritarata da 3 a 16 misurando su sei semi: la griglia perde 3.9 punti di overall in quarant'anni contro i 4.3 di prima, l'età media resta a 27, e tutte le metriche di bilanciamento restano in banda.
+
+Una cosa però è cambiata e vale la pena saperlo: **il valore dello staff si è spostato in avanti**. Con la crescita più concentrata si arriva prima vicino al tetto, e vicino al tetto ogni moltiplicatore conta meno. Su un talento da 91 di potenziale lo staff vale **+4.8 punti a vent'anni** e +2.4 a ventisette — cioè conta di più quando stai lottando per un sedile, che è quando serve davvero.
 
 ### I minigiochi
 
@@ -718,7 +743,7 @@ engine/
     tracks.ts       31 circuiti di fantasia con regione, fuso e ora di partenza
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              90 test: rng, curve e modelli, gara, gara live,
+tests/              94 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -756,7 +781,7 @@ ugualmente distinguibili non esistono — il validatore lo dice chiaramente — 
 ## Comandi
 
 ```bash
-npm test               # vitest, 90 test
+npm test               # vitest, 94 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo

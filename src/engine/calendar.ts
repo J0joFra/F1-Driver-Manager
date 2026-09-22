@@ -36,6 +36,15 @@ export interface SeasonWeek {
   trackId: string | null;
   /** numero di round, 1-based; null se non si corre */
   round: number | null;
+  /**
+   * Sessioni di allenamento concesse da questa settimana.
+   *
+   * Sta sulla settimana e non solo sul tipo perché nelle pause ci si allena
+   * una settimana sì e una no: due settimane di pausa estiva hanno lo stesso
+   * `kind` e capienza diversa. Il calendario resta l'unica fonte di verità su
+   * cosa si può fare quando.
+   */
+  training: number;
 }
 
 /** Quante settimane di test precedono il via. */
@@ -133,18 +142,44 @@ export const WEEK_LABEL: Record<WeekKind, string> = {
 /**
  * Quanto si può lavorare in una settimana, prima dei bonus dello staff.
  *
- * Nella pausa estiva le fabbriche chiudono davvero: non ci si allena, si
- * recupera. È l'unico momento dell'anno in cui la stanchezza scende da sola.
+ * Sono poche sessioni di proposito. Un pilota non si allena dieci volte nella
+ * settimana di un Gran Premio: prepara, viaggia, corre. Una sessione in un
+ * weekend di gara e due in una settimana libera è il ritmo vero, e rende ogni
+ * singola sessione una scelta invece che una riga di un monte ore.
+ *
+ * Nelle pause ci si allena una settimana sì e una no — in vacanza, ma senza
+ * perdere la forma. La capienza effettiva di ogni settimana sta in
+ * `SeasonWeek.training`, che applica questa alternanza.
  */
 export const WEEK_TRAINING_CAPACITY: Record<WeekKind, number> = {
-  testing: 12,
-  free: 10,
-  race: 6,
-  summerBreak: 0,
-  postseason: 8,
+  testing: 3,
+  free: 2,
+  race: 1,
+  summerBreak: 2,
+  postseason: 2,
 };
 
-/** Recupero extra concesso dalla settimana, in punti di stanchezza. */
+/** Le pause in cui ci si allena a settimane alterne. */
+const ALTERNATING: ReadonlySet<WeekKind> = new Set<WeekKind>(['summerBreak', 'postseason']);
+
+/**
+ * La capienza effettiva di una settimana: la tabella qui sopra, ma spenta
+ * nelle settimane pari delle pause. `offset` è la posizione dentro il blocco
+ * di pausa, 0-based.
+ */
+export function capacityOf(kind: WeekKind, offset: number): number {
+  if (ALTERNATING.has(kind) && offset % 2 === 1) return 0;
+  return WEEK_TRAINING_CAPACITY[kind];
+}
+
+/**
+ * Recupero extra concesso dalla settimana, in punti di stanchezza.
+ *
+ * Nelle pause si stacca davvero: è lì che si smaltisce il logorio di
+ * ventiquattro Gran Premi. Ci si allena comunque a settimane alterne — un
+ * pilota in vacanza non smette di correre — ma il bilancio resta nettamente
+ * a favore del riposo.
+ */
 export const WEEK_RECOVERY: Record<WeekKind, number> = {
   testing: 0,
   free: 0,
@@ -267,7 +302,8 @@ function chooseRaceWeeks(available: readonly number[], races: number, rng: Rng):
 export function buildCalendar(year: number, raceCount: number, rng: Rng): SeasonWeek[] {
   const start = seasonStartDay(year);
   const weeks: SeasonWeek[] = Array.from({ length: SEASON_WEEKS }, (_, i) => ({
-    index: i, kind: 'free' as WeekKind, startDay: start + i * 7, trackId: null, round: null,
+    index: i, kind: 'free' as WeekKind, startDay: start + i * 7,
+    trackId: null, round: null, training: WEEK_TRAINING_CAPACITY.free,
   }));
 
   const weekOf = (sunday: Date) => Math.round((dayOfYear(sunday) - 6 - start) / 7);
@@ -275,12 +311,11 @@ export function buildCalendar(year: number, raceCount: number, rng: Rng): Season
   const finaleWeek = Math.min(SEASON_WEEKS - 1, weekOf(nthSunday(year, 11, 1))); // dicembre
   const breakStart = weekOf(nthSunday(year, 7, 1)); // agosto
 
-  for (let i = 0; i < TESTING_WEEKS; i++) weeks[i]!.kind = 'testing';
-  for (let i = 0; i < SUMMER_BREAK_WEEKS; i++) {
-    const w = weeks[breakStart + i];
-    if (w) w.kind = 'summerBreak';
+  for (let i = 0; i < TESTING_WEEKS; i++) setKind(weeks[i], 'testing', i);
+  for (let i = 0; i < SUMMER_BREAK_WEEKS; i++) setKind(weeks[breakStart + i], 'summerBreak', i);
+  for (let i = finaleWeek + 1; i < SEASON_WEEKS; i++) {
+    setKind(weeks[i], 'postseason', i - finaleWeek - 1);
   }
-  for (let i = finaleWeek + 1; i < SEASON_WEEKS; i++) weeks[i]!.kind = 'postseason';
 
   const available: number[] = [];
   for (let i = openerWeek; i <= finaleWeek; i++) {
@@ -323,12 +358,19 @@ export function buildCalendar(year: number, raceCount: number, rng: Rng): Season
 
   raceWeeks.forEach((weekIndex, r) => {
     const week = weeks[weekIndex]!;
-    week.kind = 'race';
+    setKind(week, 'race', 0);
     week.trackId = take(tour[r]) ?? take(tour[r - 1]) ?? take(tour[r + 1]) ?? fullest();
     week.round = r + 1;
   });
 
   return weeks;
+}
+
+/** Assegna tipo e capienza insieme: separarli lascerebbe le due cose divergere. */
+function setKind(week: SeasonWeek | undefined, kind: WeekKind, offset: number): void {
+  if (!week) return;
+  week.kind = kind;
+  week.training = capacityOf(kind, offset);
 }
 
 export function raceCountOf(schedule: readonly SeasonWeek[]): number {

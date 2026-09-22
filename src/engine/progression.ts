@@ -33,7 +33,7 @@ import { CATEGORY_EFFECTS, TRAINING_CATEGORIES } from './training.js';
  * rende gli ultimi punti proibitivi — e i sei punti di differenza sono ciò che
  * lo staff vale davvero.
  */
-const WEEK_SCALE = 3;
+const WEEK_SCALE = 16;
 
 export interface GrowthContext {
   /** 0–1: quanto della settimana è andato in questa categoria */
@@ -47,6 +47,18 @@ export interface GrowthContext {
 
 /** Oltre questa soglia allenare di più rende di meno. */
 export const OVERTRAINING_THRESHOLD = 0.85;
+
+/** Quanto stanca una sessione di allenamento, in punti. */
+export const FATIGUE_PER_SESSION = 3.5;
+
+/**
+ * Quanto stanca correre un Gran Premio.
+ *
+ * Senza questo la settimana di gara sarebbe la più riposante dell'anno — una
+ * sola sessione di allenamento — il che è esattamente al contrario della
+ * realtà. È il numero che rende la pausa estiva una cosa che si aspetta.
+ */
+export const RACE_FATIGUE = 6.5;
 
 export function overtrainingPenalty(totalLoad: number): number {
   return totalLoad > OVERTRAINING_THRESHOLD
@@ -144,14 +156,15 @@ export function previewTraining(
     // Le settimane pesanti si pagano: la stanchezza è il freno naturale
     // all'ottimo "tutto al massimo, sempre".
     //
-    // Conta il numero di sessioni, non la percentuale della capienza: sei
-    // sessioni in un weekend di gara stancano meno di dieci in una settimana
+    // Conta il numero di sessioni, non la percentuale della capienza: una
+    // sessione in un weekend di gara stanca meno di due in una settimana
     // libera, anche se entrambe riempiono il piano. Normalizzare sulla
-    // capienza rendeva ogni settimana ugualmente faticosa, e con un
-    // calendario lungo la stanchezza si saturava a fine stagione.
-    // Il fattore 1.4 lascia invariata la settimana da dieci sessioni, che è
-    // quella su cui la crescita era stata tarata.
-    fatigueGain: totalSessions * 1.4 - 4,
+    // capienza rendeva ogni settimana ugualmente faticosa.
+    //
+    // Le sessioni da sole non bastano a stancare un pilota: il peso vero di
+    // una settimana di gara è il Gran Premio, che costa `RACE_FATIGUE` ed è
+    // contato dove si corre, non qui.
+    fatigueGain: totalSessions * FATIGUE_PER_SESSION,
     load: totalLoad,
   };
 }

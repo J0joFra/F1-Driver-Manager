@@ -6,7 +6,7 @@ import { player } from '../../engine/selectors.js';
 import { getTrack, isNightRace } from '../../engine/data/tracks.js';
 import {
   formatDay, formatHour, formatShortDay, monthName, raceCountOf, raceHourInItaly,
-  weekendDays, weekMonday, WEEK_LABEL, WEEK_TRAINING_CAPACITY,
+  weekendDays, weekMonday, WEEK_LABEL,
   type SeasonWeek, type WeekKind,
 } from '../../engine/calendar.js';
 import type { Driver, Region, World } from '../../engine/types.js';
@@ -207,7 +207,7 @@ function SeasonList({ world, me }: { world: World; me: Driver }) {
                     {mine ? (mine.dnf ? 'ritiro' : `P${mine.position} · ${mine.points}pt`) : ''}
                   </span>
                   <span className="text-right text-dim">
-                    {WEEK_TRAINING_CAPACITY[week.kind] || '—'}
+                    {week.training || '—'}
                   </span>
                 </div>
               </div>
@@ -282,8 +282,8 @@ function SidePanels({ world, current, me, totalRaces }: {
 
               <div className="mt-2 pt-2 border-t border-line flex justify-between font-mono text-2xs">
                 <span className="text-muted">Sessioni disponibili</span>
-                <span className={WEEK_TRAINING_CAPACITY[current.kind] > 0 ? 'text-ink' : 'text-accent'}>
-                  {WEEK_TRAINING_CAPACITY[current.kind] || 'riposo'}
+                <span className={current.training > 0 ? 'text-ink' : 'text-accent'}>
+                  {current.training || 'riposo'}
                 </span>
               </div>
             </>
@@ -307,8 +307,8 @@ function SidePanels({ world, current, me, totalRaces }: {
           </div>
 
           <p className="font-mono text-[8.5px] text-dim leading-relaxed mt-2.5">
-            Nella pausa estiva le fabbriche chiudono: non ci si allena e si recupera. È l'unico
-            momento dell'anno in cui la stanchezza scende da sola.
+            Una sessione nelle settimane di gara, due in quelle libere. Nelle pause ci si allena
+            una settimana sì e una no: in vacanza, ma senza perdere la forma.
           </p>
         </Panel>
     </div>

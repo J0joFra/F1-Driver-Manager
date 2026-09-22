@@ -28,8 +28,7 @@ export function TopBar({
   // Che cosa c'è in programma oggi: è la riga che sostituisce il "che
   // settimana è" di prima, e dice al giocatore se vale la pena fermarsi.
   const agenda = week
-    ? (weekActivities(week.kind, plan, week.trackId !== null)[world.dayOfWeek] ?? [])
-        .map((a) => a.label).join(' · ')
+    ? (weekActivities(week, plan)[world.dayOfWeek] ?? []).map((a) => a.label).join(' · ')
     : '';
 
   return (
