@@ -1,6 +1,7 @@
 import { Dumbbell, RotateCcw } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
-import { isRaceWeek, player } from '../../engine/selectors.js';
+import { currentWeek, player, weekLabel } from '../../engine/selectors.js';
+import { WEEK_LABEL } from '../../engine/calendar.js';
 import type { AttributeKey, TrainingCategory } from '../../engine/types.js';
 import {
   CATEGORY_EFFECTS, MINIGAME_AUTO, TRAINING_CATEGORIES, emptyPlan,
@@ -30,8 +31,11 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
   const setPlan = useGame((s) => s.setPlan);
   const me = player(world)!;
 
-  const raceWeek = isRaceWeek(world);
-  const limits = trainingLimits(me, raceWeek);
+  const week = currentWeek(world);
+  const kind = week?.kind ?? 'free';
+  const raceWeek = kind === 'race';
+  const limits = trainingLimits(me, kind);
+  const resting = limits.total === 0;
   const free = limits.total - planTotal(plan);
   const minigame = pickMinigame(plan, world.lastMinigame);
 
@@ -50,18 +54,28 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
     <div className="h-full grid grid-cols-[264px_1fr] gap-2 min-h-0">
       <Panel
         title="Piano settimanale"
-        tag={<span className={free > 0 ? 'text-accent' : 'text-primary'}>{free}/{limits.total} libere</span>}
+        tag={
+          resting
+            ? <span className="text-accent">riposo</span>
+            : <span className={free > 0 ? 'text-accent' : 'text-primary'}>{free}/{limits.total} libere</span>
+        }
         bodyClass="p-2.5 flex flex-col min-h-0"
       >
         <div className="flex items-baseline justify-between pb-1.5 border-b border-line">
-          <span className="font-mono text-2xs text-muted">
-            {raceWeek ? 'Settimana di gara' : 'Settimana libera'}
-          </span>
+          <span className="font-mono text-2xs text-muted">{weekLabel(world)}</span>
           <span className="font-mono text-2xs text-dim">max {limits.perCategory.simulator} per categoria</span>
         </div>
 
         <div className="flex-1 min-h-0 scroll-y -mx-0.5 px-0.5">
-          {TRAINING_CATEGORIES.map((c) => {
+          {resting && (
+            <div className="mt-2">
+              <Note tone="warn">
+                {WEEK_LABEL[kind]}: non si lavora. La stanchezza scende da sola, ed è l'unico
+                momento dell'anno in cui succede.
+              </Note>
+            </div>
+          )}
+          {!resting && TRAINING_CATEGORIES.map((c) => {
             const key = primaryAttribute(c);
             return (
               <div key={c} className="bg-panel2 border border-line rounded mt-1.5 px-2.5 py-2">
@@ -100,7 +114,7 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
           </Btn>
           <Btn variant="green" onClick={onAdvance} className="flex-1" testId="train-advance">
             <Dumbbell className="w-3.5 h-3.5" />
-            {raceWeek ? 'Allena e vai alla gara' : 'Allena e avanza'}
+            {resting ? 'Riposa e avanza' : raceWeek ? 'Allena e vai alla gara' : 'Allena e avanza'}
           </Btn>
         </div>
       </Panel>

@@ -17,6 +17,7 @@ export type Screen =
   | 'paddock'
   | 'pilota'
   | 'allenamento'
+  | 'calendario'
   | 'finanze'
   | 'scuderia'
   | 'contratti'

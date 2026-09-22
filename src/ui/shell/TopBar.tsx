@@ -1,6 +1,7 @@
 import { ChevronsRight } from 'lucide-react';
 import { useGame, seasonWeeks } from '../../state/useGame.js';
-import { isRaceWeek, nextRace } from '../../engine/selectors.js';
+import { currentWeek, isRaceWeek, nextRace, weekLabel } from '../../engine/selectors.js';
+import { formatDay, weekMonday } from '../../engine/calendar.js';
 
 /**
  * Riga di stato: dove si trova il mondo, e l'unico comando che fa passare il
@@ -12,13 +13,17 @@ export function TopBar({ onAdvance, busy }: { onAdvance: () => void; busy: boole
   const race = nextRace(world);
   const raceWeek = isRaceWeek(world);
   const seasonOver = world.week >= seasonWeeks;
+  const week = currentWeek(world);
   const offersOpen = (world.offers?.length ?? 0) > 0;
 
   return (
     <header className="h-[34px] shrink-0 border-b border-line bg-panel flex items-center gap-3 px-3 font-mono text-2xs">
       <span className="font-sans font-bold tracking-[0.12em] text-ink text-[11px]">F1 MANAGER</span>
       <span className="text-muted tnum">{world.year}</span>
-      <span className="text-muted tnum">Sett. {Math.min(world.week + 1, seasonWeeks)}/{seasonWeeks}</span>
+      <span className="text-muted tnum">
+        {week ? formatDay(weekMonday(world.year, week)) : `sett. ${seasonWeeks}`}
+      </span>
+      <span className="text-dim truncate hidden sm:inline">{weekLabel(world)}</span>
       <span className="truncate">
         {offersOpen ? (
           <span className="text-accent">CONTRATTO SCADUTO · scegli dove correre</span>

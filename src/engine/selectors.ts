@@ -1,7 +1,7 @@
-import type { Driver, Team, World } from './types.js';
+import type { Driver, SeasonWeek, Team, World } from './types.js';
 import { getTrack } from './data/tracks.js';
-import { driverStandings } from './season.js';
-import { SEASON_WEEKS } from './season.js';
+import { driverStandings, SEASON_WEEKS } from './season.js';
+import { raceCountOf, weekendDays, WEEK_LABEL, type WeekKind } from './calendar.js';
 
 /** Query di sola lettura sul mondo. Nessuna muta lo stato. */
 
@@ -20,8 +20,20 @@ export function teammateOf(world: World, d: Driver | null): Driver | null {
   return id ? world.drivers[id] ?? null : null;
 }
 
+export function currentWeek(world: World): SeasonWeek | null {
+  return world.schedule[world.week] ?? null;
+}
+
 export function isRaceWeek(world: World): boolean {
-  return world.schedule[world.week] != null;
+  return currentWeek(world)?.trackId != null;
+}
+
+export function weekKind(world: World): WeekKind {
+  return currentWeek(world)?.kind ?? 'postseason';
+}
+
+export function weekLabel(world: World): string {
+  return WEEK_LABEL[weekKind(world)];
 }
 
 export interface NextRace {
@@ -31,21 +43,23 @@ export interface NextRace {
   weeksAway: number;
   round: number;
   totalRounds: number;
+  /** giorno della gara, per mostrarlo nel calendario */
+  raceDay: Date;
 }
 
 export function nextRace(world: World): NextRace | null {
-  const total = world.schedule.filter(Boolean).length;
-  let round = world.round;
+  const total = raceCountOf(world.schedule);
   for (let w = world.week; w < SEASON_WEEKS; w++) {
-    const id = world.schedule[w];
-    if (!id) continue;
+    const week = world.schedule[w];
+    if (!week?.trackId) continue;
     return {
-      trackId: id,
-      trackName: getTrack(id).name,
+      trackId: week.trackId,
+      trackName: getTrack(week.trackId).name,
       week: w,
       weeksAway: w - world.week,
-      round: round + 1,
+      round: week.round ?? world.round + 1,
       totalRounds: total,
+      raceDay: weekendDays(world.year, week).race,
     };
   }
   return null;

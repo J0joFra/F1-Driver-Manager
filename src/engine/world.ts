@@ -1,7 +1,7 @@
 import type { MinigameKind, Seat, TrainingPlan, World } from './types.js';
-import { createRng, hashSeed, type Rng } from './rng.js';
+import { createRng, hashSeed } from './rng.js';
 import { TEAM_SEEDS } from './data/teams.js';
-import { TRACKS } from './data/tracks.js';
+import { buildCalendar, raceCountOf, WEEK_RECOVERY } from './calendar.js';
 import { applyAging, createVeteran, overall, retirementChance } from './driver.js';
 import {
   acceptOffer as marketAcceptOffer, intakeNewgens, POTENTIAL_ANCHOR,
@@ -31,22 +31,6 @@ export interface CreateWorldOptions {
   races?: number;
 }
 
-function buildSchedule(raceCount: number, rng: Rng): (string | null)[] {
-  const schedule: (string | null)[] = new Array(SEASON_WEEKS).fill(null);
-  const pool = rng.shuffle(TRACKS.map((t) => t.id));
-  // Le gare non sono mai in settimane consecutive più di due volte di fila.
-  const slots: number[] = [];
-  for (let w = 1; w < SEASON_WEEKS - 1 && slots.length < raceCount; w++) {
-    const recent = slots.slice(-2);
-    if (recent.length === 2 && recent[1] === w - 1 && recent[0] === w - 2) continue;
-    slots.push(w);
-  }
-  slots.slice(0, raceCount).forEach((w, i) => {
-    schedule[w] = pool[i % pool.length]!;
-  });
-  return schedule;
-}
-
 export function createWorld(opts: CreateWorldOptions): World {
   const rng = createRng(hashSeed('world', opts.seed));
   const year = opts.year ?? 2031;
@@ -58,7 +42,7 @@ export function createWorld(opts: CreateWorldOptions): World {
     round: 0,
     drivers: {},
     teams: {},
-    schedule: buildSchedule(opts.races ?? 20, rng),
+    schedule: buildCalendar(year, opts.races ?? 22, rng),
     regulations: { lastResetYear: year, nextResetYear: year + rng.int(4, 6) },
     seat: opts.seat ?? { mode: 'osservatore' },
     academy: [],
@@ -139,8 +123,9 @@ export function playerDriver(world: World) {
  * Restituisce cosa è successo, così l'interfaccia sa che schermata mostrare.
  */
 export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
-  const trackId = world.schedule[world.week] ?? null;
-  const isRaceWeek = trackId !== null;
+  const week = world.schedule[world.week];
+  const trackId = week?.trackId ?? null;
+  const kind = week?.kind ?? 'free';
   const rng = rngFor(world, 'week');
   const player = playerDriver(world);
 
@@ -148,7 +133,11 @@ export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
 
   for (const d of Object.values(world.drivers)) {
     if (d.retired) continue;
-    const limits = trainingLimits(d, isRaceWeek);
+    // La pausa estiva è riposo forzato: le fabbriche chiudono davvero.
+    if (WEEK_RECOVERY[kind] > 0) {
+      d.fatigue = Math.max(0, d.fatigue - WEEK_RECOVERY[kind]);
+    }
+    const limits = trainingLimits(d, kind);
 
     if (d === player && opts.plan) {
       const errs = validatePlan(opts.plan, limits);
@@ -157,11 +146,11 @@ export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
       const mult = opts.minigameScore === undefined
         ? MINIGAME_AUTO
         : minigameMultiplier(opts.minigameScore);
-      applyTraining(d, opts.plan, minigame ? mult : MINIGAME_AUTO, isRaceWeek);
+      applyTraining(d, opts.plan, minigame ? mult : MINIGAME_AUTO, kind);
     } else {
       const team = d.teamId ? world.teams[d.teamId] : null;
       applyTraining(
-        d, aiTrainingPlan(d, limits, rng.next()), MINIGAME_AUTO, isRaceWeek,
+        d, aiTrainingPlan(d, limits, rng.next()), MINIGAME_AUTO, kind,
         entourageEfficiency(team?.prestige ?? 30),
       );
     }
@@ -184,7 +173,7 @@ export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
 
 /** Chiude una settimana lasciata in sospeso da `deferRace`. */
 export function finishPendingRace(world: World, commit: () => void): WeekReport {
-  const trackId = world.schedule[world.week] ?? null;
+  const trackId = world.schedule[world.week]?.trackId ?? null;
   commit();
   world.week += 1;
   return {
@@ -266,7 +255,7 @@ export function endSeason(world: World): SeasonSummary {
   world.lastMinigame = null;
   for (const t of Object.values(world.teams)) world.constructorStandings[t.id] = 0;
   for (const d of Object.values(world.drivers)) if (!d.retired) world.standings[d.id] = 0;
-  world.schedule = buildSchedule(world.schedule.filter(Boolean).length, rng);
+  world.schedule = buildCalendar(world.year, raceCountOf(world.schedule), rng);
 
   return {
     year: world.year - 1,

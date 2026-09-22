@@ -9,6 +9,7 @@ import { Training } from './ui/screens/Training.js';
 import { DriverScreen } from './ui/screens/DriverScreen.js';
 import { Finance } from './ui/screens/Finance.js';
 import { TeamScreen } from './ui/screens/TeamScreen.js';
+import { Calendar } from './ui/screens/Calendar.js';
 import { Contracts } from './ui/screens/Contracts.js';
 import { Standings } from './ui/screens/Standings.js';
 import { History } from './ui/screens/History.js';
@@ -94,6 +95,7 @@ export function App() {
             {screen === 'paddock' && <Paddock onAdvance={onAdvance} />}
             {screen === 'pilota' && <DriverScreen />}
             {screen === 'allenamento' && <Training onAdvance={onAdvance} />}
+            {screen === 'calendario' && <Calendar />}
             {screen === 'finanze' && <Finance />}
             {screen === 'scuderia' && <TeamScreen />}
             {screen === 'contratti' && <Contracts />}
