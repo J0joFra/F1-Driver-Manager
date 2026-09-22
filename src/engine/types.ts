@@ -241,6 +241,8 @@ export interface World {
   year: number;
   /** settimana corrente della stagione, 0-based (una stagione dura SEASON_WEEKS) */
   week: number;
+  /** giorno della settimana corrente, 0 = lunedì */
+  dayOfWeek: number;
   /** gare già corse quest'anno */
   round: number;
   drivers: Record<string, Driver>;

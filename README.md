@@ -51,7 +51,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 83 test
+npm test                      # 90 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -124,7 +124,7 @@ una torre dei tempi i numeri devono incolonnarsi.
 | **Paddock** | tre colonne: il tuo pilota e il contratto · il prossimo weekend e la classifica piloti · la scuderia e la classifica costruttori |
 | **Pilota** | profilo e carriera a sinistra, i sette attributi per esteso a destra, ognuno con il proprio tetto |
 | **Allenamento** | piano settimanale a sinistra con i pip di allocazione, a destra gli attributi che si muovono |
-| **Calendario** | l'anno intero in tabella a sinistra, con gli stacchi dei mesi · a destra la settimana corrente e il resto della stagione |
+| **Calendario** | due viste: griglia mensile a sette colonne, o l'anno intero in tabella · a destra la settimana corrente e il resto della stagione |
 | **Finanze** | entrate · uscite · il netto isolato in una colonna sua |
 | **Scuderia** | la squadra · i piloti in schede · lo sviluppo, in sola lettura |
 | **Contratti** | profilo e stagione a sinistra, a destra il contratto in corso o le offerte da firmare |
@@ -339,6 +339,34 @@ stacchi dei mesi e la settimana corrente evidenziata e portata in vista da
 sola. A destra due pannelli: cosa succede questa settimana (regione, giorni del
 weekend, ora locale e ora italiana) e cosa resta dell'anno.
 
+### Due viste: il mese e la stagione
+
+La schermata Calendario ha due impaginazioni, e non è ridondanza: rispondono a
+due domande diverse.
+
+**Mese** è la griglia a sette colonne dei manageriali — una riga per settimana,
+una casella per giorno, fino a tre etichette per casella. Serve a *pianificare*:
+il colpo d'occhio dice dove sono i weekend e quanto fiato c'è in mezzo, cosa
+che una lista verticale non riesce a dare. La colonna di sinistra tiene il
+carattere della settimana (`R7`, `Libera`, `Pausa`), che è l'equivalente dello
+stile di allenamento nei manageriali di calcio.
+
+**Stagione** è l'anno intero in tabella, con gli stacchi dei mesi e i
+risultati. Serve a *cercare*.
+
+Due vincoli hanno deciso la griglia:
+
+- **Una casella è larga meno di settanta pixel.** Perciò ogni attività porta
+  due nomi: `label` per intero e `short` per la griglia — "Trasferta" diventa
+  "Volo", "Prova della settimana" diventa "Prova", "Preparazione" diventa
+  "Fisico". Non sono abbreviazioni a caso: sono i nomi che reggono in undici
+  caratteri, e un test lo verifica, perché troncare con i puntini non informa
+  nessuno.
+- **Le settimane fuori stagione non meritano lo stesso spazio.** A febbraio ci
+  sono tre righe vuote prima dei test: a 390 px di altezza regalare loro un
+  quinto dello schermo sarebbe assurdo, quindi una riga senza attività è alta
+  22 px invece di 58.
+
 ### Un difetto che il calendario lungo ha fatto emergere
 
 La stanchezza si calcolava come `totalLoad * 14 - 4`, dove `totalLoad` è la
@@ -357,15 +385,47 @@ stata tarata — ma le settimane di gara costano meno. La deriva è tornata a
 
 ## La settimana di gioco
 
-Una stagione dura **44 settimane**, di cui 24 con una gara. `advanceWeek()` fa avanzare il mondo di una settimana; il [calendario](#il-calendario-della-stagione) decide cosa contiene.
+Una stagione dura **44 settimane**, di cui 24 con una gara. Il tempo però
+**scorre a giorni**: `advanceDay()` è l'unità del gioco, e *Avanza* sposta il
+mondo di ventiquattro ore.
 
-| Giorno | Cosa fai | Durata |
+| Giorno | Cosa succede | Durata |
 |---|---|---|
 | Lun–Gio | **Allenamento**: sessioni secondo il tipo di settimana (12 nei test, 10 se libera, 6 se c'è la gara), **max 4 per categoria** | 30 s |
-| Gio | **Il minigioco della settimana**, una sola partita | 40 s |
+| Mer | **Il minigioco della settimana**, una sola partita | 40 s |
+| Gio | **Trasferta** verso il circuito | — |
 | Ven | **Libere**: scegli una direzione di assetto | 20 s |
 | Sab | **Qualifica**: tre decisioni + il giro lanciato | 90 s |
 | Dom | **Gara** | 3–5 min |
+
+### Il tempo scorre a giorni, i conti restano a settimane
+
+Sono due cose diverse e vale la pena tenerle separate.
+
+Il **passo** è il giorno, perché è quello che rende leggibile una stagione:
+scorrendo il calendario si vede la trasferta di giovedì, il venerdì di libere,
+la domenica di gara. Il **conto** dell'allenamento resta settimanale, perché le
+curve di crescita sono tarate su una settimana intera e spezzarle in sette
+pezzi cambierebbe i risultati senza aggiungere una decisione — il piano si
+sceglie una volta a settimana, non una volta al giorno.
+
+Il ponte fra le due cose è una riga: `COMMIT_DAY`, il giorno in cui il lavoro
+della settimana va a bilancio. È l'ultima giornata di allenamento — giovedì in
+un weekend di gara, venerdì in una settimana libera — quindi gli attributi si
+muovono quando il blocco di lavoro finisce, e sempre **prima** della gara. Un
+test verifica che `COMMIT_DAY` cada sull'ultima giornata di allenamento e mai
+dopo la domenica.
+
+`advanceWeek()` esiste ancora ma non è più l'unità di tempo: è costruita sopra
+`advanceDay()` e serve al simulatore da riga di comando, che corre quarant'anni
+e non ha motivo di passare per i giorni. Costruirla sopra invece che accanto
+significa che i due percorsi non possono divergere — e un test lo verifica
+davvero, facendo correre la stessa stagione nei due modi e confrontando
+classifica, attributi e stanchezza di ogni pilota.
+
+Trecento giorni all'anno sono tanti da premere a mano, quindi accanto ad
+*Avanza* c'è **Al weekend**: salta ai giorni che contano e si ferma appena
+succede qualcosa.
 
 ### Allenamento
 
@@ -639,6 +699,7 @@ engine/
   driver.ts         creazione, newgen, overall, curve di età, ritiro
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
+  days.ts           la settimana giorno per giorno: attività, giorno di bilancio
   training.ts       sessioni, tetti, scelta del minigioco, applicazione crescita
   curves.ts         sigmoidi, curve di età, rendimenti decrescenti
   progression.ts    crescita settimanale, sovrallenamento, stanchezza
@@ -652,12 +713,12 @@ engine/
   regulations.ts    sviluppo monoposto, handicap, budget cap, prestigio, reset
   market.ts         valore di mercato, ingaggi, mercato piloti, finanze
   season.ts         weekend, classifiche, aggregati storici
-  world.ts          createWorld, advanceWeek, endSeason, simulateSeason
+  world.ts          createWorld, advanceDay, advanceWeek, endSeason, simulateSeason
   data/
     tracks.ts       31 circuiti di fantasia con regione, fuso e ora di partenza
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              83 test: rng, curve e modelli, gara, gara live,
+tests/              90 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -695,7 +756,7 @@ ugualmente distinguibili non esistono — il validatore lo dice chiaramente — 
 ## Comandi
 
 ```bash
-npm test               # vitest, 83 test
+npm test               # vitest, 90 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
@@ -730,6 +791,7 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 
 - [x] Vite + React + TypeScript + Tailwind, layout orizzontale
 - [x] Hub: Paddock, Pilota, Allenamento, Calendario, Finanze, Scuderia, Contratti, Classifiche, Storia
+- [x] Il tempo scorre a giorni: *Avanza* di ventiquattro ore, *Al weekend* per saltare ai giorni che contano
 - [x] Ciclo settimanale completo: allenamento → weekend → fine stagione
 - [x] Calendario ricalcato su quello vero: date reali, giro del mondo per regioni, triple header, pausa d'agosto, orari locali e italiani
 - [x] Salvataggio automatico con Zustand `persist`, con migrazione dei salvataggi vecchi

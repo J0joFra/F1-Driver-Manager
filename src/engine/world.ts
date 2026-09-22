@@ -1,7 +1,8 @@
 import type { MinigameKind, Seat, TrainingPlan, World } from './types.js';
 import { createRng, hashSeed } from './rng.js';
 import { TEAM_SEEDS } from './data/teams.js';
-import { buildCalendar, raceCountOf, WEEK_RECOVERY } from './calendar.js';
+import { buildCalendar, raceCountOf, WEEK_RECOVERY, type WeekKind } from './calendar.js';
+import { COMMIT_DAY, DAYS_IN_WEEK, RACE_DAY, type DayActivity, weekActivities } from './days.js';
 import { applyAging, createVeteran, overall, retirementChance } from './driver.js';
 import {
   acceptOffer as marketAcceptOffer, intakeNewgens, POTENTIAL_ANCHOR,
@@ -39,6 +40,7 @@ export function createWorld(opts: CreateWorldOptions): World {
     seed: opts.seed,
     year,
     week: 0,
+    dayOfWeek: 0,
     round: 0,
     drivers: {},
     teams: {},
@@ -118,17 +120,33 @@ export function playerDriver(world: World) {
   return world.seat.mode === 'pilota' ? world.drivers[world.seat.driverId] ?? null : null;
 }
 
+export interface DayReport {
+  week: number;
+  /** giorno della settimana appena concluso, 0 = lunedì */
+  day: number;
+  /** cosa è successo, per il resoconto dell'interfaccia */
+  activities: DayActivity[];
+  /** il lavoro della settimana è stato messo a bilancio oggi */
+  trainingApplied: boolean;
+  minigame: MinigameKind | null;
+  raceRun: string | null;
+  pendingRace: string | null;
+  /** oggi era l'ultimo giorno della settimana */
+  weekOver: boolean;
+  seasonOver: boolean;
+}
+
 /**
- * Avanza di una settimana: allenamenti per tutti, poi l'eventuale weekend.
- * Restituisce cosa è successo, così l'interfaccia sa che schermata mostrare.
+ * Il lavoro della settimana: recupero e allenamenti, per tutti i piloti.
+ *
+ * Resta un conto settimanale anche se il tempo scorre a giorni. Spezzarlo in
+ * sette pezzi cambierebbe i risultati — le curve di crescita sono tarate su
+ * una settimana intera — e non aggiungerebbe niente: il giocatore decide il
+ * piano una volta a settimana, non una volta al giorno.
  */
-export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
-  const week = world.schedule[world.week];
-  const trackId = week?.trackId ?? null;
-  const kind = week?.kind ?? 'free';
+function commitWeekWork(world: World, kind: WeekKind, opts: WeekOptions): MinigameKind | null {
   const rng = rngFor(world, 'week');
   const player = playerDriver(world);
-
   let minigame: MinigameKind | null = null;
 
   for (const d of Object.values(world.drivers)) {
@@ -157,27 +175,103 @@ export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
   }
 
   if (minigame) world.lastMinigame = minigame;
-
-  if (trackId && opts.deferRace) {
-    // Gli allenamenti sono già applicati; la settimana avanzerà con
-    // `finishPendingRace`, quando l'esito della gara sarà noto.
-    return { week: world.week, raceRun: null, pendingRace: trackId, minigame, seasonOver: false };
-  }
-
-  if (trackId) runWeekend(world, trackId);
-
-  world.week += 1;
-  const seasonOver = world.week >= SEASON_WEEKS;
-  return { week: world.week - 1, raceRun: trackId, pendingRace: null, minigame, seasonOver };
+  return minigame;
 }
 
-/** Chiude una settimana lasciata in sospeso da `deferRace`. */
+/** Sposta il cursore di un giorno, cambiando settimana quando serve. */
+function advanceCursor(world: World): void {
+  world.dayOfWeek += 1;
+  if (world.dayOfWeek >= DAYS_IN_WEEK) {
+    world.dayOfWeek = 0;
+    world.week += 1;
+  }
+}
+
+/**
+ * Avanza di un giorno.
+ *
+ * È l'unità di tempo del gioco: il giocatore scorre il calendario un giorno
+ * alla volta, come in Soccer Manager. Quasi tutti i giorni sposta solo il
+ * cursore — il lavoro della settimana si mette a bilancio in un giorno solo
+ * (`COMMIT_DAY`, l'ultimo di allenamento) e la gara si corre la domenica.
+ */
+export function advanceDay(world: World, opts: WeekOptions = {}): DayReport {
+  const week = world.schedule[world.week];
+  const trackId = week?.trackId ?? null;
+  const kind = week?.kind ?? 'free';
+  const day = world.dayOfWeek;
+  const activities = weekActivities(kind, opts.plan ?? null, trackId !== null)[day] ?? [];
+
+  const trainingApplied = day === COMMIT_DAY[kind];
+  const minigame = trainingApplied ? commitWeekWork(world, kind, opts) : null;
+
+  const raceToday = trackId !== null && day === RACE_DAY;
+  if (raceToday && opts.deferRace) {
+    // Il giorno non avanza: lo farà `finishPendingRace`, quando l'esito
+    // della gara sarà noto. Gli allenamenti sono già a bilancio da giovedì.
+    return {
+      week: world.week, day, activities, trainingApplied, minigame,
+      raceRun: null, pendingRace: trackId, weekOver: false, seasonOver: false,
+    };
+  }
+
+  if (raceToday) runWeekend(world, trackId);
+
+  const weekBefore = world.week;
+  advanceCursor(world);
+
+  return {
+    week: weekBefore,
+    day,
+    activities,
+    trainingApplied,
+    minigame,
+    raceRun: raceToday ? trackId : null,
+    pendingRace: null,
+    weekOver: world.week !== weekBefore,
+    seasonOver: world.week >= SEASON_WEEKS,
+  };
+}
+
+/**
+ * Avanza fino alla fine della settimana.
+ *
+ * Non è più l'unità di tempo del gioco ma resta l'unità di simulazione: il
+ * simulatore da riga di comando e i test corrono stagioni intere e non hanno
+ * motivo di passare per i giorni. È costruita sopra `advanceDay`, così i due
+ * percorsi non possono divergere.
+ */
+export function advanceWeek(world: World, opts: WeekOptions = {}): WeekReport {
+  let minigame: MinigameKind | null = null;
+  let raceRun: string | null = null;
+
+  for (;;) {
+    const report = advanceDay(world, opts);
+    if (report.minigame) minigame = report.minigame;
+    if (report.raceRun) raceRun = report.raceRun;
+    if (report.pendingRace) {
+      return {
+        week: report.week, raceRun: null, pendingRace: report.pendingRace,
+        minigame, seasonOver: false,
+      };
+    }
+    if (report.weekOver) {
+      return {
+        week: report.week, raceRun, pendingRace: null, minigame,
+        seasonOver: report.seasonOver,
+      };
+    }
+  }
+}
+
+/** Chiude un weekend lasciato in sospeso da `deferRace`. */
 export function finishPendingRace(world: World, commit: () => void): WeekReport {
   const trackId = world.schedule[world.week]?.trackId ?? null;
   commit();
-  world.week += 1;
+  const weekBefore = world.week;
+  advanceCursor(world);
   return {
-    week: world.week - 1,
+    week: weekBefore,
     raceRun: trackId,
     pendingRace: null,
     minigame: null,

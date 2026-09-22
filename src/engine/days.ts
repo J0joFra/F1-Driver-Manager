@@ -1,0 +1,200 @@
+import type { TrainingCategory, TrainingPlan } from './types.js';
+import type { WeekKind } from './calendar.js';
+import { TRAINING_CATEGORIES } from './training.js';
+
+/**
+ * La settimana giorno per giorno.
+ *
+ * Il motore ha sempre ragionato a settimane, e continua a farlo: i conti
+ * dell'allenamento sono tarati su una settimana intera e spezzarli in sette
+ * pezzi li cambierebbe. Quello che cambia è il **passo del tempo**: il
+ * giocatore avanza di un giorno alla volta e vede il calendario scorrere,
+ * come in Soccer Manager.
+ *
+ * Per farlo basta sapere due cose per ogni tipo di settimana: che cosa
+ * succede in ciascuno dei sette giorni, e in quale giorno il lavoro della
+ * settimana va messo a bilancio. Tutto il resto è presentazione.
+ */
+
+export const DAYS_IN_WEEK = 7;
+
+/** La domenica: il giorno della gara. */
+export const RACE_DAY = 6;
+
+export const WEEKDAY_NAMES = [
+  'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica',
+] as const;
+
+export const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'] as const;
+
+export type DayKind =
+  | 'rest'        // niente
+  | 'recovery'    // scarico attivo: la stanchezza scende
+  | 'training'    // sessioni del piano
+  | 'test'        // giornata di test invernali
+  | 'minigame'    // la prova della settimana
+  | 'travel'      // trasferta verso il circuito
+  | 'practice'    // prove libere
+  | 'qualifying'  // qualifica
+  | 'race'        // gara
+  | 'break';      // pausa estiva, fabbriche chiuse
+
+export interface DayActivity {
+  kind: DayKind;
+  label: string;
+  /**
+   * Etichetta per la griglia mensile, dove una casella è larga meno di
+   * settanta pixel. Non è il nome accorciato a caso: è il nome che regge in
+   * undici caratteri, perché troncare con i puntini non informa nessuno.
+   */
+  short: string;
+  /** categorie allenate, solo per le giornate di allenamento */
+  categories?: TrainingCategory[];
+}
+
+/**
+ * Il giorno in cui il lavoro della settimana viene messo a bilancio.
+ *
+ * È l'ultima giornata di allenamento: avanzando giorno per giorno gli
+ * attributi si muovono quando il blocco di lavoro finisce, non il lunedì.
+ */
+export const COMMIT_DAY: Record<WeekKind, number> = {
+  testing: 4,      // venerdì, fine dei test
+  free: 4,         // venerdì
+  race: 3,         // giovedì, prima di partire
+  summerBreak: 0,  // lunedì: non c'è lavoro, solo recupero
+  postseason: 3,   // giovedì
+};
+
+/** Le giornate che portano sessioni di allenamento, per tipo di settimana. */
+export const TRAINING_DAYS: Record<WeekKind, readonly number[]> = {
+  testing: [1, 2, 3, 4],
+  free: [0, 1, 2, 3, 4],
+  race: [1, 2, 3],
+  summerBreak: [],
+  postseason: [0, 1, 2, 3],
+};
+
+/** Il giorno del minigioco, quando la settimana ne prevede uno. */
+export const MINIGAME_DAY: Record<WeekKind, number | null> = {
+  testing: 3,
+  free: 2,
+  race: 2,
+  summerBreak: null,
+  postseason: null,
+};
+
+/**
+ * Distribuisce le sessioni del piano sulle giornate di allenamento.
+ *
+ * A turno e non a blocchi: così ogni giornata mescola categorie diverse,
+ * invece di avere tre giorni di simulatore e uno di media. È anche più
+ * onesto — un pilota non passa il martedì intero a fare interviste.
+ */
+export function sessionsByDay(plan: TrainingPlan, kind: WeekKind): TrainingCategory[][] {
+  const days = TRAINING_DAYS[kind];
+  const out: TrainingCategory[][] = Array.from({ length: DAYS_IN_WEEK }, () => []);
+  if (days.length === 0) return out;
+
+  const queue: TrainingCategory[] = [];
+  for (const c of TRAINING_CATEGORIES) for (let i = 0; i < plan[c]; i++) queue.push(c);
+
+  queue.forEach((category, i) => {
+    out[days[i % days.length]!]!.push(category);
+  });
+  return out;
+}
+
+const CATEGORY_NAME: Record<TrainingCategory, string> = {
+  simulator: 'Simulatore',
+  fitness: 'Preparazione',
+  engineering: 'Ingegneria',
+  media: 'Media',
+};
+
+const CATEGORY_SHORT: Record<TrainingCategory, string> = {
+  simulator: 'Simul.',
+  fitness: 'Fisico',
+  engineering: 'Tecnica',
+  media: 'Media',
+};
+
+/** Il nome da stampare su una giornata di allenamento. */
+export function trainingLabel(categories: readonly TrainingCategory[], short = false): string {
+  const names = short ? CATEGORY_SHORT : CATEGORY_NAME;
+  if (categories.length === 0) return short ? 'Libero' : 'Allenamento';
+  const unique = [...new Set(categories)];
+  if (unique.length === 1) return names[unique[0]!];
+  return short ? 'Misto' : `${names[unique[0]!]} +${unique.length - 1}`;
+}
+
+/**
+ * Le attività dei sette giorni di una settimana.
+ *
+ * `plan` serve solo a dare un nome alle giornate di allenamento: senza, le
+ * caselle direbbero tutte "Allenamento" e il calendario non aiuterebbe a
+ * pianificare, che è il motivo per cui esiste.
+ */
+export function weekActivities(
+  kind: WeekKind,
+  plan: TrainingPlan | null,
+  hasRace: boolean,
+): DayActivity[][] {
+  const days: DayActivity[][] = Array.from({ length: DAYS_IN_WEEK }, () => []);
+  const sessions = plan ? sessionsByDay(plan, kind) : null;
+
+  if (kind === 'summerBreak') {
+    for (let d = 0; d < DAYS_IN_WEEK; d++) {
+      days[d]!.push({ kind: 'break', label: 'Pausa estiva', short: 'Pausa' });
+    }
+    days[6]!.push({ kind: 'recovery', label: 'Recupero', short: 'Recupero' });
+    return days;
+  }
+
+  for (const d of TRAINING_DAYS[kind]) {
+    const categories = sessions?.[d] ?? [];
+    // Una giornata senza sessioni assegnate è riposo, non un allenamento vuoto.
+    if (plan && categories.length === 0) {
+      days[d]!.push({ kind: 'rest', label: 'Riposo', short: 'Riposo' });
+      continue;
+    }
+    days[d]!.push({
+      kind: kind === 'testing' ? 'test' : 'training',
+      label: kind === 'testing' ? 'Test' : trainingLabel(categories),
+      short: kind === 'testing' ? 'Test' : trainingLabel(categories, true),
+      categories,
+    });
+  }
+
+  const minigameDay = MINIGAME_DAY[kind];
+  if (minigameDay !== null && plan) {
+    days[minigameDay]!.push({ kind: 'minigame', label: 'Prova della settimana', short: 'Prova' });
+  }
+
+  if (kind === 'race' && hasRace) {
+    days[3]!.push({ kind: 'travel', label: 'Trasferta', short: 'Volo' });
+    days[4]!.push({ kind: 'practice', label: 'Prove libere', short: 'Libere' });
+    days[5]!.push({ kind: 'qualifying', label: 'Qualifica', short: 'Qualif.' });
+    days[6]!.push({ kind: 'race', label: 'Gara', short: 'Gara' });
+    days[0]!.push({ kind: 'recovery', label: 'Recupero', short: 'Recupero' });
+  }
+
+  if (kind === 'free') {
+    days[5]!.push({ kind: 'rest', label: 'Riposo', short: 'Riposo' });
+    days[6]!.push({ kind: 'recovery', label: 'Recupero', short: 'Recupero' });
+  }
+
+  if (kind === 'testing') {
+    days[0]!.push({ kind: 'travel', label: 'Trasferta', short: 'Volo' });
+    days[5]!.push({ kind: 'rest', label: 'Riposo', short: 'Riposo' });
+    days[6]!.push({ kind: 'rest', label: 'Riposo', short: 'Riposo' });
+  }
+
+  if (kind === 'postseason') {
+    for (let d = 4; d < DAYS_IN_WEEK; d++) {
+      days[d]!.push({ kind: 'rest', label: 'Riposo', short: 'Riposo' });
+    }
+  }
+
+  return days;
+}

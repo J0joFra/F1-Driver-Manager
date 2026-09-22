@@ -72,6 +72,11 @@ export function weekMonday(year: number, week: SeasonWeek): Date {
   return new Date(Date.UTC(year, 0, 1 + week.startDay));
 }
 
+/** La data di un giorno preciso della settimana, 0 = lunedì. */
+export function dayDate(year: number, week: SeasonWeek, dayOfWeek: number): Date {
+  return new Date(weekMonday(year, week).getTime() + dayOfWeek * DAY);
+}
+
 /** I tre giorni di un weekend: libere, qualifica, gara. */
 export function weekendDays(year: number, week: SeasonWeek): { practice: Date; qualifying: Date; race: Date } {
   const monday = weekMonday(year, week);

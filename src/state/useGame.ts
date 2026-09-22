@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { RaceResult, TrainingPlan, World } from '../engine/types.js';
-import { advanceWeek, endSeason, finishPendingRace, takeOffer, type SeasonSummary, type WeekReport } from '../engine/world.js';
+import { advanceDay, endSeason, finishPendingRace, takeOffer, type DayReport, type SeasonSummary, type WeekReport } from '../engine/world.js';
 import { startCareer, type StartCareerOptions } from '../engine/career.js';
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
 import { migrateWorld } from '../engine/migrate.js';
@@ -24,6 +24,48 @@ export type Screen =
   | 'classifiche'
   | 'storia';
 
+/** Si può avanzare solo se non c'è una gara da giocare o un contratto da firmare. */
+function canAdvance(world: World | null, pendingRace: string | null): world is World {
+  if (!world || world.week >= SEASON_WEEKS || pendingRace) return false;
+  return (world.offers?.length ?? 0) === 0;
+}
+
+/**
+ * Un giorno di mondo. Se il giocatore è in griglia il weekend si ferma prima
+ * del via: la gara la corre lui, e sarà `completeRace` a registrarla.
+ */
+function stepDay(world: World, plan: TrainingPlan, minigameScore?: number): DayReport {
+  return advanceDay(world, {
+    plan,
+    ...(minigameScore !== undefined ? { minigameScore } : {}),
+    deferRace: world.seat.mode === 'pilota',
+  });
+}
+
+/**
+ * Il motore muta il mondo in posto: se ne prende una copia superficiale per
+ * far scattare il render di React.
+ */
+function commitStep(
+  set: (partial: Partial<GameState>) => void,
+  world: World,
+  report: DayReport,
+): void {
+  set({
+    world: { ...world },
+    lastDay: report,
+    // Il riepilogo del weekend si apre solo quando la gara è stata corsa.
+    lastWeek: report.raceRun
+      ? {
+          week: report.week, raceRun: report.raceRun, pendingRace: null,
+          minigame: report.minigame, seasonOver: report.seasonOver,
+        }
+      : null,
+    pendingRace: report.pendingRace,
+    gridReady: false,
+  });
+}
+
 interface GameState {
   world: World | null;
   screen: Screen;
@@ -32,6 +74,8 @@ interface GameState {
   setPlan: (plan: TrainingPlan) => void;
   /** ultimo weekend corso, da mostrare come riepilogo */
   lastWeek: WeekReport | null;
+  /** l'ultimo giorno avanzato: cosa è successo, per la barra di stato */
+  lastDay: DayReport | null;
   lastSeason: SeasonSummary | null;
   /** gara da giocare: la settimana resta ferma finché non è chiusa */
   pendingRace: string | null;
@@ -52,7 +96,10 @@ interface GameState {
   newGame: (opts: StartCareerOptions) => void;
   abandon: () => void;
   goTo: (screen: Screen) => void;
-  advance: (plan: TrainingPlan, minigameScore?: number) => WeekReport | null;
+  /** avanza di un giorno: è l'unità di tempo del gioco */
+  advance: (plan: TrainingPlan, minigameScore?: number) => DayReport | null;
+  /** avanza fino al venerdì del prossimo weekend di gara, o alla fine della stagione */
+  skipToWeekend: (plan: TrainingPlan) => DayReport | null;
   closeSeason: () => SeasonSummary | null;
   dismissSummary: () => void;
 }
@@ -71,6 +118,7 @@ export const useGame = create<GameState>()(
       plan: { simulator: 3, fitness: 2, engineering: 1, media: 0 },
       setPlan: (plan) => set({ plan }),
       lastWeek: null,
+      lastDay: null,
       lastSeason: null,
       pendingRace: null,
       raceRunning: false,
@@ -87,7 +135,7 @@ export const useGame = create<GameState>()(
       abandon: () => {
         endRace();
         set({
-          world: null, lastWeek: null, lastSeason: null,
+          world: null, lastWeek: null, lastDay: null, lastSeason: null,
           pendingRace: null, raceRunning: false, gridReady: false, screen: 'paddock',
         });
       },
@@ -96,24 +144,29 @@ export const useGame = create<GameState>()(
 
       advance: (plan, minigameScore) => {
         const world = get().world;
-        if (!world || world.week >= SEASON_WEEKS || get().pendingRace) return null;
-        if ((world.offers?.length ?? 0) > 0) return null;
-        // Se il giocatore è in griglia la settimana si ferma prima del via: la
-        // gara la corre lui, e sarà `completeRace` a registrarla.
-        const racing = world.seat.mode === 'pilota';
-        const report = advanceWeek(world, {
-          plan,
-          ...(minigameScore !== undefined ? { minigameScore } : {}),
-          deferRace: racing,
-        });
-        // Il motore muta il mondo in posto: se ne prende una copia superficiale
-        // per far scattare il render di React.
-        set({
-          world: { ...world },
-          lastWeek: report.pendingRace ? null : report,
-          pendingRace: report.pendingRace,
-          gridReady: false,
-        });
+        if (!canAdvance(world, get().pendingRace)) return null;
+        const report = stepDay(world!, plan, minigameScore);
+        commitStep(set, world!, report);
+        return report;
+      },
+
+      /**
+       * Trecento giorni all'anno e ventiquattro gare: avanzare a mano fino al
+       * prossimo weekend sarebbe un lavoro, non una scelta. Questo salta ai
+       * giorni che contano e si ferma appena succede qualcosa.
+       */
+      skipToWeekend: (plan) => {
+        const world = get().world;
+        if (!canAdvance(world, get().pendingRace)) return null;
+        let report: DayReport | null = null;
+        for (let guard = 0; guard < SEASON_WEEKS * 7; guard++) {
+          report = stepDay(world!, plan);
+          if (report.pendingRace || report.raceRun || report.seasonOver) break;
+          // Ci si ferma al venerdì di un weekend di gara: da lì in avanti ogni
+          // giorno ha qualcosa da decidere.
+          if (world!.schedule[world!.week]?.trackId && world!.dayOfWeek >= 4) break;
+        }
+        if (report) commitStep(set, world!, report);
         return report;
       },
 
@@ -134,7 +187,10 @@ export const useGame = create<GameState>()(
           commitWeekend(world, session.prepared, results, safetyCars);
         });
         endRace();
-        set({ world: { ...world }, lastWeek: report, pendingRace: null, raceRunning: false, gridReady: false });
+        set({
+          world: { ...world }, lastWeek: report, pendingRace: null,
+          raceRunning: false, gridReady: false,
+        });
       },
 
       closeSeason: () => {

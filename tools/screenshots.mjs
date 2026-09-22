@@ -91,10 +91,13 @@ for (const [screen, file] of [
   await noVerticalScroll(screen);
 }
 
-// Avanza fino alla prima gara
-for (let i = 0; i < 10; i++) {
+// Avanza fino alla prima gara. Il tempo scorre a giorni, quindi si usa il
+// salto al weekend finché c'è, e gli ultimi giorni uno alla volta.
+for (let i = 0; i < 40; i++) {
   if (await page.locator('[data-testid=go-racing]').count()) break;
-  await page.click('[data-testid=advance]', { timeout: 4000 });
+  const skip = page.locator('[data-testid=skip]');
+  if (await skip.count()) await skip.click({ timeout: 4000 });
+  else await page.click('[data-testid=advance]', { timeout: 4000 });
   await page.waitForTimeout(150);
 }
 await shot('10-griglia');
