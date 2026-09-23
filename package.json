@@ -18,7 +18,8 @@
     "preview": "vite preview --host",
     "shots": "node tools/screenshots.mjs",
     "check:offers": "node tools/check-offers.mjs",
-    "check:migration": "node tools/check-migration.mjs"
+    "check:migration": "node tools/check-migration.mjs",
+    "check:palette": "node tools/check-palette.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

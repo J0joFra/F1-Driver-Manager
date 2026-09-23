@@ -51,7 +51,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 94 test
+npm test                      # 98 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -106,6 +106,7 @@ denso che resta leggibile.
 | **Colonne** | due o tre per schermata: in orizzontale la larghezza è ciò che abbonda |
 | **Palette navy** | pagina `#0A1120`, schede `#0C1423`, superfici `#121B2E`; verde d'azione, giallo di richiamo |
 | **Tipografia** | Barlow Condensed per i numeri grandi, Inter per il testo, IBM Plex Mono per le cifre in colonna |
+| **Tema chiaro** | rosso e bianco, per richiamare GridUP: vedi [la palette](#la-palette) |
 | **Icone** | `lucide-react` |
 
 Ogni attributo del pilota ha la propria tinta, presa dalla stessa scala
@@ -122,7 +123,7 @@ una torre dei tempi i numeri devono incolonnarsi.
 | Schermata | Impaginazione |
 |---|---|
 | **Paddock** | tre colonne: il tuo pilota e il contratto · il prossimo weekend e la classifica piloti · la scuderia e la classifica costruttori |
-| **Pilota** | profilo e carriera a sinistra, i sette attributi per esteso a destra, ognuno con il proprio tetto |
+| **Pilota** | tre fasce: chi è (nome, scuderia, contratto, overall e potenziale) · di cosa è fatto (ruoli a stelle, attributi in colonne, anagrafica) · come sta (morale, condizione, forma, stagione) |
 | **Allenamento** | piano settimanale a sinistra con i pip di allocazione, a destra gli attributi che si muovono |
 | **Calendario** | due viste: griglia mensile a sette colonne, o l'anno intero in tabella · a destra la settimana corrente e il resto della stagione |
 | **Finanze** | entrate · uscite · il netto isolato in una colonna sua |
@@ -157,6 +158,7 @@ cose che su desktop non si vedono mai:
 ```bash
 npm run build && npm run preview &
 npm run shots -- screenshots
+npm run check:palette
 ```
 
 ## Architettura: perché il motore viene prima
@@ -724,6 +726,7 @@ engine/
   driver.ts         creazione, newgen, overall, curve di età, ritiro
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
+  roles.ts          quanto un pilota vale in ciascun mestiere del weekend
   days.ts           la settimana giorno per giorno: attività, giorno di bilancio
   training.ts       sessioni, tetti, scelta del minigioco, applicazione crescita
   curves.ts         sigmoidi, curve di età, rendimenti decrescenti
@@ -743,10 +746,11 @@ engine/
     tracks.ts       31 circuiti di fantasia con regione, fuso e ora di partenza
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              94 test: rng, curve e modelli, gara, gara live,
+tests/              98 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
+tools/check-palette.mjs contrasti, separazione fra tinte, daltonismo
 tools/check-offers.mjs verifica il flusso delle offerte di contratto
 tools/check-migration.mjs  carica un salvataggio vecchio e uno corrotto
 ```
@@ -755,33 +759,42 @@ tools/check-migration.mjs  carica un salvataggio vecchio e uno corrotto
 
 «Formula 1», i nomi delle scuderie e quelli dei piloti sono marchi protetti. Team e piloti sono inventati; i circuiti sono parametrizzati sui valori reali (giro 70–105 s, 44–71 giri) ma con nomi e disegni propri. È la stessa scelta di *Motorsport Manager*, e permette di pubblicare sugli store senza problemi.
 
-### La palette delle scuderie
+### La palette
 
-Gli otto colori non sono decorativi: sono anche i colori delle barre in tutte le classifiche, quindi devono funzionare come palette categorica. Sono stati verificati con un validatore per daltonismo — banda di luminosità, soglia di croma, separazione ΔE ≥ 9 fra tinte adiacenti in protanopia e tritanopia, contrasto ≥ 3:1 sul fondo scuro.
+Il gioco è **chiaro**, sul rosso e bianco di GridUP. Il fondo è grigio
+chiarissimo e non bianco pieno, così le schede bianche si staccano senza
+bordi pesanti. Il rosso di marca è l'unico rosso che significa *premi qui*.
 
-| Scuderia | Colore |
-|---|---|
-| Scuderia Aurora | `#E8283C` |
-| Vantar Racing | `#3E86F0` |
-| Kestrel Motors | `#12A06E` |
-| Solaro Corse | `#0E9BB4` |
-| Mirage GP | `#D4761E` |
-| Brandt Werke | `#DE5AA2` |
-| Nordvik Squadra | `#A06BE0` |
-| Kaizen Racing | `#94892A` |
+Tutti i colori stanno in [`src/theme.js`](src/theme.js), letto da tre
+consumatori: `tailwind.config.js` per le classi, `src/ui/palette.ts` per quel
+che si disegna con `style` (barre, pallini SVG, pip) e
+`tools/check-palette.mjs` per verificarli. Prima i colori "a mano" vivevano
+sparsi nei componenti, e cambiare tema ne lasciava indietro metà.
 
-L'unica coppia sotto la soglia di separazione (rosa e ciano in deuteranopia,
-ΔE 6.3) è sempre accompagnata dal nome della scuderia: nell'interfaccia il
-colore non è mai l'unico elemento che distingue una riga. Dieci tinte
-ugualmente distinguibili non esistono — il validatore lo dice chiaramente — ed
-è il motivo per cui la griglia ha otto scuderie e non dieci.
+Gli otto colori delle scuderie non sono decorativi: sono anche i colori delle
+barre in tutte le classifiche, quindi devono funzionare come palette
+categorica. `npm run check:palette` verifica quattro cose:
 
----
+1. contrasto di ogni tinta sul pannello bianco ≥ 4.5:1, così il testo bianco
+   sopra è sempre leggibile;
+2. nessuna scuderia troppo vicina al rosso di marca;
+3. separazione ΔE ≥ 9 fra tutte le coppie, in visione normale **e** in
+   protanopia, deuteranopia e tritanopia;
+4. che `src/engine/data/teams.ts` non sia divergente dal tema — il motore
+   porta il colore nel salvataggio e non può importare la presentazione,
+   quindi le due liste vanno confrontate invece che condivise.
+
+Il controllo non è cerimoniale: lanciato sulla vecchia palette scura ha
+trovato **tre coppie indistinguibili** che la documentazione dava per
+validate. Otto tinte categoriche che sopravvivono a tre dicromazie stanno al
+limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 9
+— quindi non si toccano a occhio: si cambia un valore e si rilancia.
+
 
 ## Comandi
 
 ```bash
-npm test               # vitest, 94 test
+npm test               # vitest, 98 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo

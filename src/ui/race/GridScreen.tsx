@@ -1,3 +1,4 @@
+import { PALETTE } from '../palette.js';
 import { useState } from 'react';
 import type { Compound } from '../../engine/types.js';
 import { carOf, fastForward, liveResults } from '../../engine/liveRace.js';
@@ -64,7 +65,7 @@ export function GridScreen() {
                 <span className={`font-display text-xs font-bold text-right tnum ${mine ? 'text-ink' : 'text-dim'}`}>
                   {q.position}
                 </span>
-                <i className="block w-[3px] h-3.5 rounded-sm" style={{ background: team?.colour ?? '#5B6672' }} />
+                <i className="block w-[3px] h-3.5 rounded-sm" style={{ background: team?.colour ?? PALETTE.dim }} />
                 <span className="font-display text-xs tracking-wide truncate">{d?.name ?? q.driverId}</span>
                 <span className="font-mono text-[9px] text-dim tnum">
                   {q.position === 1
@@ -101,7 +102,7 @@ export function GridScreen() {
                 className="font-display text-xs font-bold uppercase tracking-wider py-2 rounded-sm border"
                 style={
                   compound === c.k
-                    ? { background: c.colour, borderColor: c.colour, color: '#0D1114' }
+                    ? { background: c.colour, borderColor: c.colour, color: '#FFFFFF' }
                     : { background: '#1C232B', borderColor: '#293240', color: '#8B95A2' }
                 }
               >
