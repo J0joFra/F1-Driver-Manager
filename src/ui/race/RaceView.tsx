@@ -1,3 +1,4 @@
+import { PALETTE } from '../palette.js';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Compound, EngineMode } from '../../engine/types.js';
 import {
@@ -95,7 +96,7 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
 
   const teamColour = (driverId: string) => {
     const teamId = race.cars.find((c) => c.entry.driverId === driverId)?.entry.teamId;
-    return (teamId && world.teams[teamId]?.colour) || '#5B6672';
+    return (teamId && world.teams[teamId]?.colour) || PALETTE.dim;
   };
   const driverName = (driverId: string) => world.drivers[driverId]?.name ?? driverId;
 

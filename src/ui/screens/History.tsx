@@ -1,3 +1,4 @@
+import { PALETTE } from '../palette.js';
 import { useGame } from '../../state/useGame.js';
 import { player } from '../../engine/selectors.js';
 import { getTrack } from '../../engine/data/tracks.js';
@@ -47,11 +48,11 @@ export function History() {
                       border-b border-line/50 last:border-0 font-mono text-2xs tnum ${mine ? 'bg-primary/10' : ''}`}
                   >
                     <span className="text-muted">{c.year}</span>
-                    <i className="block w-2 h-2 rounded-full self-center" style={{ background: t?.colour ?? '#5D6C85' }} />
+                    <i className="block w-2 h-2 rounded-full self-center" style={{ background: t?.colour ?? PALETTE.dim }} />
                     <span className={`font-sans text-xs truncate ${mine ? 'text-primary font-bold' : 'text-ink'}`}>
                       {d?.name ?? '—'}
                     </span>
-                    <span className="truncate" style={{ color: t?.colour ?? '#5D6C85' }}>{t?.name ?? '—'}</span>
+                    <span className="truncate" style={{ color: t?.colour ?? PALETTE.dim }}>{t?.name ?? '—'}</span>
                     <span className="text-right text-accent">{season?.points ?? '—'}</span>
                   </div>
                 );
@@ -72,7 +73,7 @@ export function History() {
                 <div key={teamId} className="grid grid-cols-[78px_1fr_18px] items-center gap-2 py-[3px]">
                   <span className="font-sans text-xs truncate">{t?.short ?? '—'}</span>
                   <div className="h-[5px] bg-panel3 rounded-sm overflow-hidden">
-                    <div className="h-full rounded-sm" style={{ width: `${(n / maxTitles) * 100}%`, background: t?.colour ?? '#5D6C85' }} />
+                    <div className="h-full rounded-sm" style={{ width: `${(n / maxTitles) * 100}%`, background: t?.colour ?? PALETTE.dim }} />
                   </div>
                   <span className="font-mono text-2xs text-accent tnum text-right">{n}</span>
                 </div>
@@ -106,7 +107,7 @@ export function History() {
                         border-b border-line/50 last:border-0 font-mono text-2xs tnum ${mine ? 'bg-primary/10' : ''}`}
                     >
                       <span className="text-dim text-right">{r.position}</span>
-                      <i className="block w-2 h-2 rounded-full self-center" style={{ background: t?.colour ?? '#5D6C85' }} />
+                      <i className="block w-2 h-2 rounded-full self-center" style={{ background: t?.colour ?? PALETTE.dim }} />
                       <span className={`font-sans text-xs truncate ${mine ? 'text-primary font-semibold' : 'text-ink'}`}>
                         {d?.name ?? r.driverId}
                       </span>

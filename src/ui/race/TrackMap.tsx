@@ -82,7 +82,7 @@ export function TrackMap({
       </svg>
 
       {keyMoment && (
-        <div className="absolute top-1.5 left-1/2 -translate-x-1/2 bg-warn text-[#2B2200] font-display text-2xs font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-sm">
+        <div className="absolute top-1.5 left-1/2 -translate-x-1/2 bg-warn text-white font-display text-2xs font-bold uppercase tracking-[0.14em] px-2.5 py-1 rounded-sm">
           {keyMoment}
         </div>
       )}

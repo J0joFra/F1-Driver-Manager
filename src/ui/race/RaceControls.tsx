@@ -1,11 +1,12 @@
+import { PALETTE } from '../palette.js';
 import type { Compound, EngineMode } from '../../engine/types.js';
 import type { LiveCar, LiveRace } from '../../engine/liveRace.js';
 import { ATTACK_COOLDOWN, isAttacking } from '../../engine/liveRace.js';
 
 const COMPOUNDS: { k: Compound; label: string; colour: string }[] = [
-  { k: 'S', label: 'Soft', colour: '#E8283C' },
-  { k: 'M', label: 'Medium', colour: '#F5C518' },
-  { k: 'H', label: 'Hard', colour: '#E8EBF0' },
+  { k: 'S', label: 'Soft', colour: PALETTE.tyreSoft },
+  { k: 'M', label: 'Medium', colour: PALETTE.tyreMedium },
+  { k: 'H', label: 'Hard', colour: PALETTE.tyreHard },
 ];
 
 const MODES: { k: EngineMode; label: string }[] = [
@@ -33,7 +34,7 @@ export function RaceControls({
   const cooling = race.t < attackReadyAt;
   const canAttack = gapAhead !== null && gapAhead < 1 && !cooling && !attacking && !car.dnf;
   const wear = Math.min(100, car.tyre.wear);
-  const wearColour = wear > 80 ? '#E8283C' : wear > 55 ? '#F5C518' : '#2FD98A';
+  const wearColour = wear > 80 ? PALETTE.bad : wear > 55 ? PALETTE.warn : PALETTE.good;
 
   return (
     <div className="shrink-0 grid grid-cols-[1.15fr_1fr_0.9fr] gap-1.5" style={{ height: 74 }}>
@@ -49,7 +50,7 @@ export function RaceControls({
                 className="font-display text-2xs font-bold uppercase tracking-wider px-2 py-1 rounded-sm border"
                 style={
                   nextCompound === c.k
-                    ? { background: c.colour, borderColor: c.colour, color: '#0D1114' }
+                    ? { background: c.colour, borderColor: c.colour, color: '#FFFFFF' }
                     : { background: '#1C232B', borderColor: '#293240', color: '#8B95A2' }
                 }
               >

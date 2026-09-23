@@ -1,3 +1,4 @@
+import { PALETTE } from '../palette.js';
 import type { ReactNode } from 'react';
 import type { AttributeKey } from '../../engine/types.js';
 
@@ -34,10 +35,10 @@ export function Btn({
   className?: string; title?: string; testId?: string;
 }) {
   const look = {
-    ghost: 'bg-panel2 border-line text-muted hover:text-ink',
-    primary: 'bg-aurora border-aurora text-white',
-    green: 'bg-primary border-primary text-[#04231A] font-semibold',
-    danger: 'bg-transparent border-line text-bad',
+    ghost: 'bg-panel2 border-line text-muted hover:text-ink hover:border-dim',
+    primary: 'bg-ink border-ink text-white',
+    green: 'bg-primary border-primary text-white font-semibold',
+    danger: 'bg-transparent border-line text-bad hover:border-bad',
   }[variant];
   return (
     <button
@@ -84,7 +85,7 @@ export function KeyRow({
 }
 
 export function Bar({
-  value, max = 100, colour = '#8C9AB0', height = 5, track = true,
+  value, max = 100, colour = PALETTE.muted, height = 5, track = true,
 }: { value: number; max?: number; colour?: string; height?: number; track?: boolean }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   return (
@@ -102,13 +103,13 @@ export function Bar({
  * nome dell'attributo è sempre accanto alla barra.
  */
 export const ATTRIBUTE_COLOURS: Record<AttributeKey, string> = {
-  speed: '#E8283C',
-  consistency: '#3E86F0',
-  tyres: '#12A06E',
-  starts: '#D4761E',
-  wet: '#A06BE0',
-  technical: '#0E9BB4',
-  composure: '#DE5AA2',
+  speed: PALETTE.aurora,
+  consistency: PALETTE.vantar,
+  tyres: PALETTE.kestrel,
+  starts: PALETTE.mirage,
+  wet: PALETTE.nordvik,
+  technical: PALETTE.solaro,
+  composure: PALETTE.brandt,
 };
 
 export function AttrRow({
@@ -172,14 +173,14 @@ export function TeamBadge({ name, colour, size = 34 }: { name: string; colour: s
 }
 
 /** Pip di allocazione: quante sessioni su quante disponibili. */
-export function Pips({ filled, total, colour = '#10B981' }: { filled: number; total: number; colour?: string }) {
+export function Pips({ filled, total, colour = PALETTE.primary }: { filled: number; total: number; colour?: string }) {
   return (
     <div className="flex gap-[3px]">
       {Array.from({ length: total }, (_, i) => (
         <span
           key={i}
           className="h-[3px] flex-1 rounded-sm"
-          style={{ background: i < filled ? colour : '#1A2440' }}
+          style={{ background: i < filled ? colour : PALETTE.panel3 }}
         />
       ))}
     </div>
@@ -188,9 +189,9 @@ export function Pips({ filled, total, colour = '#10B981' }: { filled: number; to
 
 export function Note({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'good' | 'warn' }) {
   const look = {
-    info: 'bg-vantar/10 border-vantar/60 text-[#B6D0F5]',
-    good: 'bg-primary/10 border-primary/60 text-[#9FE3C6]',
-    warn: 'bg-accent/10 border-accent/60 text-[#E8D5A3]',
+    info: 'bg-vantar/8 border-vantar text-vantar',
+    good: 'bg-kestrel/8 border-kestrel text-kestrel',
+    warn: 'bg-accent/8 border-accent text-accent',
   }[tone];
   return <div className={`border-l-2 px-2.5 py-2 text-[10.5px] leading-relaxed rounded-sm ${look}`}>{children}</div>;
 }

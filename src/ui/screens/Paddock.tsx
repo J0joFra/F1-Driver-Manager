@@ -1,3 +1,4 @@
+import { PALETTE } from '../palette.js';
 import { Flag } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
 import { championshipPosition, isRaceWeek, nextRace, player, teamOf } from '../../engine/selectors.js';
@@ -31,7 +32,7 @@ export function Paddock({ onAdvance }: { onAdvance: () => void }) {
             i sette attributi non entrano tutti sotto la riga dei numeri. */}
         <Panel title="Il tuo pilota" className="flex-1" bodyClass="p-2.5 flex flex-col min-h-0">
           <div className="flex items-center gap-2.5 shrink-0">
-            <DriverBadge name={me.name} colour={team?.colour ?? '#5D6C85'} />
+            <DriverBadge name={me.name} colour={team?.colour ?? PALETTE.dim} />
             <div className="min-w-0">
               <div className="font-sans text-xs font-bold truncate">{me.name}</div>
               <div className="font-mono text-2xs text-muted truncate">{team?.name}</div>
@@ -114,7 +115,7 @@ export function Paddock({ onAdvance }: { onAdvance: () => void }) {
                   border-b border-line/60 last:border-0 ${mine ? 'bg-primary/10' : ''}`}
               >
                 <span className="font-mono text-2xs text-dim text-right tnum">{row.position}</span>
-                <TeamDot colour={t?.colour ?? '#5D6C85'} />
+                <TeamDot colour={t?.colour ?? PALETTE.dim} />
                 <span className={`font-sans text-xs truncate ${mine ? 'text-primary font-semibold' : ''}`}>{d.name}</span>
                 <span className="font-mono text-2xs text-accent tnum">{row.points}</span>
               </div>

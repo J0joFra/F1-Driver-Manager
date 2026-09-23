@@ -1,3 +1,4 @@
+import { PALETTE } from '../palette.js';
 import { useGame } from '../../state/useGame.js';
 import { player } from '../../engine/selectors.js';
 import { getTrack } from '../../engine/data/tracks.js';
@@ -78,7 +79,7 @@ export function WeekendOverlay() {
                   className={`grid grid-cols-[20px_3px_1fr_auto_28px] items-center gap-2 px-3 py-1 border-b border-line last:border-0 ${
                     isMe ? 'bg-aurora/15' : ''}`}>
                   <span className="font-display text-sm font-bold text-right text-dim tnum">{r.position}</span>
-                  <i className="block w-[3px] h-3.5 rounded-sm" style={{ background: team?.colour ?? '#5B6672' }} />
+                  <i className="block w-[3px] h-3.5 rounded-sm" style={{ background: team?.colour ?? PALETTE.dim }} />
                   <span className="font-display text-sm tracking-wide truncate">{d?.name}</span>
                   <span className="font-mono text-2xs text-dim tnum">{r.position === 1 ? 'LEADER' : gap(r.gap)}</span>
                   <span className="font-mono text-2xs text-muted text-right tnum">{r.points || ''}</span>
