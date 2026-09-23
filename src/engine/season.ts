@@ -122,7 +122,9 @@ export function commitWeekend(
     if (!r.dnf && r.position === 1) rep += 3;
     else if (!r.dnf && r.position <= 3) rep += 1.5;
     if (r.dnf) rep -= 0.4;
-    d.reputation = clamp(d.reputation + rep, 0, 100);
+    // Chi sa stare davanti a una telecamera costruisce fama più in fretta,
+    // e la fama è quello che le scuderie comprano.
+    d.reputation = clamp(d.reputation + rep * skillEffects(d).reputation, 0, 100);
 
     const swing = clamp((exp - r.position) * 1.6, -12, 12);
     d.form = clamp(d.form * 0.82 + 50 * 0.18 + swing, 5, 95);

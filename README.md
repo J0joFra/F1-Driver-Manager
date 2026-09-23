@@ -52,7 +52,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 113 test
+npm test                      # 115 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -125,7 +125,7 @@ una torre dei tempi i numeri devono incolonnarsi.
 |---|---|
 | **Paddock** | tre colonne: il tuo pilota e il contratto · il prossimo weekend e la classifica piloti · la scuderia e la classifica costruttori |
 | **Pilota** | tre fasce: chi è (nome, scuderia, contratto, overall e potenziale) · di cosa è fatto (ruoli a stelle, attributi in colonne, anagrafica) · come sta (morale, condizione, forma, stagione). Da qui si apre l'albero |
-| **Abilità** | i sei rami tutti insieme, con il dettaglio del nodo scelto in basso |
+| **Abilità** | un'area alla volta come grafo ramificato, schede in alto, dettaglio del nodo scelto in basso |
 | **Allenamento** | piano settimanale a sinistra con i pip di allocazione, a destra gli attributi che si muovono |
 | **Calendario** | due viste: griglia mensile a sette colonne, o l'anno intero in tabella · a destra la settimana corrente e il resto della stagione |
 | **Finanze** | entrate · uscite · il netto isolato in una colonna sua |
@@ -533,44 +533,67 @@ morto.
 È il posto dove finisce quello che un pilota impara correndo, e che nessun
 allenamento settimanale può dare: non punti in più ma **regole diverse**. Un
 nodo alza un tetto, uno cambia il degrado delle gomme, uno rende un sorpasso
-più probabile. È la stessa scelta di progetto dello staff personale — *alza i
-tetti, non i punteggi* — applicata alla carriera.
+più probabile, uno fa sì che il muretto ascolti quando parli.
 
-Sei rami da tre nodi: Velocità, Gomme, Sorpasso, Partenze, Bagnato, Testa.
-Un nodo si sblocca solo dopo quello sopra, e i costi salgono 1 → 2 → 3, quindi
-arrivare in cima a un ramo costa sei punti e significa non aver toccato gli
-altri. Trentasei punti per l'albero intero.
+### Quattro aree, tre di guida e una di mestiere
 
-I rami sono **lineari**, non ramificati come nei giochi di calcio da cui
-l'idea viene. Un albero ramificato starebbe bene su uno schermo grande; in
-390 px di altezza diventerebbe illeggibile, e la scelta vera resta comunque
-*quale ramo percorro per primo*. Per lo stesso motivo la schermata mostra
-tutti e sei i rami insieme invece che a schede: il colpo d'occhio sull'albero
-intero è metà del motivo per cui un albero esiste.
+| Area | Cosa tocca |
+|---|---|
+| **Passo** | velocità pura, qualifica, sorpasso |
+| **Macchina** | degrado gomme, guida sul bagnato, assetto |
+| **Testa** | riflessi al via, freddezza, costanza, recupero |
+| **Carriera** | stampa, sponsor, ingaggi, rapporto con gli ingegneri |
+
+Un pilota non è solo uno che guida, e un albero che dimenticasse quella metà
+racconterebbe metà carriera. L'area **Carriera** non dà niente in pista in
+modo diretto: dà fama più in fretta, sponsor personali, ingaggi più ricchi, e
+— il nodo che preferisco — un riscontro tecnico che fa sviluppare la
+monoposto più in fretta a tutta la scuderia. È l'unico modo che un pilota ha
+di migliorare la macchina, ed è vero anche nella realtà.
+
+### È un grafo, non una fila
+
+Ogni area ha un nodo di base da cui partono **due strade**, e in fondo un
+nodo che chiede di aver percorso **entrambi** i rami interni. È la forma che
+rende la scelta costosa: puoi prendere in fretta la punta di un ramo, o
+andare largo e arrivare al nodo finale molto più tardi.
+
+I collegamenti sono disegnati in SVG sotto i nodi, quindi un nodo che chiede
+due rami si riconosce subito — ha due fili che vi arrivano. La schermata
+mostra **un'area alla volta**: quattro grafi affiancati in 780 px
+diventerebbero quattro colonne di pallini senza fili leggibili, e i fili
+*sono* la regola. Le schede in alto dicono quanto manca in ciascuna area, così
+cambiare scheda non è cercare al buio.
+
+Un test verifica che ogni area abbia una sola radice, che ogni nodo sia
+raggiungibile da lì, che nessun filo esca dall'area e che ogni filo vada
+verso il basso — cioè che il grafo non abbia anelli.
 
 ### I punti li dà il mestiere, non il palmarès
 
-Uno ogni sei gare, uguale per tutti, più tre per ogni titolo. Al primo
+Uno ogni cinque gare, uguale per tutti, più tre per ogni titolo. Al primo
 tentativo li avevo legati ai risultati — due per una vittoria, uno per un
 podio — e sembrava ovvio. In quarant'anni di simulazione produceva una
 **dinastia**: chi vince prende più punti, sblocca più nodi, vince di più. Il
 test `nessun mondo si congela su una sola scuderia` l'ha preso al primo colpo.
 
 Vincere paga già in macchina migliore e contratti migliori: non deve pagare
-anche qui. Al ritmo di quattro punti a stagione un albero da trentasei si
-completa in nove anni, cioè verso la fine di una carriera tipica.
+anche qui. L'albero intero costa 74 punti e una stagione ne dà quattro o
+cinque: una carriera lunga arriva a completarlo, ma solo quella. Chi smette a
+trent'anni deve scegliere che pilota diventare.
 
-I piloti gestiti dal computer spendono i loro punti da soli, sul ramo in cui
-sono già forti. Non è la strategia migliore possibile ed è voluto: se l'IA
-giocasse l'albero meglio del giocatore, l'albero non sarebbe una scelta ma un
-compito. Ma **spendere deve spenderli** — ogni decisione del giocatore ha una
-sua versione IA, o la griglia resterebbe indietro rispetto a chi è al volante
-di una persona.
+I piloti gestiti dal computer spendono i loro punti da soli, sull'area in cui
+sono già forti, prendendo sempre il nodo disponibile più economico. Non è la
+strategia migliore possibile ed è voluto: se l'IA giocasse l'albero meglio del
+giocatore, l'albero non sarebbe una scelta ma un compito. Ma **spendere deve
+spenderli** — ogni decisione del giocatore ha una sua versione IA, o la
+griglia resterebbe indietro rispetto a chi è al volante di una persona.
 
-Gli effetti entrano nel motore da due punti soli: `effectiveCap` per i tetti e
-la crescita, e `buildEntries` per tutto quello che conta in gara. Il modello
-di gara lavora sugli ingressi, non sui piloti, quindi non deve sapere che
-l'albero esiste.
+Gli effetti entrano nel motore da pochi punti precisi: `effectiveCap` per i
+tetti e la crescita, `buildEntries` per tutto quello che conta in gara,
+`offeredSalary` e `settleFinances` per i soldi, `developCars` per il
+riscontro tecnico. Il modello di gara lavora sugli ingressi, non sui piloti,
+quindi non deve sapere che l'albero esiste.
 
 ---
 
@@ -795,7 +818,7 @@ engine/
     tracks.ts       31 circuiti di fantasia con regione, fuso e ora di partenza
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              113 test: rng, curve e modelli, gara, gara live,
+tests/              115 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -843,7 +866,7 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 113 test
+npm test               # vitest, 115 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
