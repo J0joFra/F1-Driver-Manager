@@ -15,6 +15,7 @@ import {
   pickMinigame, trainingLimits,
 } from './training.js';
 import { entourageEfficiency } from './staff.js';
+import { POINTS_FOR_TITLE, spendPointsAsAi } from './skills.js';
 
 /**
  * Il mondo si simula da solo.
@@ -303,6 +304,11 @@ export function endSeason(world: World): SeasonSummary {
 
   if (championDriver) {
     championDriver.career.titles += 1;
+    // Un titolo insegna quanto mezzo ramo dell'albero.
+    championDriver.skillPoints += POINTS_FOR_TITLE;
+    if (championDriver.id !== (world.seat.mode === 'pilota' ? world.seat.driverId : null)) {
+      spendPointsAsAi(championDriver);
+    }
     world.champions.push({ year: world.year, driverId: championDriver.id, teamId: championTeamId });
   }
 

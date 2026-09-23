@@ -4,6 +4,7 @@ import { getTrack } from './data/tracks.js';
 import { carPace } from './regulations.js';
 import { simulateQualifying, simulateRace, type RaceEntry } from './race.js';
 import { RACE_FATIGUE } from './progression.js';
+import { pointsForRace, skillEffects, spendPointsAsAi } from './skills.js';
 
 // La lunghezza della stagione la decide il calendario: qui si riespone perché
 // mezzo motore la usa come limite del ciclo settimanale.
@@ -21,6 +22,9 @@ export function buildEntries(world: World): RaceEntry[] {
       const d = world.drivers[driverId];
       if (!d || d.retired) continue;
       const formShift = (d.form - 50) * 0.06;
+      // Le abilità sbloccate entrano in gara qui: il modello lavora sugli
+      // ingressi, non sui piloti, e così non deve sapere che esistono.
+      const skills = skillEffects(d);
       entries.push({
         driverId: d.id,
         teamId: team.id,
@@ -29,11 +33,13 @@ export function buildEntries(world: World): RaceEntry[] {
         speed: clamp(d.attrs.speed + formShift, 1, 99),
         consistency: clamp(d.attrs.consistency + formShift, 1, 99),
         tyres: d.attrs.tyres,
-        starts: d.attrs.starts,
-        wet: d.attrs.wet,
+        starts: clamp(d.attrs.starts + skills.start, 1, 99),
+        wet: clamp(d.attrs.wet + skills.wet, 1, 99),
         composure: clamp(d.attrs.composure + (d.morale - 50) * 0.08, 1, 99),
         pitCrew: team.crew.pitCrew,
         grid: 0,
+        overtakeMod: skills.overtake,
+        tyreWearMod: skills.tyreWear,
       });
     }
   }
@@ -77,6 +83,7 @@ export function commitWeekend(
   safetyCars: number,
 ): WeekendResult {
   const { entries, qualifying, trackId } = prepared;
+  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
   const gridById = new Map(qualifying.map((q) => [q.driverId, q.position]));
 
   // Posizione attesa in base alla sola monoposto: serve a giudicare il pilota.
@@ -96,6 +103,12 @@ export function commitWeekend(
     // Correre stanca più che allenarsi: due ore al limite, con il collo e il
     // fiato di un weekend intero dietro.
     d.fatigue = clamp(d.fatigue + RACE_FATIGUE, 0, 100);
+
+    // Correre insegna, vincere insegna di più. Il giocatore i punti li
+    // spende a mano; gli altri se li giocano da soli, o la griglia
+    // resterebbe indietro rispetto a chi è al volante di una persona.
+    d.skillPoints += pointsForRace(d.career.starts);
+    if (d.id !== playerId) spendPointsAsAi(d);
     if (!r.dnf) {
       if (r.position === 1) d.career.wins += 1;
       if (r.position <= 3) d.career.podiums += 1;

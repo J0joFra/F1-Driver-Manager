@@ -1,4 +1,4 @@
-import { Star } from 'lucide-react';
+import { Sparkles, Star } from 'lucide-react';
 import { PALETTE } from '../palette.js';
 import { useGame } from '../../state/useGame.js';
 import { championshipPosition, player, seasonResults, teamOf } from '../../engine/selectors.js';
@@ -30,6 +30,7 @@ const COLUMNS: { title: string; keys: AttributeKey[] }[] = [
 
 export function DriverScreen() {
   const world = useGame((s) => s.world)!;
+  const goTo = useGame((s) => s.goTo);
   const me = player(world)!;
   const team = teamOf(world, me);
   const colour = team?.colour ?? PALETTE.dim;
@@ -47,7 +48,8 @@ export function DriverScreen() {
 
   return (
     <div className="h-full flex flex-col gap-2 min-h-0">
-      <Header me={me} teamName={team?.name ?? 'Senza contratto'} colour={colour} />
+      <Header me={me} teamName={team?.name ?? 'Senza contratto'} colour={colour}
+        onSkills={() => goTo('abilita')} />
 
       <div className="flex-1 grid grid-cols-[168px_1fr_1fr_172px] gap-2 min-h-0">
         <Panel title="Ruoli" bodyClass="p-2 scroll-y">
@@ -123,7 +125,9 @@ export function DriverScreen() {
 }
 
 /** La fascia d'intestazione: tutto quello che identifica il pilota, su una riga. */
-function Header({ me, teamName, colour }: { me: Driver; teamName: string; colour: string }) {
+function Header({ me, teamName, colour, onSkills }: {
+  me: Driver; teamName: string; colour: string; onSkills: () => void;
+}) {
   const now = Math.round(overall(me.attrs));
   const peak = Math.round(overall(me.caps));
   return (
@@ -139,6 +143,22 @@ function Header({ me, teamName, colour }: { me: Driver; teamName: string; colour
       </div>
 
       <span className="flex-1" />
+
+      {/* L'albero si apre da qui: è una cosa del pilota, non una voce di menu. */}
+      <button
+        type="button"
+        data-testid="open-skills"
+        onClick={onSkills}
+        className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 font-sans text-2xs
+          font-semibold transition ${me.skillPoints > 0
+            ? 'bg-primary border-primary text-white hover:brightness-110'
+            : 'border-line text-muted hover:text-ink hover:border-dim'}`}
+      >
+        <Sparkles className="w-3 h-3" />
+        Abilità
+        {me.skillPoints > 0 && <span className="tnum">{me.skillPoints}</span>}
+      </button>
+      <div className="w-px self-stretch bg-line" />
 
       <HeaderStat label="Overall" value={now} tone="text-ink" />
       <HeaderStat label="Potenziale" value={peak} tone="text-primary" />

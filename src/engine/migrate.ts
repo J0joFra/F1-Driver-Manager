@@ -95,6 +95,13 @@ export function migrateWorld(raw: unknown): World | null {
     if (typeof driver.money !== 'number') driver.money = 0;
     // Arrivati con il modello di progressione: stanchezza e esperienza.
     if (typeof driver.fatigue !== 'number') driver.fatigue = 0;
+    // L'albero delle abilità è arrivato dopo: un pilota già in carriera
+    // riceve i punti che avrebbe accumulato, non un albero vuoto.
+    if (!Array.isArray(driver.perks)) driver.perks = [];
+    if (typeof driver.skillPoints !== 'number') {
+      driver.skillPoints = Math.floor((driver.career?.starts ?? 0) / 5)
+        + (driver.career?.podiums ?? 0) + (driver.career?.wins ?? 0) * 2;
+    }
     if (typeof driver.experience !== 'number') {
       // Si stima dalle gare già disputate, così un veterano non riparte da
       // zero: l'esperienza è ciò che lo tiene competitivo.

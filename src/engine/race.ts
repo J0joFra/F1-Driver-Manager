@@ -40,6 +40,10 @@ export interface RaceEntry {
   /** qualità dei meccanici: incide sul tempo di sosta */
   pitCrew: number;
   grid: number;
+  /** abilità sbloccate: punti in più quando attacca, non quando difende */
+  overtakeMod?: number;
+  /** abilità sbloccate: moltiplicatore del degrado, sotto 1 è un guadagno */
+  tyreWearMod?: number;
 }
 
 export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
@@ -97,7 +101,8 @@ export function lapTimeFor(e: RaceEntry, ctx: LapContext, rng: Rng): number {
 export function wearPerLap(
   e: RaceEntry, tyre: TyreState, track: Track, mode: EngineMode, attacking = false,
 ): number {
-  return tyreWearPerLap(tyre, e.tyres, track, MODE_WEAR[mode] * (attacking ? 1.5 : 1));
+  return tyreWearPerLap(tyre, e.tyres, track, MODE_WEAR[mode] * (attacking ? 1.5 : 1))
+    * (e.tyreWearMod ?? 1);
 }
 
 export { overtakeProbability as overtakeChance };
@@ -232,7 +237,7 @@ export function simulateRace(
 
       const p = overtakeProbability(track, {
         gap,
-        attackSkill: fol.e.speed + fol.e.composure,
+        attackSkill: fol.e.speed + fol.e.composure + (fol.e.overtakeMod ?? 0),
         defenceSkill: lead.e.speed + lead.e.consistency,
         paceDelta: lead.lastLap - fol.lastLap,
         tyreAdvantage: lead.tyre.wear - fol.tyre.wear,

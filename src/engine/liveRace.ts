@@ -219,7 +219,8 @@ export function stepRace(race: LiveRace, dt: number): void {
     }, rng);
     c.lastLap = lapTime;
 
-    const before = Math.floor(c.progress);
+    const p0 = c.progress;
+    const before = Math.floor(p0);
     const fraction = dt / lapTime;
     c.progress += fraction;
     const push = sc ? 0.5 : attacking ? 1.35 : c.mode === 'push' ? 1.2 : c.mode === 'conserve' ? 0.85 : 1;
@@ -238,17 +239,49 @@ export function stepRace(race: LiveRace, dt: number): void {
       continue;
     }
 
+    /*
+     * Bandiera a scacchi.
+     *
+     * La distanza percorsa è la verità, non un contatore di giri. Il contatore
+     * si scollava dalla distanza a ogni sosta: la penalità del pit stop fa
+     * arretrare `progress` sotto la linea appena superata, quindi il giro
+     * veniva contato una seconda volta alla passata successiva, ma il
+     * contatore non tornava indietro. Risultato: chi si fermava una volta
+     * tagliava dopo 67 giri veri, chi si fermava due dopo 66, e i distacchi
+     * finali erano multipli di un giro intero.
+     */
+    if (c.progress >= track.laps) {
+      // Il momento in cui ha tagliato, non la fine del passo: `fastForward`
+      // avanza a quattro secondi per volta, e senza questo ogni distacco
+      // sarebbe arrotondato a multipli del passo.
+      const crossed = fraction > 0 ? clamp((track.laps - p0) / fraction, 0, 1) : 1;
+      c.finishedAt = race.t + dt * crossed;
+      c.progress = track.laps;
+      c.lap = track.laps;
+      continue;
+    }
+
     // Passaggio sulla linea del traguardo
     const after = Math.floor(c.progress);
     if (after > before && c.progress > 0) {
-      c.lap += 1;
-      if (c.lap > track.laps) {
-        c.finishedAt = race.t;
-        continue;
-      }
-      // L'IA decide da sé quando fermarsi; il giocatore arma la sosta a mano.
-      if (c.entry.driverId !== race.playerId && c.pitArmed === null && c.stops === 0 && !sc) {
-        if (c.lap >= (c.plan[0] ?? Infinity) || c.tyre.wear > 82) {
+      // Il giro in corso si legge dalla distanza, così una sosta non lo
+      // fa più avanzare due volte.
+      c.lap = after + 1;
+      /*
+       * L'IA decide da sé quando fermarsi; il giocatore arma la sosta a mano.
+       *
+       * Il piano si consuma per indice, una voce per sosta. Prima veniva
+       * letto solo `plan[0]` con la condizione `stops === 0`, quindi una
+       * vettura si fermava **una volta sola** per tutta la gara: sui circuiti
+       * ad alto degrado, dove `pitStrategy` prevede due soste, il secondo
+       * stint finiva oltre il crollo delle gomme e la gara durava un terzo di
+       * più. Il percorso veloce esegue tutte le soste del piano: le due
+       * cadenze dello stesso modello devono decidere allo stesso modo.
+       */
+      const planned = c.plan[c.stops] ?? Infinity;
+      const worthIt = track.laps - c.lap >= 3;
+      if (c.entry.driverId !== race.playerId && c.pitArmed === null && !sc && worthIt) {
+        if (c.lap >= planned || c.tyre.wear > 82) {
           c.pitArmed = c.tyre.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S';
         }
       }
@@ -278,7 +311,7 @@ export function stepRace(race: LiveRace, dt: number): void {
 
     const p = overtakeChance(track, {
       gap,
-      attackSkill: fol.entry.speed + fol.entry.composure,
+      attackSkill: fol.entry.speed + fol.entry.composure + (fol.entry.overtakeMod ?? 0),
       defenceSkill: lead.entry.speed + lead.entry.consistency,
       paceDelta: lead.lastLap - fol.lastLap,
       tyreAdvantage: lead.tyre.wear - fol.tyre.wear,
@@ -320,8 +353,13 @@ export function stepRace(race: LiveRace, dt: number): void {
 
 /** Porta la gara alla fine senza mostrarla: passi grossi, stesso modello. */
 export function fastForward(race: LiveRace, step = 4): void {
+  // Il limite non è un numero tondo ma la durata attesa della gara con
+  // abbondanza: con un limite fisso un passo fine finiva i giri prima del
+  // traguardo, le vetture restavano senza tempo d'arrivo e i distacchi
+  // venivano stimati sulla distanza residua — centinaia di secondi.
+  const maxSteps = Math.ceil((race.track.laps * race.track.baseLap * 3) / step) + 1000;
   let guard = 0;
-  while (!race.finished && guard++ < 20_000) stepRace(race, step);
+  while (!race.finished && guard++ < maxSteps) stepRace(race, step);
   race.finished = true;
 }
 

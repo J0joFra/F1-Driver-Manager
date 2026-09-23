@@ -2,6 +2,7 @@ import type { AttributeKey, Driver, TrainingCategory, TrainingPlan } from './typ
 import { ATTRIBUTE_KEYS, ATTRIBUTE_PROFILE } from './types.js';
 import { ageGrowthCurve, clamp, marginalDifficulty } from './curves.js';
 import { staffEfficiency } from './staff.js';
+import { effectiveCap, skillEffects } from './skills.js';
 import { CATEGORY_EFFECTS, TRAINING_CATEGORIES } from './training.js';
 
 /**
@@ -41,6 +42,8 @@ export interface GrowthContext {
   /** 0–1: carico totale della settimana, per il sovrallenamento */
   totalLoad: number;
   staff: number;
+  /** moltiplicatore delle abilità sbloccate */
+  skills: number;
   minigame: number;
   noise: number;
 }
@@ -82,7 +85,9 @@ export function attributeGrowth(
 ): number {
   const profile = ATTRIBUTE_PROFILE[attr];
   const current = driver.attrs[attr];
-  const cap = driver.caps[attr];
+  // Le abilità alzano il tetto: è il modo in cui l'albero vale davvero,
+  // perché un tetto più alto sposta anche la difficoltà marginale.
+  const cap = effectiveCap(driver, attr);
   if (current >= cap) return 0;
 
   const gap = clamp((cap - current) / Math.max(1, cap), 0, 1);
@@ -97,6 +102,7 @@ export function attributeGrowth(
     overtrainingPenalty(ctx.totalLoad) *
     fatiguePenalty(driver.fatigue) *
     moraleFactor(driver.morale) *
+    ctx.skills *
     ctx.minigame *
     ctx.noise
   );
@@ -130,6 +136,7 @@ export function previewTraining(
   const totalSessions = TRAINING_CATEGORIES.reduce((s, c) => s + plan[c], 0);
   const totalLoad = totalCapacity > 0 ? totalSessions / totalCapacity : 0;
   const staff = efficiency ?? staffEfficiency(driver);
+  const skills = skillEffects(driver);
   const gains: Partial<Record<AttributeKey, number>> = {};
 
   for (const category of TRAINING_CATEGORIES) {
@@ -143,6 +150,7 @@ export function previewTraining(
         load: load * weight * 2.2,
         totalLoad,
         staff,
+        skills: skills.growth,
         minigame,
         noise,
       });
@@ -181,6 +189,6 @@ export function commitTraining(driver: Driver, preview: TrainingPreview): void {
 
 /** Riposo fra un impegno e l'altro. Il fisioterapista accorcia i tempi. */
 export function recover(driver: Driver, physioQuality: number): void {
-  const rate = 6 + (physioQuality / 100) * 6;
+  const rate = 6 + (physioQuality / 100) * 6 + skillEffects(driver).recovery;
   driver.fatigue = clamp(driver.fatigue - rate, 0, 100);
 }

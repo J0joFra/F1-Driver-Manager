@@ -101,6 +101,8 @@ export function createNewgen(rng: Rng, opts: NewgenOptions): Driver {
     form: 50 + rng.normal() * 8,
     morale: 60,
     fatigue: 0,
+    skillPoints: 0,
+    perks: [],
     experience: 0,
     teamId: null,
     contractYears: 0,

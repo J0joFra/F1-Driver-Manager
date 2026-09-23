@@ -172,3 +172,77 @@ describe('gara live', () => {
     expect(livePoints).toBeGreaterThanOrEqual(POINTS.reduce((s, p) => s + p, 0));
   });
 });
+
+/**
+ * Regressioni sul traguardo.
+ *
+ * I distacchi finali della gara giocata dicevano che il secondo arrivava tre
+ * giri dietro al primo. Tre difetti indipendenti, tutti qui sotto.
+ */
+describe('la bandiera a scacchi', () => {
+  const wearing = getTrack('marabec'); // degrado 1.42: serve più di una sosta
+
+  it('si taglia il traguardo dopo la distanza intera, sempre', () => {
+    for (const t of [track, wearing]) {
+      const race = createLiveRace(t, field(), createRng(7));
+      fastForward(race);
+      for (const c of race.cars) {
+        if (c.dnf) continue;
+        // Il contatore dei giri si scollava dalla distanza a ogni sosta:
+        // chi si fermava una volta tagliava dopo un giro in meno.
+        expect(c.finishedAt, `${c.entry.driverId} su ${t.id}`).not.toBeNull();
+        expect(c.progress, `${c.entry.driverId} su ${t.id}`).toBeCloseTo(t.laps, 6);
+      }
+    }
+  });
+
+  it('i tempi d\'arrivo non si arrotondano al passo di simulazione', () => {
+    // `finishedAt` veniva scritto alla fine del passo invece che nel momento
+    // del taglio, quindi con `fastForward` a quattro secondi ogni distacco
+    // era un multiplo di quattro — e due vetture che tagliavano nello stesso
+    // passo risultavano appaiate a zero.
+    const step = 4;
+    const race = createLiveRace(track, field(), createRng(99));
+    fastForward(race, step);
+    const gaps = liveResults(race).filter((r) => !r.dnf && r.position > 1).map((r) => r.gap!);
+    expect(gaps.length).toBeGreaterThan(3);
+    const quantised = gaps.filter((g) => Math.abs(g / step - Math.round(g / step)) < 1e-6);
+    expect(quantised.length, `${quantised.length} distacchi su ${gaps.length} multipli di ${step}`)
+      .toBeLessThan(gaps.length);
+  });
+
+  it('una gara non dura molto più della sua distanza', () => {
+    for (const t of [track, wearing]) {
+      const race = createLiveRace(t, field(), createRng(3));
+      fastForward(race);
+      const winner = race.cars.filter((c) => c.finishedAt !== null)
+        .sort((a, b) => a.finishedAt! - b.finishedAt!)[0]!;
+      const pure = t.laps * t.baseLap;
+      // Gomme, benzina, traffico e soste pesano; un terzo in più no. Ci si
+      // arrivava quando l'IA saltava la seconda sosta e finiva la gara oltre
+      // il crollo delle gomme.
+      expect(winner.finishedAt! / pure, t.id).toBeGreaterThan(1);
+      expect(winner.finishedAt! / pure, t.id).toBeLessThan(1.3);
+    }
+  });
+
+  it("l'IA esegue tutte le soste del suo piano", () => {
+    const race = createLiveRace(wearing, field(), createRng(11));
+    fastForward(race);
+    // `pitStrategy` ne prevede due su un circuito da degrado 1.42. Il percorso
+    // dal vivo ne faceva sempre una sola, e le due cadenze dello stesso
+    // modello finivano per correre due gare diverse.
+    const stops = race.cars.filter((c) => !c.dnf).map((c) => c.stops);
+    expect(Math.max(...stops)).toBeGreaterThanOrEqual(2);
+  });
+
+  it('i distacchi crescono con la posizione e partono da zero', () => {
+    const race = createLiveRace(wearing, field(), createRng(5));
+    fastForward(race);
+    const finishers = liveResults(race).filter((r) => !r.dnf);
+    expect(finishers[0]!.gap).toBe(0);
+    for (let i = 1; i < finishers.length; i++) {
+      expect(finishers[i]!.gap!, `P${i + 1}`).toBeGreaterThanOrEqual(finishers[i - 1]!.gap!);
+    }
+  });
+});
