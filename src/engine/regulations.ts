@@ -1,4 +1,5 @@
 import type { CarRating, World } from './types.js';
+import { skillEffects } from './skills.js';
 import { clamp, type Rng } from './rng.js';
 
 /**
@@ -40,7 +41,14 @@ export function developCars(world: World, rng: Rng, standingOrder: string[] = []
     const efficiency = team.crew.technical / 100;
     // Chi è indietro recupera un po' più in fretta: senza questo la griglia si blocca.
     const catchUp = clamp(1 + (mean - carPace(team.car)) * 0.030, 0.75, 1.35);
-    const points = spendRatio * efficiency * catchUp * handicap * rng.range(2.4, 5.2) * (1 - team.futureFocus * 0.5);
+    // Un pilota che sa dire agli ingegneri cosa fa la macchina vale mesi di
+    // galleria del vento: il riscontro migliore fra i due piloti conta.
+    const feedback = team.driverIds.reduce((best, id) => {
+      const d = world.drivers[id];
+      return d ? Math.max(best, skillEffects(d).development) : best;
+    }, 0);
+    const points = spendRatio * efficiency * catchUp * handicap * rng.range(2.4, 5.2)
+      * (1 - team.futureFocus * 0.5) * (1 + feedback * 0.06);
 
     // Ogni scuderia ha una priorità di sviluppo, e non sempre è quella giusta.
     const weights = { aero: rng.range(0.2, 0.5), engine: rng.range(0.1, 0.35), chassis: rng.range(0.15, 0.4), reliability: rng.range(0.1, 0.3) };

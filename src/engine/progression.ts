@@ -160,7 +160,7 @@ export function previewTraining(
 
   return {
     gains,
-    reputationGain: plan.media * 0.6 * minigame,
+    reputationGain: plan.media * 0.6 * minigame * skills.reputation,
     // Le settimane pesanti si pagano: la stanchezza è il freno naturale
     // all'ottimo "tutto al massimo, sempre".
     //

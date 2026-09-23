@@ -2,6 +2,7 @@ import type { ContractOffer, Driver, World } from './types.js';
 import { clamp, type Rng } from './rng.js';
 import { createNewgen, overall, potentialOverall } from './driver.js';
 import { agentBonus, staffAnnualCost } from './staff.js';
+import { skillEffects } from './skills.js';
 
 /**
  * Mercato piloti e conti correnti.
@@ -30,7 +31,8 @@ export function offeredSalary(d: Driver, teamBudget: number, rng: Rng): number {
   const scale = clamp((v - 50) / 45, 0.02, 1);
   const cap = teamBudget * 0.22;
   const base = cap * Math.pow(scale, 2.1);
-  return Math.round(clamp(base * agentBonus(d) * rng.range(0.9, 1.15), 250_000, 30_000_000));
+  const skills = skillEffects(d).salary;
+  return Math.round(clamp(base * agentBonus(d) * skills * rng.range(0.9, 1.15), 250_000, 30_000_000));
 }
 
 /**
@@ -78,7 +80,8 @@ export function intakeNewgens(world: World, rng: Rng, count: number): void {
 /** Conti di fine stagione del pilota: ingaggio, bonus, staff, spese fisse. */
 export function settleFinances(d: Driver, pointsThisYear: number, podiums: number, wins: number): number {
   const bonuses = pointsThisYear * 15_000 + podiums * 150_000 + wins * 400_000;
-  const sponsors = Math.round(d.reputation * 12_000);
+  // Gli sponsor personali sono un'abilità, non una conseguenza dei risultati.
+  const sponsors = Math.round(d.reputation * 12_000 * skillEffects(d).sponsors);
   const income = d.salary + bonuses + sponsors;
   const costs = staffAnnualCost(d) + Math.round(income * 0.15);
   const net = income - costs;
