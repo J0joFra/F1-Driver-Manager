@@ -108,6 +108,10 @@ export interface Driver {
   attrs: Attributes;
   /** tetto invalicabile per ogni attributo, fissato alla nascita del pilota */
   caps: Attributes;
+  /** punti abilità non ancora spesi */
+  skillPoints: number;
+  /** id dei nodi dell'albero già sbloccati */
+  perks: string[];
   /** 0–100: apre contratti, sponsor e accesso allo staff migliore */
   reputation: number;
   /** 0–100: forma del momento */

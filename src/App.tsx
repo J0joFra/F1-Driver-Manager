@@ -3,6 +3,7 @@ import { useGame, seasonWeeks } from './state/useGame.js';
 import { OrientationGate } from './ui/shell/OrientationGate.js';
 import { Sidebar } from './ui/shell/Sidebar.js';
 import { TopBar } from './ui/shell/TopBar.js';
+import { Skills } from './ui/screens/Skills.js';
 import { NewGame } from './ui/screens/NewGame.js';
 import { Paddock } from './ui/screens/Paddock.js';
 import { Training } from './ui/screens/Training.js';
@@ -112,6 +113,7 @@ export function App() {
             {screen === 'scuderia' && <TeamScreen />}
             {screen === 'contratti' && <Contracts />}
             {screen === 'classifiche' && <Standings />}
+            {screen === 'abilita' && <Skills />}
             {screen === 'storia' && <History />}
           </main>
           {showWeekend && <WeekendOverlay />}

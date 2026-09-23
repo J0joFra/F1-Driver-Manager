@@ -79,6 +79,7 @@ for (const [screen, file] of [
   ['allenamento', '03-allenamento'],
   ['pilota', '04-pilota'],
   ['calendario', '04b-calendario'],
+  ['abilita', '04c-abilita'],
   ['finanze', '05-finanze'],
   ['scuderia', '06-scuderia'],
   ['contratti', '07-contratti'],

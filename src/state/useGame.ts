@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { RaceResult, TrainingPlan, World } from '../engine/types.js';
-import { advanceDay, endSeason, finishPendingRace, takeOffer, type DayReport, type SeasonSummary, type WeekReport } from '../engine/world.js';
+import { unlockSkill as unlock } from '../engine/skills.js';
+import { advanceDay, endSeason, finishPendingRace, playerDriver, takeOffer, type DayReport, type SeasonSummary, type WeekReport } from '../engine/world.js';
 import { startCareer, type StartCareerOptions } from '../engine/career.js';
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
 import { migrateWorld } from '../engine/migrate.js';
@@ -22,6 +23,7 @@ export type Screen =
   | 'scuderia'
   | 'contratti'
   | 'classifiche'
+  | 'abilita'
   | 'storia';
 
 /** Si può avanzare solo se non c'è una gara da giocare o un contratto da firmare. */
@@ -97,6 +99,8 @@ interface GameState {
   abandon: () => void;
   goTo: (screen: Screen) => void;
   /** avanza di un giorno: è l'unità di tempo del gioco */
+  /** spende un punto abilità sul nodo scelto */
+  unlockSkill: (id: string) => void;
   advance: (plan: TrainingPlan, minigameScore?: number) => DayReport | null;
   /** avanza fino al venerdì del prossimo weekend di gara, o alla fine della stagione */
   skipToWeekend: (plan: TrainingPlan) => DayReport | null;
@@ -143,6 +147,13 @@ export const useGame = create<GameState>()(
       },
 
       goTo: (screen) => set({ screen }),
+
+      unlockSkill: (id) => {
+        const world = get().world;
+        const me = world ? playerDriver(world) : null;
+        if (!world || !me) return;
+        if (unlock(me, id)) set({ world: { ...world } });
+      },
 
       advance: (plan, minigameScore) => {
         const world = get().world;

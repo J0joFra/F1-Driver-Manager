@@ -1,4 +1,5 @@
 import {
+  Sparkles,
   BookOpen, Building2, CalendarDays, FileText, Flag, Gauge, Trophy, User, Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -20,6 +21,7 @@ const ITEMS: { id: Screen; label: string; icon: LucideIcon }[] = [
   { id: 'scuderia', label: 'Scuderia', icon: Building2 },
   { id: 'contratti', label: 'Contratti', icon: FileText },
   { id: 'classifiche', label: 'Classifiche', icon: Trophy },
+  { id: 'abilita', label: 'Abilità', icon: Sparkles },
   { id: 'storia', label: 'Storia', icon: BookOpen },
 ];
 

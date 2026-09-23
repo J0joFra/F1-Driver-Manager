@@ -20,6 +20,7 @@ con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 - [Il mondo infinito](#il-mondo-infinito)
 - [Il calendario della stagione](#il-calendario-della-stagione)
 - [La settimana di gioco](#la-settimana-di-gioco)
+- [L'albero delle abilità](#lalbero-delle-abilità)
 - [Soldi e staff personale](#soldi-e-staff-personale)
 - [Il modello di gara](#il-modello-di-gara)
 - [Le regole che tengono in piedi il bilanciamento](#le-regole-che-tengono-in-piedi-il-bilanciamento)
@@ -51,7 +52,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 98 test
+npm test                      # 113 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -123,7 +124,8 @@ una torre dei tempi i numeri devono incolonnarsi.
 | Schermata | Impaginazione |
 |---|---|
 | **Paddock** | tre colonne: il tuo pilota e il contratto · il prossimo weekend e la classifica piloti · la scuderia e la classifica costruttori |
-| **Pilota** | tre fasce: chi è (nome, scuderia, contratto, overall e potenziale) · di cosa è fatto (ruoli a stelle, attributi in colonne, anagrafica) · come sta (morale, condizione, forma, stagione) |
+| **Pilota** | tre fasce: chi è (nome, scuderia, contratto, overall e potenziale) · di cosa è fatto (ruoli a stelle, attributi in colonne, anagrafica) · come sta (morale, condizione, forma, stagione). Da qui si apre l'albero |
+| **Abilità** | i sei rami tutti insieme, con il dettaglio del nodo scelto in basso |
 | **Allenamento** | piano settimanale a sinistra con i pip di allocazione, a destra gli attributi che si muovono |
 | **Calendario** | due viste: griglia mensile a sette colonne, o l'anno intero in tabella · a destra la settimana corrente e il resto della stagione |
 | **Finanze** | entrate · uscite · il netto isolato in una colonna sua |
@@ -526,6 +528,52 @@ senza `offers` e verifica che la carriera riprenda — e controlla anche che la
 rete di sicurezza scatti su un salvataggio corrotto, così non resta codice
 morto.
 
+## L'albero delle abilità
+
+È il posto dove finisce quello che un pilota impara correndo, e che nessun
+allenamento settimanale può dare: non punti in più ma **regole diverse**. Un
+nodo alza un tetto, uno cambia il degrado delle gomme, uno rende un sorpasso
+più probabile. È la stessa scelta di progetto dello staff personale — *alza i
+tetti, non i punteggi* — applicata alla carriera.
+
+Sei rami da tre nodi: Velocità, Gomme, Sorpasso, Partenze, Bagnato, Testa.
+Un nodo si sblocca solo dopo quello sopra, e i costi salgono 1 → 2 → 3, quindi
+arrivare in cima a un ramo costa sei punti e significa non aver toccato gli
+altri. Trentasei punti per l'albero intero.
+
+I rami sono **lineari**, non ramificati come nei giochi di calcio da cui
+l'idea viene. Un albero ramificato starebbe bene su uno schermo grande; in
+390 px di altezza diventerebbe illeggibile, e la scelta vera resta comunque
+*quale ramo percorro per primo*. Per lo stesso motivo la schermata mostra
+tutti e sei i rami insieme invece che a schede: il colpo d'occhio sull'albero
+intero è metà del motivo per cui un albero esiste.
+
+### I punti li dà il mestiere, non il palmarès
+
+Uno ogni sei gare, uguale per tutti, più tre per ogni titolo. Al primo
+tentativo li avevo legati ai risultati — due per una vittoria, uno per un
+podio — e sembrava ovvio. In quarant'anni di simulazione produceva una
+**dinastia**: chi vince prende più punti, sblocca più nodi, vince di più. Il
+test `nessun mondo si congela su una sola scuderia` l'ha preso al primo colpo.
+
+Vincere paga già in macchina migliore e contratti migliori: non deve pagare
+anche qui. Al ritmo di quattro punti a stagione un albero da trentasei si
+completa in nove anni, cioè verso la fine di una carriera tipica.
+
+I piloti gestiti dal computer spendono i loro punti da soli, sul ramo in cui
+sono già forti. Non è la strategia migliore possibile ed è voluto: se l'IA
+giocasse l'albero meglio del giocatore, l'albero non sarebbe una scelta ma un
+compito. Ma **spendere deve spenderli** — ogni decisione del giocatore ha una
+sua versione IA, o la griglia resterebbe indietro rispetto a chi è al volante
+di una persona.
+
+Gli effetti entrano nel motore da due punti soli: `effectiveCap` per i tetti e
+la crescita, e `buildEntries` per tutto quello che conta in gara. Il modello
+di gara lavora sugli ingressi, non sui piloti, quindi non deve sapere che
+l'albero esiste.
+
+---
+
 ## Soldi e staff personale
 
 L'ingaggio non è un numero di vanità: è la risorsa che finanzia la tua crescita. È questo che trasforma la schermata dei contratti nella più importante del gioco.
@@ -727,6 +775,7 @@ engine/
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
   roles.ts          quanto un pilota vale in ciascun mestiere del weekend
+  skills.ts         l'albero delle abilità: nodi, punti, effetti
   days.ts           la settimana giorno per giorno: attività, giorno di bilancio
   training.ts       sessioni, tetti, scelta del minigioco, applicazione crescita
   curves.ts         sigmoidi, curve di età, rendimenti decrescenti
@@ -746,7 +795,7 @@ engine/
     tracks.ts       31 circuiti di fantasia con regione, fuso e ora di partenza
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              98 test: rng, curve e modelli, gara, gara live,
+tests/              113 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -794,7 +843,7 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 98 test
+npm test               # vitest, 113 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
@@ -841,6 +890,7 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 - [ ] I tre minigiochi in React, con il risultato scritto all'avvio della partita
 - [ ] Qualifica: le tre decisioni e il giro lanciato
 - [ ] Libere: la direzione di assetto
+- [x] Albero delle abilità, dal profilo pilota
 - [ ] Mercato dello staff personale (il motore c'è già, manca la schermata)
 - [ ] Slot di salvataggio multipli
 
