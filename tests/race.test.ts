@@ -61,10 +61,34 @@ describe('simulazione di gara', () => {
     expect(rate).toBeLessThan(0.25);
   });
 
-  it('la qualifica ordina per tempo crescente', () => {
-    const q = simulateQualifying(track, field(), createRng(9));
-    const times = q.map((x) => x.lapTime);
-    expect([...times].sort((a, b) => a - b)).toEqual(times);
-    expect(q[0]!.position).toBe(1);
+  it('la qualifica elimina a manche, e la griglia segue le manche', () => {
+    const field = Array.from({ length: 20 }, (_, i) => entry(`d${i}`, 90 - i * 0.8, 88 - i, i + 1));
+    const grid = simulateQualifying(track, field, createRng(4));
+    expect(grid).toHaveLength(20);
+    expect(grid.map((q) => q.position)).toEqual(field.map((_, i) => i + 1));
+
+    // Chi esce in Q1 parte dalla sedicesima fila in giù, anche se in Q1 ha
+    // girato più forte di chi poi è arrivato in Q3: conta passare il taglio.
+    const q1Out = grid.slice(15);
+    const q2Out = grid.slice(10, 15);
+    const q3 = grid.slice(0, 10);
+    expect(q1Out).toHaveLength(5);
+    expect(q2Out).toHaveLength(5);
+    // Dentro ogni manche l'ordine è quello dei tempi.
+    for (const block of [q3, q2Out, q1Out]) {
+      for (let i = 1; i < block.length; i++) {
+        expect(block[i]!.lapTime).toBeGreaterThanOrEqual(block[i - 1]!.lapTime);
+      }
+    }
+  });
+
+  it('la pista si gomma: in Q3 si gira più forte che in Q1', () => {
+    // Su venti piloti identici la differenza fra il primo e il sedicesimo
+    // non può che venire dall'evoluzione della pista.
+    const field = Array.from({ length: 20 }, (_, i) => entry(`d${i}`, 85, 85, i + 1));
+    const grid = simulateQualifying(track, field, createRng(11));
+    const mediaQ3 = grid.slice(0, 10).reduce((s, q) => s + q.lapTime, 0) / 10;
+    const mediaQ1 = grid.slice(15).reduce((s, q) => s + q.lapTime, 0) / 5;
+    expect(mediaQ3).toBeLessThan(mediaQ1);
   });
 });

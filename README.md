@@ -24,6 +24,7 @@ con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 - [Soldi e staff personale](#soldi-e-staff-personale)
 - [Il modello di gara](#il-modello-di-gara)
 - [La forma del circuito](#la-forma-del-circuito)
+- [Il regolamento](#il-regolamento)
 - [La qualifica, tre decisioni](#la-qualifica-tre-decisioni)
 - [Le regole che tengono in piedi il bilanciamento](#le-regole-che-tengono-in-piedi-il-bilanciamento)
 - [Struttura del progetto](#struttura-del-progetto)
@@ -54,7 +55,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 132 test
+npm test                      # 137 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -825,7 +826,68 @@ rettilineo.
 
 ---
 
+## Il regolamento
+
+Le regole che un giocatore dà per scontate perché le conosce dalla
+televisione, e che quindi si notano solo quando mancano. Stanno in
+[`engine/rules.ts`](src/engine/rules.ts), separate dalle formule di
+prestazione: sono vincoli, non modelli.
+
+### La distanza di gara, e perché Monaco è più corta
+
+Non si scrivono più i giri: si corre **la distanza più corta che superi i 305
+km**, con un tetto di 78 giri. Le lunghezze vengono dai tracciati reali, e i
+conti tornano da soli:
+
+| Tracciato | Lunghezza | Giri calcolati | Giri veri |
+|---|---|---|---|
+| Lario (Monza) | 5.77 km | 53 | 53 |
+| Nordkap (Spa) | 6.95 km | 44 | 44 |
+| Wyverne (Silverstone) | 5.86 km | 53 | 52 |
+| Vallmar (Monaco) | 3.32 km | **78** (tetto) | 78 |
+
+Il tetto non è un caso speciale per Monaco: è una regola sola, e su un
+tracciato da 3.3 km produce 78 giri e 260 km invece dei 305. L'eccezione più
+famosa del calendario esce da sé.
+
+Con le lunghezze vere anche il **tempo sul giro** smette di essere scritto a
+mano: `baseLap` deriva da lunghezza e forma, perché un giro si percorre alla
+velocità che la sua forma permette. Prima erano tre numeri indipendenti e
+potevano contraddirsi — un tracciato da sette chilometri percorso a 308 km/h
+di media. Ora le gare durano fra i 68 e gli 89 minuti.
+
+### Due mescole diverse
+
+Su asciutto vanno usate almeno due mescole, il che rende obbligatoria almeno
+una sosta. È **l'unica ragione per cui una strategia esiste**: senza, la gara
+migliore sarebbe sempre partire con la dura e non fermarsi mai.
+
+Chi finisce senza prende 25 secondi — abbastanza da rovinare la gara, non da
+cancellarla come farebbe la squalifica vera. E il pulsante dei box lo dice
+mentre corri: una penalità che non potevi vedere arrivare non è una regola, è
+una punizione.
+
+---
+
 ## La qualifica, tre decisioni
+
+### Q1, Q2, Q3
+
+Tre manche con le eliminazioni: Q1 taglia i cinque più lenti, Q2 altri cinque,
+Q3 decide la pole. Non è una formalità, **cambia la natura della decisione**:
+in Q1 basta sopravvivere e rischiare per due decimi che non servono a niente è
+stupido; in Q3 quei due decimi sono la pole. La stessa scelta ha un prezzo
+diverso a seconda di quanto hai da perdere.
+
+Due dettagli che fanno la differenza fra una simulazione e una lista di tempi:
+la **pista si gomma** manche dopo manche, quindi in Q3 si gira più forte che
+in Q1 anche con la stessa macchina; e le **gomme non si azzerano**, quindi chi
+passa il taglio col cuore in gola arriva in Q3 con la gomma segnata.
+
+L'IA lo sa: `pressureOf` dice quanto è avventato rischiare, e un pilota al
+sicuro in Q1 non esce all'ultimo momento mentre uno sul filo del taglio sì.
+
+### Le tre decisioni
 
 Un giro secco non si guida a comandi: si prepara. Quello che un pilota decide
 davvero è **quando uscire**, **su che gomma** e **come scaldarla**, e poi il
@@ -936,7 +998,8 @@ engine/
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
   layout.ts         la forma del giro: settori, pesi della monoposto, derivate
-  qualifying.ts     le tre decisioni del sabato e il loro prezzo
+  qualifying.ts     le tre decisioni del sabato, le manche, il loro prezzo
+  rules.ts          distanza di gara, punti, regola delle due mescole
   roles.ts          quanto un pilota vale in ciascun mestiere del weekend
   skills.ts         l'albero delle abilità: nodi, punti, effetti
   days.ts           la settimana giorno per giorno: attività, giorno di bilancio
@@ -958,7 +1021,7 @@ engine/
     tracks.ts       31 circuiti: forma del giro, larghezza, regione, fuso, orari
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              132 test: rng, curve e modelli, gara, gara live,
+tests/              137 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -1006,7 +1069,7 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 132 test
+npm test               # vitest, 137 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo

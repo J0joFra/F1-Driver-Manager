@@ -173,8 +173,11 @@ export interface Track {
   id: string;
   name: string;
   region: Region;
-  /** tempo sul giro di riferimento in secondi per una macchina da 100 */
+  /** tempo sul giro di riferimento — derivato da lunghezza e forma */
   baseLap: number;
+  /** lunghezza del giro in km, misurata sul tracciato reale */
+  lengthKm: number;
+  /** giri di gara — derivato: il più corto che superi i 305 km, max 78 */
   laps: number;
   /**
    * La forma del giro: quanta parte in rettilineo, curve lente, medie e
@@ -208,6 +211,8 @@ export interface Track {
 }
 
 export interface RaceResult {
+  /** ha finito senza usare due mescole: venticinque secondi di penalità */
+  penalised?: boolean;
   driverId: string;
   position: number;
   grid: number;

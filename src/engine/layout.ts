@@ -172,6 +172,25 @@ export function tyreWearFrom(mix: SectorMix, trackTemp: number): number {
   return clamp(load * (1 + (trackTemp - 32) * 0.008), 0.62, 1.5);
 }
 
+/**
+ * Velocità media sul giro, in km/h.
+ *
+ * Un giro è lungo quanto è lungo e si percorre alla velocità che la sua forma
+ * permette: i rettilinei e i curvoni alzano la media, i tornanti la
+ * abbassano. Deriva da qui il tempo sul giro, che prima era un terzo numero
+ * scritto a mano — e poteva contraddire gli altri due, come un tracciato da
+ * sette chilometri percorso a 308 km/h di media.
+ */
+export function averageSpeed(mix: SectorMix): number {
+  const total = mixTotal(mix) || 1;
+  return 150 + (mix.straight / total) * 150 + (mix.fast / total) * 120;
+}
+
+/** Il tempo sul giro di riferimento, in secondi. */
+export function baseLapFrom(lengthKm: number, mix: SectorMix): number {
+  return Math.round((lengthKm / averageSpeed(mix)) * 3600 * 10) / 10;
+}
+
 /** Descrizione in una parola, per l'interfaccia. */
 export function layoutName(mix: SectorMix): string {
   const total = mixTotal(mix) || 1;

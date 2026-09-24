@@ -1,4 +1,4 @@
-import type { EngineMode, QualifyingResult, RaceResult, Track } from './types.js';
+import type { Compound, EngineMode, QualifyingResult, RaceResult, Track } from './types.js';
 import { type Rng } from './rng.js';
 import { clamp } from './curves.js';
 import {
@@ -6,6 +6,7 @@ import {
   wearPerLap as tyreWearPerLap, type TyreState,
 } from './tyres.js';
 import { DRS_RANGE, overtakeChance as overtakeProbability } from './overtaking.js';
+import { breaksCompoundRule, COMPOUND_RULE_PENALTY, POINTS } from './rules.js';
 import { driverInfluence, driverSkillOn, NEUTRAL_MIX } from './layout.js';
 import { aiQualifyingPlan, qualifyingOutcome, type QualifyingPlan } from './qualifying.js';
 import { driverErrorChance, mechanicalFailureChance, safetyCarChancePerLap } from './incidents.js';
@@ -50,7 +51,7 @@ export interface RaceEntry {
   tyreWearMod?: number;
 }
 
-export const POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+export { POINTS } from './rules.js';
 export const MIN_GAP = 0.42;
 export const BASE_PIT_LOSS = 21.5;
 
@@ -153,6 +154,8 @@ export interface Car {
   time: number;
   lastLap: number;
   tyre: TyreState;
+  /** le mescole montate e già usate: servono alla regola delle due mescole */
+  compounds: Compound[];
   stops: number;
   plan: number[];
   dnf: boolean;
@@ -185,6 +188,7 @@ export function simulateRace(
     time: e.grid * 0.28,
     lastLap: track.baseLap,
     tyre: freshTyre(track.tyreWear > 1.2 ? 'M' : rng.chance(0.4) ? 'S' : 'M'),
+    compounds: [] as Compound[],
     stops: 0,
     plan: pitStrategy(track, rng),
     dnf: false,
@@ -230,6 +234,7 @@ export function simulateRace(
         const loss = pitLossFor(e, underSC);
         c.time += loss;
         c.stops += 1;
+        c.compounds.push(c.tyre.compound);
         c.tyre = freshTyre(c.tyre.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S');
       }
 
@@ -283,7 +288,8 @@ export function simulateRace(
       grid: c.e.grid,
       points,
       dnf: false,
-      gap: c.time - winnerTime,
+      gap: c.time - winnerTime + penalty(c.compounds, c.tyre.compound, wet),
+      penalised: breaksCompoundRule([...c.compounds, c.tyre.compound], wet),
       stops: c.stops,
       fastestLap: fastest === c,
     });
@@ -311,6 +317,19 @@ export function simulateRace(
  * gomme, quanto rischiare nell'ultimo settore); qui contano solo l'esito e
  * l'ordine di griglia.
  */
+/**
+ * La penalità delle due mescole.
+ *
+ * Su asciutto vanno usate almeno due mescole diverse, il che rende
+ * obbligatoria almeno una sosta. È l'unica ragione per cui una strategia
+ * esiste: senza, la gara migliore sarebbe sempre partire con la dura e non
+ * fermarsi mai. Qui costa venticinque secondi invece della squalifica —
+ * abbastanza da rovinare la gara, non da cancellarla.
+ */
+function penalty(used: readonly Compound[], current: Compound, wet: boolean): number {
+  return breaksCompoundRule([...used, current], wet) ? COMPOUND_RULE_PENALTY : 0;
+}
+
 export function simulateQualifying(
   track: Track,
   entries: readonly RaceEntry[],
