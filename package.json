@@ -19,7 +19,8 @@
     "shots": "node tools/screenshots.mjs",
     "check:offers": "node tools/check-offers.mjs",
     "check:migration": "node tools/check-migration.mjs",
-    "check:palette": "node tools/check-palette.mjs"
+    "check:palette": "node tools/check-palette.mjs",
+    "check:career": "tsx tools/check-career.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

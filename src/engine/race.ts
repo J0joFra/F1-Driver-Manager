@@ -89,7 +89,16 @@ export function lapTimeFor(e: RaceEntry, ctx: LapContext, rng: Rng): number {
   // Il rumore si estrae sempre, anche dietro la safety car: la sequenza
   // casuale non deve dipendere da un ramo, altrimenti lo stesso seed produce
   // mondi diversi a seconda di quando esce la safety car.
-  const noise = rng.normal() * (0.34 - e.consistency * 0.0016);
+  /*
+   * Il rumore sul giro: quanto un pilota è ripetibile.
+   *
+   * L'esperienza lo riduce quanto la costanza, ed è il motivo per cui un
+   * esordiente perde tempo anche quando è veloce: non sbaglia il giro buono,
+   * sbaglia tutti gli altri. Nei dati storici il salto fra la prima e la
+   * seconda stagione è il più grande di tutta la carriera, e viene da qui.
+   */
+  const steadiness = e.consistency * 0.0016 + (e.experience ?? 0) * 0.09;
+  const noise = rng.normal() * Math.max(0.08, 0.34 - steadiness);
   if (ctx.underSafetyCar) return track.baseLap * 1.55;
 
   let t = track.baseLap;
@@ -102,8 +111,9 @@ export function lapTimeFor(e: RaceEntry, ctx: LapContext, rng: Rng): number {
   t += MODE_PACE[ctx.mode];
   if (ctx.dirtyAir) t += 0.22;
   if (ctx.wet) t += 7.5 + (100 - e.wet) * 0.05;
-  // L'esperienza non rende più veloci: fa sbagliare meno, e sul giro si vede.
-  t -= (e.experience ?? 0) * 0.08;
+  // Conoscere il tracciato vale qualche centesimo; il grosso lo fa il
+  // rumore qui sopra, cioè non buttare via i giri normali.
+  t -= (e.experience ?? 0) * 0.14;
   t += noise;
   return t;
 }
@@ -127,6 +137,7 @@ export function retirementChancePerLap(
       consistency: e.consistency,
       fatigue,
       tyreWear: tyre.wear,
+      experience: e.experience ?? 0,
       wetness: wet ? 1 : 0,
       wetSkill: e.wet,
       underPressure,

@@ -34,7 +34,7 @@ import { CATEGORY_EFFECTS, TRAINING_CATEGORIES } from './training.js';
  * rende gli ultimi punti proibitivi — e i sei punti di differenza sono ciò che
  * lo staff vale davvero.
  */
-const WEEK_SCALE = 16;
+const WEEK_SCALE = 2.5;
 
 export interface GrowthContext {
   /** 0–1: quanto della settimana è andato in questa categoria */
@@ -90,12 +90,13 @@ export function attributeGrowth(
   const cap = effectiveCap(driver, attr);
   if (current >= cap) return 0;
 
-  const gap = clamp((cap - current) / Math.max(1, cap), 0, 1);
+  // I punti che mancano, non la frazione del tetto: vedi HEADROOM_SCALE.
+  const headroom = Math.max(0, cap - current);
 
   return (
     WEEK_SCALE *
     profile.baseGain *
-    marginalDifficulty(gap) *
+    marginalDifficulty(headroom) *
     ageGrowthCurve(driver.age, profile.peakAge) *
     ctx.staff *
     ctx.load *
