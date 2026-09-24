@@ -1,6 +1,6 @@
 import { PALETTE } from '../palette.js';
 import { useGame } from '../../state/useGame.js';
-import { player } from '../../engine/selectors.js';
+import { focusedDriver } from '../../engine/selectors.js';
 import { getTrack } from '../../engine/data/tracks.js';
 import { driverStandings } from '../../engine/season.js';
 import { Btn, Stat } from '../components/kit.js';
@@ -21,7 +21,8 @@ function Sheet({ children, onClose, cta = 'Continua' }: { children: React.ReactN
 export function WeekendOverlay() {
   const world = useGame((s) => s.world)!;
   const dismiss = useGame((s) => s.dismissSummary);
-  const me = player(world)!;
+  const selected = useGame((s) => s.selected);
+  const me = focusedDriver(world, selected)!;
   const weekend = world.results[world.results.length - 1];
   if (!weekend) return null;
 
@@ -98,7 +99,8 @@ export function SeasonOverlay() {
   const world = useGame((s) => s.world)!;
   const summary = useGame((s) => s.lastSeason)!;
   const dismiss = useGame((s) => s.dismissSummary);
-  const me = player(world)!;
+  const selected = useGame((s) => s.selected);
+  const me = focusedDriver(world, selected)!;
   const last = me.history[me.history.length - 1];
   const champion = world.drivers[summary.championId];
   const championTeam = world.teams[summary.championTeamId];

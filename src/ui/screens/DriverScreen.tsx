@@ -1,7 +1,7 @@
 import { Sparkles, Star } from 'lucide-react';
 import { PALETTE } from '../palette.js';
 import { useGame } from '../../state/useGame.js';
-import { championshipPosition, player, seasonResults, teamOf } from '../../engine/selectors.js';
+import { championshipPosition, focusedDriver, seasonResults, teamOf } from '../../engine/selectors.js';
 import { overall } from '../../engine/driver.js';
 import { ratedRoles } from '../../engine/roles.js';
 import { marketValue } from '../../engine/market.js';
@@ -31,7 +31,8 @@ const COLUMNS: { title: string; keys: AttributeKey[] }[] = [
 export function DriverScreen() {
   const world = useGame((s) => s.world)!;
   const goTo = useGame((s) => s.goTo);
-  const me = player(world)!;
+  const selected = useGame((s) => s.selected);
+  const me = focusedDriver(world, selected)!;
   const team = teamOf(world, me);
   const colour = team?.colour ?? PALETTE.dim;
   const roles = ratedRoles(me);
@@ -49,7 +50,7 @@ export function DriverScreen() {
   return (
     <div className="h-full flex flex-col gap-2 min-h-0">
       <Header me={me} teamName={team?.name ?? 'Senza contratto'} colour={colour}
-        onSkills={() => goTo('abilita')} />
+        onSkills={() => goTo('abilita')} onBack={() => goTo('piloti')} />
 
       <div className="flex-1 grid grid-cols-[168px_1fr_1fr_172px] gap-2 min-h-0">
         <Panel title="Ruoli" bodyClass="p-2 scroll-y">
@@ -184,8 +185,8 @@ function Growth({ me, year }: { me: Driver; year: number }) {
 }
 
 /** La fascia d'intestazione: tutto quello che identifica il pilota, su una riga. */
-function Header({ me, teamName, colour, onSkills }: {
-  me: Driver; teamName: string; colour: string; onSkills: () => void;
+function Header({ me, teamName, colour, onSkills, onBack }: {
+  me: Driver; teamName: string; colour: string; onSkills: () => void; onBack: () => void;
 }) {
   const now = Math.round(overall(me.attrs));
   const peak = Math.round(overall(me.caps));
@@ -194,7 +195,9 @@ function Header({ me, teamName, colour, onSkills }: {
     <div className="shrink-0 panel flex items-center gap-3 px-3 py-2"
       style={{ borderLeft: `3px solid ${colour}` }}
     >
-      <DriverBadge name={me.name} colour={colour} size={40} />
+      <button type="button" onClick={onBack} title="Torna ai tuoi piloti" data-testid="profile-back">
+        <DriverBadge name={me.name} colour={colour} size={40} />
+      </button>
       <div className="min-w-0">
         <div className="font-display text-xl font-bold leading-none truncate">{me.name}</div>
         <div className="font-mono text-2xs text-muted truncate">

@@ -81,11 +81,13 @@ export function prepareWeekend(world: World, trackId: string): PreparedWeekend {
   const entries = buildEntries(world, track);
 
   const wet = rng.chance(track.rain);
-  // Le tre decisioni del giocatore entrano da qui; per tutti gli altri le
-  // sceglie l'IA dentro `simulateQualifying`.
-  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
-  const plans = playerId && world.qualifyingPlan
-    ? new Map([[playerId, world.qualifyingPlan]])
+  // Le tre decisioni del giocatore entrano da qui, per entrambe le sue
+  // monoposto; per tutti gli altri le sceglie l'IA dentro `simulateQualifying`.
+  const mine = world.seat.mode === 'scuderia'
+    ? world.teams[world.seat.teamId]?.driverIds ?? []
+    : [];
+  const plans = world.qualifyingPlan && mine.length > 0
+    ? new Map(mine.map((id) => [id, world.qualifyingPlan!]))
     : undefined;
   const qualifying = simulateQualifying(track, entries, rng, wet && rng.chance(0.5), plans);
   const gridById = new Map(qualifying.map((q) => [q.driverId, q.position]));
@@ -102,7 +104,10 @@ export function commitWeekend(
   safetyCars: number,
 ): WeekendResult {
   const { entries, qualifying, trackId } = prepared;
-  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
+  // I piloti del giocatore: i loro punti abilità li spende lui.
+  const mine = new Set(world.seat.mode === 'scuderia'
+    ? world.teams[world.seat.teamId]?.driverIds ?? []
+    : []);
   const gridById = new Map(qualifying.map((q) => [q.driverId, q.position]));
 
   // Posizione attesa in base alla sola monoposto: serve a giudicare il pilota.
@@ -123,11 +128,11 @@ export function commitWeekend(
     // fiato di un weekend intero dietro.
     d.fatigue = clamp(d.fatigue + RACE_FATIGUE, 0, 100);
 
-    // Correre insegna, vincere insegna di più. Il giocatore i punti li
-    // spende a mano; gli altri se li giocano da soli, o la griglia
-    // resterebbe indietro rispetto a chi è al volante di una persona.
+    // Correre insegna, vincere insegna di più. I piloti del giocatore li
+    // spende lui; gli altri se li giocano da soli, o la griglia resterebbe
+    // indietro rispetto a chi è gestito da una persona.
     d.skillPoints += pointsForRace(d.career.starts);
-    if (d.id !== playerId) spendPointsAsAi(d);
+    if (!mine.has(d.id)) spendPointsAsAi(d);
     if (!r.dnf) {
       if (r.position === 1) d.career.wins += 1;
       if (r.position <= 3) d.career.podiums += 1;

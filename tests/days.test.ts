@@ -12,6 +12,7 @@ import { TRAINING_CATEGORIES } from '../src/engine/training.js';
 
 const KINDS: WeekKind[] = ['testing', 'race', 'free', 'summerBreak', 'postseason'];
 const PLAN: TrainingPlan = { simulator: 1, fitness: 1, engineering: 0, media: 0 };
+const PLANS: Record<string, TrainingPlan> = {};
 
 /** Una settimana finta, per provare le viste senza costruire un mondo. */
 const week = (kind: WeekKind, training: number, trackId: string | null = null): SeasonWeek =>
@@ -22,8 +23,8 @@ describe('la settimana giorno per giorno', () => {
     const byWeek = createWorld({ seed: 99 });
     const byDay = createWorld({ seed: 99 });
 
-    while (byWeek.week < SEASON_WEEKS) advanceWeek(byWeek, { plan: PLAN });
-    while (byDay.week < SEASON_WEEKS) advanceDay(byDay, { plan: PLAN });
+    while (byWeek.week < SEASON_WEEKS) advanceWeek(byWeek, { plans: PLANS });
+    while (byDay.week < SEASON_WEEKS) advanceDay(byDay, { plans: PLANS });
 
     // Il campionato è il riassunto più severo: dipende da ogni gara e da ogni
     // allenamento di tutti i piloti.
@@ -39,7 +40,7 @@ describe('la settimana giorno per giorno', () => {
     const w = createWorld({ seed: 12 });
     let days = 0;
     while (w.week < SEASON_WEEKS) {
-      advanceDay(w, { plan: PLAN });
+      advanceDay(w, { plans: PLANS });
       days++;
     }
     expect(days).toBe(SEASON_WEEKS * DAYS_IN_WEEK);
@@ -49,7 +50,7 @@ describe('la settimana giorno per giorno', () => {
     const w = createWorld({ seed: 7 });
     let commits = 0;
     for (let i = 0; i < DAYS_IN_WEEK * 4; i++) {
-      if (advanceDay(w, { plan: PLAN }).trainingApplied) commits++;
+      if (advanceDay(w, { plans: PLANS }).trainingApplied) commits++;
     }
     expect(commits).toBe(4);
   });
@@ -59,7 +60,7 @@ describe('la settimana giorno per giorno', () => {
     while (w.week < SEASON_WEEKS) {
       const week = w.schedule[w.week]!;
       const expectRace = week.trackId !== null && w.dayOfWeek === RACE_DAY;
-      const report = advanceDay(w, { plan: PLAN });
+      const report = advanceDay(w, { plans: PLANS });
       expect(!!report.raceRun, `sett. ${week.index} giorno ${report.day}`).toBe(expectRace);
     }
   });

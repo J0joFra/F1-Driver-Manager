@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Flag, Timer } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
-import { nextRace, player, teamOf } from '../../engine/selectors.js';
+import { nextRace, focusedDriver, teamOf } from '../../engine/selectors.js';
 import { getTrack } from '../../engine/data/tracks.js';
 import { layoutName } from '../../engine/layout.js';
 import {
@@ -25,7 +25,8 @@ import { Panel } from '../components/kit.js';
 export function Qualifying({ onDone }: { onDone: () => void }) {
   const world = useGame((s) => s.world)!;
   const setPlan = useGame((s) => s.setQualifyingPlan);
-  const me = player(world)!;
+  const selected = useGame((s) => s.selected);
+  const me = focusedDriver(world, selected)!;
   const team = teamOf(world, me);
   const race = nextRace(world);
   const track = race ? getTrack(race.trackId) : null;

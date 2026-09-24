@@ -1,6 +1,6 @@
-import { Dumbbell, RotateCcw } from 'lucide-react';
-import { useGame } from '../../state/useGame.js';
-import { currentWeek, player, weekLabel } from '../../engine/selectors.js';
+import { Dumbbell, RotateCcw, Sparkles, User, UserPlus } from 'lucide-react';
+import { useGame, defaultPlan } from '../../state/useGame.js';
+import { currentWeek, myDrivers, myTeam, weekLabel } from '../../engine/selectors.js';
 import { WEEK_LABEL } from '../../engine/calendar.js';
 import type { AttributeKey, TrainingCategory } from '../../engine/types.js';
 import {
@@ -8,6 +8,7 @@ import {
   pickMinigame, planTotal, trainingLimits,
 } from '../../engine/training.js';
 import { previewTraining } from '../../engine/progression.js';
+import { overall } from '../../engine/driver.js';
 import { ATTRIBUTE_COLOURS, Bar, Btn, Note, Panel, Pips } from '../components/kit.js';
 import { ATTR_LABELS, CATEGORY_LABELS, MINIGAME_LABELS } from '../format.js';
 
@@ -19,17 +20,46 @@ function primaryAttribute(category: TrainingCategory): AttributeKey | null {
 }
 
 /**
- * Il piano settimanale.
+ * I tuoi piloti, e cosa fanno questa settimana.
  *
- * A sinistra si distribuiscono le sessioni, a destra si vede su cosa vanno a
- * finire. Il tetto per categoria è il vincolo che tiene viva la scelta: con
- * dieci sessioni e un massimo di quattro devi toccarne almeno tre.
+ * In alto si sceglie il pilota, sotto si distribuiscono le sue sessioni e si
+ * vede dove vanno a finire. Il programma è **per pilota** e non per squadra:
+ * mandare uno al simulatore e l'altro in palestra è la decisione, e un piano
+ * unico la cancellerebbe.
+ *
+ * Far crescere i piloti che hai è la leva veloce della scuderia — la
+ * monoposto è quella lenta — ed è il motivo per cui un giovane con potenziale
+ * vale più di un veterano già fatto.
  */
-export function Training({ onAdvance }: { onAdvance: () => void }) {
+export function Drivers({ onAdvance }: { onAdvance: () => void }) {
   const world = useGame((s) => s.world)!;
-  const plan = useGame((s) => s.plan);
-  const setPlan = useGame((s) => s.setPlan);
-  const me = player(world)!;
+  const team = myTeam(world)!;
+  const roster = myDrivers(world);
+  const goTo = useGame((s) => s.goTo);
+  const select = useGame((s) => s.select);
+  const selected = useGame((s) => s.selected);
+  const plans = useGame((s) => s.plans);
+  const setPlanFor = useGame((s) => s.setPlan);
+
+  const me = roster.find((d) => d.id === selected) ?? roster[0];
+
+  if (!me) {
+    return (
+      <Panel title="I tuoi piloti">
+        <div className="max-w-sm">
+          <Note tone="warn">
+            Non hai piloti sotto contratto. Senza, la scuderia non prende il via e non segna punti.
+          </Note>
+          <Btn variant="green" className="mt-2" onClick={() => goTo('mercato')} testId="goto-market">
+            <UserPlus className="w-3.5 h-3.5" /> Vai al mercato
+          </Btn>
+        </div>
+      </Panel>
+    );
+  }
+
+  const plan = plans[me.id] ?? defaultPlan();
+  const setPlan = (next: typeof plan) => setPlanFor(me.id, next);
 
   const week = currentWeek(world);
   const kind = week?.kind ?? 'free';
@@ -51,7 +81,49 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
   const gainOf = (key: AttributeKey) => preview.gains[key] ?? 0;
 
   return (
-    <div className="h-full grid grid-cols-[264px_1fr] gap-2 min-h-0">
+    <div className="h-full flex flex-col gap-2 min-h-0">
+      {/* Chi stai programmando. Con due monoposto la scheda va scelta, non
+          indovinata dal contesto. */}
+      <div className="shrink-0 flex items-stretch gap-2">
+        {roster.map((d, i) => (
+          <button
+            key={d.id}
+            type="button"
+            onClick={() => select(d.id)}
+            data-testid={`driver-tab-${i}`}
+            className={`flex-1 panel px-3 py-1.5 flex items-center gap-2.5 text-left transition
+              ${d.id === me.id ? 'border-primary' : 'hover:border-dim'}`}
+            style={d.id === me.id ? { borderLeft: `3px solid ${team.colour}` } : undefined}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="font-sans text-xs font-bold truncate">{d.name}</div>
+              <div className="font-mono text-[9px] text-dim truncate">
+                {d.age} anni · contratto {d.contractYears > 0 ? `${d.contractYears} anni` : 'in scadenza'}
+              </div>
+            </div>
+            <div className="text-center shrink-0">
+              <div className="font-display text-base font-bold leading-none tnum">
+                {Math.round(overall(d.attrs))}
+              </div>
+              <div className="field-label">ovr</div>
+            </div>
+            {d.skillPoints > 0 && (
+              <span className="shrink-0 inline-flex items-center gap-0.5 rounded border border-primary/60
+                px-1 py-px font-mono text-[8.5px] text-primary">
+                <Sparkles className="w-2.5 h-2.5" />{d.skillPoints}
+              </span>
+            )}
+          </button>
+        ))}
+        <Btn onClick={() => { select(me.id); goTo('profilo'); }} className="shrink-0" testId="open-profile">
+          <User className="w-3 h-3" /> Scheda
+        </Btn>
+        <Btn onClick={() => { select(me.id); goTo('abilita'); }} className="shrink-0" testId="open-skills">
+          <Sparkles className="w-3 h-3" /> Abilità
+        </Btn>
+      </div>
+
+      <div className="flex-1 grid grid-cols-[264px_1fr] gap-2 min-h-0">
       <Panel
         title="Piano settimanale"
         tag={
@@ -186,6 +258,7 @@ export function Training({ onAdvance }: { onAdvance: () => void }) {
             </Note>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createWorld, endSeason, advanceWeek, takeOffer } from '../src/engine/world.js';
-import { startCareer } from '../src/engine/career.js';
+import { createWorld, endSeason, advanceWeek } from '../src/engine/world.js';
+import {
+  askingSalary, playerTeam, signDriver, signingRefusal, startTeam, START_CASH,
+} from '../src/engine/team.js';
+import { advanceProjects, cancelProject, PROJECT_SIZES, startProject } from '../src/engine/projects.js';
+import { marketValue } from '../src/engine/market.js';
+import { carPace } from '../src/engine/regulations.js';
+import { createRng } from '../src/engine/rng.js';
 import { SEASON_WEEKS, driverStandings } from '../src/engine/season.js';
 import { overall, potentialOverall } from '../src/engine/driver.js';
 import type { World } from '../src/engine/types.js';
@@ -280,101 +286,161 @@ describe('proprietà del mondo su più semi', () => {
 });
 
 /**
- * Le offerte di contratto: il giocatore non viene assegnato d'ufficio a una
- * scuderia come gli altri piloti, sceglie lui. Finché non risponde il suo
- * sedile resta vuoto, e questo non deve lasciare buchi nella griglia.
+ * La scuderia del giocatore. I sedili non si riempiono da soli: è lui a
+ * ingaggiare, e questo non deve lasciare buchi nel resto della griglia.
  */
-describe('offerte di contratto al giocatore', () => {
-  function careerWorld(seed: number) {
-    const w = startCareer({ seed, name: 'L. Marchetti', nationality: 'ITA' });
-    return w;
+describe('la scuderia del giocatore', () => {
+  function founded(seed: number) {
+    return startTeam({ seed, name: 'Prova', short: 'PRV', colour: '#C8102E', budget: 'indipendente' });
   }
 
-  function seasonsUntilOffers(w: World, max = 6): number {
-    for (let i = 0; i < max; i++) {
-      runSeasons(w, 1);
-      if (w.offers.length > 0) return i + 1;
-    }
-    return -1;
-  }
-
-  it('arrivano quando il contratto scade, e non prima', () => {
-    const w = careerWorld(11);
-    expect(w.offers).toHaveLength(0);
-    const after = seasonsUntilOffers(w);
-    expect(after).toBeGreaterThan(0);
-    expect(w.offers.length).toBeGreaterThan(0);
-    expect(w.offers.length).toBeLessThanOrEqual(3);
+  it('entra in griglia come nona, ultima e senza piloti', () => {
+    const w = founded(31);
+    const team = playerTeam(w)!;
+    expect(Object.keys(w.teams)).toHaveLength(9);
+    expect(team.driverIds).toHaveLength(0);
+    expect(team.cash).toBe(START_CASH.indipendente);
+    // Più lenta di tutte: è il punto di partenza di tutto il resto.
+    const others = Object.values(w.teams).filter((t) => t.id !== team.id);
+    for (const t of others) expect(carPace(t.car)).toBeGreaterThan(carPace(team.car));
   });
 
-  it('il sedile resta vuoto finché non si risponde', () => {
-    const w = careerWorld(12);
-    seasonsUntilOffers(w);
-    const me = w.drivers['player']!;
-    expect(me.teamId).toBeNull();
-    // Una scuderia fra quelle che offrono tiene il posto libero.
-    const withSpace = w.offers.filter((o) => w.teams[o.teamId]!.driverIds.length < 2);
-    expect(withSpace.length).toBeGreaterThan(0);
-  });
-
-  it('accettare riempie il sedile e chiude il mercato', () => {
-    const w = careerWorld(13);
-    seasonsUntilOffers(w);
-    const offer = w.offers[0]!;
-    expect(takeOffer(w, offer.teamId)).toBe(true);
-
-    const me = w.drivers['player']!;
-    expect(me.teamId).toBe(offer.teamId);
-    expect(me.contractYears).toBe(offer.years);
-    expect(me.salary).toBe(offer.salary);
-    expect(w.offers).toHaveLength(0);
-    // Nessun buco in griglia: i posti tenuti liberi si riempiono subito.
-    for (const t of Object.values(w.teams)) expect(t.driverIds).toHaveLength(2);
-  });
-
-  it('offre sempre almeno un sedile: la carriera non finisce per sfortuna', () => {
-    for (const seed of [21, 22, 23, 24]) {
-      const w = careerWorld(seed);
-      if (seasonsUntilOffers(w) < 0) continue;
-      expect(w.offers.length, `seed ${seed}`).toBeGreaterThan(0);
+  it('i suoi sedili restano vuoti, quelli delle altre no', () => {
+    const w = founded(32);
+    runSeasons(w, 2);
+    const team = playerTeam(w)!;
+    expect(team.driverIds).toHaveLength(0);
+    for (const t of Object.values(w.teams)) {
+      if (t.id === team.id) continue;
+      expect(t.driverIds, t.name).toHaveLength(2);
     }
   });
 
-  it('accettare un id inesistente non cambia nulla', () => {
-    const w = careerWorld(14);
-    seasonsUntilOffers(w);
-    const before = w.offers.length;
-    expect(takeOffer(w, 'scuderia-che-non-esiste')).toBe(false);
-    expect(w.offers).toHaveLength(before);
+  it('un pilota firma se lo paghi quanto chiede, e non prima', () => {
+    const w = founded(33);
+    const team = playerTeam(w)!;
+    const free = Object.values(w.drivers)
+      .filter((d) => !d.retired && !d.teamId)
+      .sort((a, b) => marketValue(b) - marketValue(a));
+    const target = free.find((d) => signingRefusal(w, d, team, {
+      years: 2, salary: askingSalary(w, d, team), role: 'prima',
+    }) === null)!;
+    expect(target).toBeDefined();
+
+    const ask = askingSalary(w, target, team);
+    // Un euro sotto la richiesta è un no, non una trattativa.
+    expect(signDriver(w, target.id, { years: 2, salary: ask - 1, role: 'seconda' })).not.toBeNull();
+    expect(target.teamId).toBeNull();
+
+    expect(signDriver(w, target.id, { years: 2, salary: ask, role: 'seconda' })).toBeNull();
+    expect(target.teamId).toBe(team.id);
+    expect(team.driverIds).toContain(target.id);
+  });
+
+  it('i più forti non firmano per una squadra nuova, a nessuna cifra', () => {
+    const w = founded(34);
+    const team = playerTeam(w)!;
+    // Il migliore della griglia, messo sul mercato per l'occasione: è il caso
+    // che la regola deve coprire, e a mondo appena creato non capita da solo.
+    const best = Object.values(w.drivers)
+      .filter((d) => !d.retired)
+      .sort((a, b) => marketValue(b) - marketValue(a))[0]!;
+    const old = w.teams[best.teamId!]!;
+    old.driverIds = old.driverIds.filter((id) => id !== best.id);
+    best.teamId = null;
+    const refusal = signingRefusal(w, best, team, {
+      years: 2, salary: 30_000_000, role: 'prima',
+    });
+    expect(refusal).toBe('Non guiderebbe per voi a nessuna cifra');
+  });
+});
+
+/**
+ * Lo sviluppo a progetti: è il cuore del gestionale, e le tre cose che lo
+ * rendono una decisione sono il reparto occupato, le settimane e la cassa.
+ */
+describe('i progetti di reparto', () => {
+  function founded(seed: number) {
+    return startTeam({ seed, name: 'Prova', short: 'PRV', colour: '#C8102E', budget: 'costruttore' });
+  }
+
+  it('un reparto lavora a un progetto solo', () => {
+    const w = founded(41);
+    const team = playerTeam(w)!;
+    expect(startProject(team, 'aero', 'medio', w.year, 0)).toBe(true);
+    expect(startProject(team, 'aero', 'piccolo', w.year, 0)).toBe(false);
+    expect(startProject(team, 'engine', 'piccolo', w.year, 0)).toBe(true);
+    expect(team.projects).toHaveLength(2);
+  });
+
+  it('si paga a settimana, e alla consegna la macchina cambia', () => {
+    const w = founded(42);
+    const team = playerTeam(w)!;
+    const before = team.car.aero;
+    const cash = team.cash;
+    startProject(team, 'aero', 'piccolo', w.year, 0);
+
+    const spec = PROJECT_SIZES.piccolo;
+    for (let i = 0; i < spec.weeks; i++) {
+      advanceProjects(w, [], createRng(i));
+    }
+    expect(team.projects).toHaveLength(0);
+    expect(team.car.aero).not.toBe(before);
+    expect(team.cash).toBeCloseTo(cash - spec.cost, 0);
+  });
+
+  it('senza fondi il lavoro si ferma, non si perde', () => {
+    const w = founded(43);
+    const team = playerTeam(w)!;
+    startProject(team, 'chassis', 'grande', w.year, 0);
+    const left = team.projects[0]!.weeksLeft;
+    team.cash = 0;
+
+    advanceProjects(w, [], createRng(1));
+    // Il progetto c'è ancora ed è fermo dov'era: la cassa è un freno, non
+    // una penale.
+    expect(team.projects).toHaveLength(1);
+    expect(team.projects[0]!.weeksLeft).toBe(left);
+    expect(team.cash).toBe(0);
+  });
+
+  it('annullare non restituisce quello che è già stato speso', () => {
+    const w = founded(44);
+    const team = playerTeam(w)!;
+    startProject(team, 'engine', 'medio', w.year, 0);
+    advanceProjects(w, [], createRng(2));
+    const cash = team.cash;
+    expect(cancelProject(team, team.projects[0]!.id)).toBe(true);
+    expect(team.projects).toHaveLength(0);
+    expect(team.cash).toBe(cash);
   });
 });
 
 describe('la crescita è raccontabile', () => {
   it('ogni stagione archiviata porta con sé l’overall di allora', () => {
-    const world = startCareer({ seed: 55, name: 'Prova', nationality: 'ITA' });
-    const id = world.seat.mode === 'pilota' ? world.seat.driverId : '';
-    for (let s = 0; s < 3; s++) {
-      while (world.week < SEASON_WEEKS) {
-        advanceWeek(world, { plan: { simulator: 2, fitness: 1, engineering: 1, media: 0 } });
-      }
-      endSeason(world);
-      const best = world.offers[0];
-      if (best) takeOffer(world, best.teamId);
-    }
-    const history = world.drivers[id]!.history;
-    expect(history.length).toBeGreaterThanOrEqual(3);
-    for (const season of history) expect(season.overall).toBeGreaterThan(0);
-    // Il senso della registrazione: la curva deve salire, altrimenti non c'è
-    // niente da mostrare nel profilo.
-    expect(history.at(-1)!.overall).toBeGreaterThan(history[0]!.overall);
+    const world = createWorld({ seed: 55 });
+    runSeasons(world, 3);
+
+    const archived = Object.values(world.drivers).flatMap((d) => d.history);
+    expect(archived.length).toBeGreaterThan(20);
+    for (const season of archived) expect(season.overall).toBeGreaterThan(0);
+
+    // Il senso della registrazione: per i giovani la curva deve salire,
+    // altrimenti nel profilo non c'è niente da mostrare.
+    const grown = Object.values(world.drivers).filter(
+      (d) => d.history.length >= 3 && d.history.at(-1)!.overall > d.history[0]!.overall,
+    );
+    expect(grown.length).toBeGreaterThan(3);
   });
 
   it('il confronto di stagione riparte dopo l’invecchiamento, non prima', () => {
-    const world = startCareer({ seed: 56, name: 'Prova', nationality: 'ITA' });
-    const id = world.seat.mode === 'pilota' ? world.seat.driverId : '';
-    while (world.week < SEASON_WEEKS) {
-      advanceWeek(world, { plan: { simulator: 2, fitness: 1, engineering: 1, media: 0 } });
-    }
+    const world = createWorld({ seed: 56 });
+    // Il più giovane in griglia: è quello che cresce abbastanza da rendere
+    // visibile la differenza fra prima e dopo.
+    const id = Object.values(world.drivers)
+      .filter((d) => d.teamId)
+      .sort((a, b) => a.age - b.age)[0]!.id;
+    while (world.week < SEASON_WEEKS) advanceWeek(world);
     const me = world.drivers[id]!;
     // Durante la stagione il riferimento resta quello di marzo: è quello che
     // rende visibile il guadagno dell'anno.

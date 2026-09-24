@@ -26,7 +26,14 @@ export function GridScreen() {
   if (!session) return null;
 
   const { prepared, race } = session;
-  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
+  // Le tue due monoposto, e quella che stai guardando. Gestendo una scuderia
+  // non c'è «la tua macchina»: ce ne sono due, e la strategia si decide per
+  // ciascuna.
+  const myIds = world.seat.mode === 'scuderia'
+    ? world.teams[world.seat.teamId]?.driverIds ?? []
+    : [];
+  const focus = useGame((s) => s.selected);
+  const playerId = myIds.includes(focus ?? '') ? focus : myIds[0] ?? null;
   const me = playerId ? carOf(race, playerId) : undefined;
   const myGrid = prepared.qualifying.find((q) => q.driverId === playerId)?.position ?? 0;
   const pole = prepared.qualifying[0];

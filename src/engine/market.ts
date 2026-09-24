@@ -1,4 +1,4 @@
-import type { ContractOffer, Driver, Team, World } from './types.js';
+import type { Driver, Team, World } from './types.js';
 import { clamp, type Rng } from './rng.js';
 import { createNewgen, overall, potentialOverall } from './driver.js';
 import { agentBonus, staffAnnualCost } from './staff.js';
@@ -68,7 +68,7 @@ export function marketScale(world: World): MarketScale {
 }
 
 /** Frazione della lista che sta sotto `x`: 0 ultimo, 1 primo. */
-function rankIn(sorted: number[], x: number): number {
+export function rankIn(sorted: number[], x: number): number {
   if (sorted.length === 0) return 0.5;
   let below = 0;
   for (const v of sorted) if (v < x) below += 1;
@@ -171,32 +171,28 @@ export function runTransferMarket(world: World, rng: Rng): void {
     }
   }
 
-  // Il giocatore non viene assegnato d'ufficio: se è senza sedile riceve
-  // offerte e sceglie lui. Il suo posto resta vuoto finché non risponde.
-  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
-  const playerFree = playerId ? !world.drivers[playerId]?.teamId && !world.drivers[playerId]?.retired : false;
+  // La scuderia del giocatore non viene riempita d'ufficio: i sedili vuoti
+  // restano vuoti, ed è lui a doverli riempire prima che cominci la stagione.
+  // Un anno con una monoposto sola è una conseguenza possibile, e deve poter
+  // succedere: è il costo di essersi distratti sul mercato.
+  const mine = world.seat.mode === 'scuderia' ? world.seat.teamId : null;
 
   const available = Object.values(world.drivers)
-    .filter((d) => !d.retired && !d.teamId && d.id !== (playerFree ? playerId : null))
+    .filter((d) => !d.retired && !d.teamId)
     .sort((a, b) => marketValue(b) - marketValue(a));
 
   // Il prestigio decide chi sceglie per primo, ma non da solo: un progetto
   // ambizioso, i soldi o la promessa di essere prima guida spostano le scelte.
   const teams = Object.values(world.teams)
+    .filter((t) => t.id !== mine)
     .map((t) => ({ t, rank: t.prestige + rng.normal() * 14 }))
     .sort((a, b) => b.rank - a.rank)
     .map((x) => x.t);
-  // Le scuderie interessate al giocatore tengono un posto libero: senza
-  // questo, quando arriva a rispondere non ci sarebbe più nessun sedile.
-  const reserved = playerFree && playerId
-    ? new Set(candidateTeams(world, world.drivers[playerId]!).map((c) => c.teamId))
-    : new Set<string>();
 
   const scale = marketScale(world);
 
   for (const team of teams) {
-    const cap = SEATS_PER_TEAM - (reserved.has(team.id) ? 1 : 0);
-    while (team.driverIds.length < cap) {
+    while (team.driverIds.length < SEATS_PER_TEAM) {
       // Una scuderia di coda non convince un top driver, e viceversa: la
       // stessa misura che decide le offerte al giocatore decide la griglia.
       //
@@ -224,77 +220,22 @@ export function runTransferMarket(world: World, rng: Rng): void {
     }
   }
 
-  world.offers = playerFree && playerId ? candidateTeams(world, world.drivers[playerId]!, rng) : [];
-
   world.academy = world.academy.filter((id) => {
     const d = world.drivers[id];
     return !!d && !d.retired && !d.teamId;
   });
 }
 
-/**
- * Le scuderie disposte a ingaggiare il giocatore, dalla più interessata alla
- * meno. Una di coda offre sempre: restare senza sedile a vent'anni sarebbe
- * una fine di carriera decisa da un tiro di dado, non da una scelta.
- */
-export function candidateTeams(world: World, driver: Driver, rng?: Rng): ContractOffer[] {
-  const scale = marketScale(world);
-  // Solo le squadre che un posto ce l'hanno davvero.
-  //
-  // Senza questo filtro il giocatore riceveva offerte da scuderie già al
-  // completo: `acceptOffer` le rifiuta, la firma non avviene e la stagione si
-  // apre senza sedile — senza un messaggio, senza un errore, semplicemente un
-  // anno sparito dalla carriera. L'ho trovato perché una carriera di tre
-  // stagioni ne archiviava due.
-  //
-  // Quando il mercato tiene un posto libero per il giocatore, `driverIds` di
-  // quelle squadre si ferma a uno: il filtro le lascia passare.
-  const scored = Object.values(world.teams)
-    .filter((team) => team.driverIds.length < SEATS_PER_TEAM)
-    .map((team) => ({ team, interest: teamInterest(scale, driver, team) }));
-
-  const wanted = scored.filter((s) => s.interest >= 45).sort((a, b) => b.interest - a.interest);
-  const fallback = scored.sort((a, b) => a.team.prestige - b.team.prestige)[0];
-  const chosen = (wanted.length > 0 ? wanted : fallback ? [fallback] : []).slice(0, 3);
-
-  return chosen.map(({ team, interest }) => ({
-    teamId: team.id,
-    years: rng ? rng.int(1, 3) : 2,
-    salary: rng
-      ? offeredSalary(driver, team.budget, rng)
-      : Math.round(team.budget * 0.05),
-    // Prima guida solo dove sei chiaramente il migliore dei due.
-    role: interest >= 78 || team.prestige < 50 ? ('prima' as const) : ('seconda' as const),
-    interest: Math.round(interest),
-  }));
-}
-
-/** Accetta un'offerta: il giocatore prende il sedile, il resto del mercato si chiude. */
-export function acceptOffer(world: World, offer: ContractOffer, rng: Rng): boolean {
-  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
-  const driver = playerId ? world.drivers[playerId] : null;
-  const team = world.teams[offer.teamId];
-  if (!driver || !team || team.driverIds.length >= SEATS_PER_TEAM) return false;
-
-  driver.teamId = team.id;
-  driver.contractYears = offer.years;
-  driver.salary = offer.salary;
-  team.driverIds.push(driver.id);
-  world.offers = [];
-
-  // I posti tenuti liberi dalle altre pretendenti si riempiono adesso.
-  fillEmptySeats(world, rng);
-  return true;
-}
-
 /** Riempie i sedili rimasti vuoti attingendo ai piloti senza contratto. */
 export function fillEmptySeats(world: World, rng: Rng): void {
-  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
+  const mine = world.seat.mode === 'scuderia' ? world.seat.teamId : null;
   const pool = Object.values(world.drivers)
-    .filter((d) => !d.retired && !d.teamId && d.id !== playerId)
+    .filter((d) => !d.retired && !d.teamId)
     .sort((a, b) => marketValue(b) - marketValue(a));
 
   for (const team of Object.values(world.teams)) {
+    // Mai la tua: i sedili della scuderia del giocatore li riempie il giocatore.
+    if (team.id === mine) continue;
     while (team.driverIds.length < SEATS_PER_TEAM) {
       const pick = pool.shift();
       if (!pick) break;

@@ -1,7 +1,7 @@
 import { PALETTE } from '../palette.js';
 import { useGame } from '../../state/useGame.js';
 import { constructorStandings, driverStandings } from '../../engine/season.js';
-import { player } from '../../engine/selectors.js';
+import { focusedDriver } from '../../engine/selectors.js';
 import { overall } from '../../engine/driver.js';
 import { carPace } from '../../engine/regulations.js';
 import { Panel } from '../components/kit.js';
@@ -16,7 +16,8 @@ import { Panel } from '../components/kit.js';
  */
 export function Standings() {
   const world = useGame((s) => s.world)!;
-  const me = player(world);
+  const selected = useGame((s) => s.selected);
+  const me = focusedDriver(world, selected);
   const drivers = driverStandings(world);
   const teams = constructorStandings(world);
 

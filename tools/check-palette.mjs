@@ -107,12 +107,54 @@ for (const vision of ['normale', ...Object.keys(DICHROMACY)]) {
   }
 }
 
+/*
+ * I colori che il giocatore può dare alla propria scuderia.
+ *
+ * Vanno misurati contro le otto della griglia, non solo fra loro: una tinta
+ * uguale a quella di una squadra esistente rende la tua indistinguibile in
+ * classifica e sul tracciato. È esattamente com'erano nella prima versione —
+ * sette su otto erano copie esatte di un colore già in uso.
+ */
+const PLAYER_COLOURS = (
+  readFileSync(new URL('../src/ui/screens/NewGame.tsx', import.meta.url), 'utf8')
+    .match(/const COLOURS = \[([^\]]+)\]/)?.[1] ?? ''
+).match(/#[0-9A-Fa-f]{6}/g) ?? [];
+
+if (PLAYER_COLOURS.length === 0) {
+  problems.push('non trovo i colori offerti al giocatore in NewGame.tsx');
+}
+
+for (const colour of PLAYER_COLOURS) {
+  const ratio = contrast(colour, C.panel);
+  if (ratio < MIN_TEAM_CONTRAST) {
+    problems.push(`colore giocatore ${colour} sul pannello: ${ratio.toFixed(2)}:1`);
+  }
+  for (const vision of ['normale', ...Object.keys(DICHROMACY)]) {
+    const conv = (h) => (vision === 'normale' ? hex(h).map(toLinear) : simulate(h, vision));
+    for (const key of TEAM_KEYS) {
+      const d = deltaE(conv(colour), conv(C[key]));
+      if (d < MIN_DELTA_E) {
+        problems.push(`colore giocatore ${colour} non si distingue da ${key} in ${vision}: ΔE ${d.toFixed(1)}`);
+      } else note(`giocatore ${colour}/${key} in ${vision}`, d, MIN_DELTA_E);
+    }
+    /*
+     * Fra loro **non** devono distinguersi, e chiederlo sarebbe un errore: il
+     * giocatore ne sceglie uno solo, e due tinte simili nella tavolozza non si
+     * incontrano mai in classifica. L'unico confronto che conta è quello con
+     * le otto scuderie che vedrà ogni domenica. Pretendere anche la
+     * separazione reciproca costringeva la tavolozza su sei toni di blu,
+     * perché lo spazio rimasto libero dalla griglia è stretto.
+     */
+  }
+}
+
 if (problems.length) {
   console.error(`Palette: ${problems.length} problemi\n  ${problems.join('\n  ')}`);
   process.exit(1);
 }
 console.log(
-  `Palette: ${TEAM_KEYS.length} colori scuderia, contrasti e separazioni a posto.\n` +
+  `Palette: ${TEAM_KEYS.length} colori scuderia + ${PLAYER_COLOURS.length} per il giocatore, ` +
+  'contrasti e separazioni a posto.\n' +
   `Margine più stretto: ${tightest.what}, ΔE ${(MIN_DELTA_E + tightest.slack).toFixed(1)} ` +
   `contro un minimo di ${MIN_DELTA_E}.`,
 );

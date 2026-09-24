@@ -9,12 +9,13 @@ import { isRaceWeek } from './engine/selectors.js';
 import { QUALIFYING_DAY } from './engine/days.js';
 import { NewGame } from './ui/screens/NewGame.js';
 import { Paddock } from './ui/screens/Paddock.js';
-import { Training } from './ui/screens/Training.js';
+import { Drivers } from './ui/screens/Drivers.js';
 import { DriverScreen } from './ui/screens/DriverScreen.js';
 import { Finance } from './ui/screens/Finance.js';
 import { TeamScreen } from './ui/screens/TeamScreen.js';
 import { Calendar } from './ui/screens/Calendar.js';
-import { Contracts } from './ui/screens/Contracts.js';
+import { Market } from './ui/screens/Market.js';
+import { Development } from './ui/screens/Development.js';
 import { Standings } from './ui/screens/Standings.js';
 import { History } from './ui/screens/History.js';
 import { SeasonOverlay, WeekendOverlay } from './ui/screens/Overlays.js';
@@ -24,14 +25,12 @@ import { RaceView } from './ui/race/RaceView.js';
 export function App() {
   const world = useGame((s) => s.world);
   const screen = useGame((s) => s.screen);
-  const plan = useGame((s) => s.plan);
   const advance = useGame((s) => s.advance);
   const skipToWeekend = useGame((s) => s.skipToWeekend);
   const closeSeason = useGame((s) => s.closeSeason);
   const lastWeek = useGame((s) => s.lastWeek);
   const lastSeason = useGame((s) => s.lastSeason);
   const pendingRace = useGame((s) => s.pendingRace);
-  const offersOpen = (world?.offers?.length ?? 0) > 0;
   const raceRunning = useGame((s) => s.raceRunning);
   const gridReady = useGame((s) => s.gridReady);
   const openGrid = useGame((s) => s.openGrid);
@@ -44,35 +43,28 @@ export function App() {
     if (pendingRace) openGrid();
   }, [pendingRace, openGrid]);
 
-  // Con un'offerta sul tavolo non si va da nessuna parte: la stagione riparte
-  // solo dopo la firma, quindi la schermata si apre da sola.
-  const goTo = useGame((s) => s.goTo);
-  useEffect(() => {
-    if (offersOpen) goTo('contratti');
-  }, [offersOpen, goTo]);
-
   const onAdvance = useCallback(() => {
     const w = useGame.getState().world;
     if (!w || busy) return;
     setBusy(true);
     try {
       if (w.week >= seasonWeeks) closeSeason();
-      else advance(plan);
+      else advance();
     } finally {
       setBusy(false);
     }
-  }, [advance, closeSeason, plan, busy]);
+  }, [advance, closeSeason, busy]);
 
   const onSkip = useCallback(() => {
     const w = useGame.getState().world;
     if (!w || busy || w.week >= seasonWeeks) return;
     setBusy(true);
     try {
-      skipToWeekend(plan);
+      skipToWeekend();
     } finally {
       setBusy(false);
     }
-  }, [skipToWeekend, plan, busy]);
+  }, [skipToWeekend, busy]);
 
   if (!world) {
     return (
@@ -88,8 +80,7 @@ export function App() {
    * scheda da consultare, e lasciarle in un angolo le renderebbe saltabili.
    */
   if (
-    world.seat.mode === 'pilota' && !pendingRace && !offersOpen
-    && isRaceWeek(world) && world.dayOfWeek === QUALIFYING_DAY
+    !pendingRace && isRaceWeek(world) && world.dayOfWeek === QUALIFYING_DAY
     && world.qualifyingPlan === null
   ) {
     return (
@@ -131,12 +122,13 @@ export function App() {
           <TopBar onAdvance={onAdvance} onSkip={onSkip} busy={busy} />
           <main className="flex-1 min-h-0 p-2">
             {screen === 'paddock' && <Paddock onAdvance={onAdvance} />}
-            {screen === 'pilota' && <DriverScreen />}
-            {screen === 'allenamento' && <Training onAdvance={onAdvance} />}
+            {screen === 'scuderia' && <TeamScreen />}
+            {screen === 'sviluppo' && <Development />}
+            {screen === 'piloti' && <Drivers onAdvance={onAdvance} />}
+            {screen === 'profilo' && <DriverScreen />}
+            {screen === 'mercato' && <Market />}
             {screen === 'calendario' && <Calendar />}
             {screen === 'finanze' && <Finance />}
-            {screen === 'scuderia' && <TeamScreen />}
-            {screen === 'contratti' && <Contracts />}
             {screen === 'classifiche' && <Standings />}
             {screen === 'abilita' && <Skills />}
             {screen === 'storia' && <History />}

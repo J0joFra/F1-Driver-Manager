@@ -20,7 +20,8 @@
     "check:offers": "node tools/check-offers.mjs",
     "check:migration": "node tools/check-migration.mjs",
     "check:palette": "node tools/check-palette.mjs",
-    "check:career": "tsx tools/check-career.ts"
+    "check:career": "tsx tools/check-career.ts",
+    "check:team": "tsx tools/check-team.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

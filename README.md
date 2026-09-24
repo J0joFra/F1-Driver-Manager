@@ -1,13 +1,21 @@
-# F1 Driver Manager
+# F1 Manager
 
-Gestionale di Formula 1 per browser e Android. Due modalità sullo stesso mondo —
-**Pilota** (fai carriera, cresci, ti scegli il sedile) e **Scuderia** (dirigi un team) —
-con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
+Gestionale di Formula 1 per browser e Android. **Fondi una scuderia** — nome,
+colori, il capitale che ti sei procurato — e la porti dall'ultima fila del
+paddock a vincere. Sviluppi la monoposto a progetti di reparto, ingaggi e fai
+crescere i piloti, e la domenica la gara si corre dal vivo, vista dall'alto in
+2D: non guidi, **decidi**.
 
-> **Stato: Modalità Pilota giocabile, gara compresa.**
-> Il mondo gira da riga di comando (40 stagioni in ~300 ms), l'app si gioca
-> settimana per settimana e le gare si corrono dal vivo: tracciato, torre dei
-> tempi, distacchi e strategia.
+> **Stato: giocabile dall'inizio alla fine.** Si fonda la scuderia, si ingaggia,
+> si sviluppa, si corre, si chiude la stagione e si ricomincia. Il mondo gira
+> anche da riga di comando — 40 stagioni in ~300 ms — ed è lì che si verifica
+> che regga.
+
+> **C'era anche una Modalità Pilota**, in cui si guidava una carriera invece di
+> una squadra. È stata tolta: due modalità significavano due interfacce e due
+> insiemi di decisioni sopra lo stesso motore, e nessuna delle due arrivava in
+> fondo. I salvataggi di allora non si perdono — chi li apre prende in mano la
+> scuderia del pilota che guidava.
 
 ---
 
@@ -16,12 +24,12 @@ con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 - [L'idea](#lidea)
 - [Provalo subito](#provalo-subito)
 - [Architettura: perché il motore viene prima](#architettura-perché-il-motore-viene-prima)
-- [Le due modalità](#le-due-modalità)
+- [La scuderia: fondarla e tenerla in piedi](#la-scuderia-fondarla-e-tenerla-in-piedi)
+- [Lo sviluppo a progetti di reparto](#lo-sviluppo-a-progetti-di-reparto)
 - [Il mondo infinito](#il-mondo-infinito)
 - [Il calendario della stagione](#il-calendario-della-stagione)
 - [La settimana di gioco](#la-settimana-di-gioco)
 - [L'albero delle abilità](#lalbero-delle-abilità)
-- [Soldi e staff personale](#soldi-e-staff-personale)
 - [Il modello di gara](#il-modello-di-gara)
 - [La carriera, tarata sui mondiali veri](#la-carriera-tarata-sui-mondiali-veri)
 - [La forma del circuito](#la-forma-del-circuito)
@@ -41,11 +49,11 @@ Un incrocio fra tre cose che esistono già separatamente:
 
 | Da | Prendiamo |
 |---|---|
-| **Monoposto** (Marco Pesce) | la profondità della carriera da pilota, la strategia vera |
+| **Monoposto** (Marco Pesce) | la profondità della simulazione, la strategia vera |
 | **F1 Clash** | la cura dell'interfaccia e il feedback immediato — **non** il gacha |
 | **Soccer Manager** | la struttura a schede, il database navigabile, il gioco che non finisce mai |
 
-Il vuoto che riempiono male tutti e tre: **una carriera single player profonda, con una presentazione moderna e senza meccaniche predatorie.**
+Il vuoto che riempiono male tutti e tre: **un gestionale single player profondo, con una presentazione moderna e senza meccaniche predatorie.**
 
 La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torre dei tempi e striscia dei distacchi. Niente 3D in pista. Il 3D compare solo nei momenti da schermata — garage, podio, firma del contratto — ed è **pre-renderizzato in Blender**, non calcolato a runtime. L'unica eccezione è l'editor di livree e casco, dove serve WebGL vero.
 
@@ -56,36 +64,45 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 137 test
+npm test                      # 145 test
 npm run sim -- --seasons 40 --verbose
+npm run check:team            # 10 scuderie fondate da zero × 16 stagioni
 ```
 
 **Il gioco si tiene in orizzontale.** Se apri l'app su un telefono in verticale
 ti chiede di ruotarlo: la torre dei tempi e la pista hanno bisogno di larghezza.
 
-Output reale dell'ultima esecuzione (seed `20260921`):
+Output reale dell'ultima esecuzione (seed `20260921`), senza nessun giocatore:
+il mondo che gira da solo.
 
 ```
-40 stagioni simulate (2031–2070) in 316 ms — seed 20260921
-======================================================================
-Piloti diversi campioni ............ 14 su 40 stagioni
-Scuderie diverse campioni .......... 5 su 5
-Deriva del potenziale medio ........ +4.73 punti in 40 anni
-Overall medio griglia .............. 75.6 → 77.5
-Età media della griglia ............ 28.4 → 28.7
-Piloti attivi ...................... 10 → 10
-Ritiri per gara .................... 8.3%
-Azzeramenti regolamentari .......... 8
+40 stagioni simulate (2031–2070) in 1796 ms — seed 20260921
+==========================================================================
+Piloti diversi campioni ............ 16 su 40 stagioni
+Scuderie diverse campioni .......... 7 su 8
+Deriva a regime (dal 2040) ......... +2.44 punti in 30 anni
+Overall medio griglia .............. 77.3 → 75.9
+Piloti attivi ...................... 16 → 16
+Ritiri per gara .................... 14.7%
+Azzeramenti regolamentari .......... 7
 
 Titoli per scuderia:
-  Vantar Racing      ████████████████ 16
-  Nordvik Squadra    █████████ 9
-  Kestrel Motors     ████████ 8
-  Mirage GP          ██████ 6
-  Scuderia Aurora    █ 1
+  Vantar Racing      ██████████████████ 18
+  Kestrel Motors     ███████ 7
+  Nordvik Squadra    █████ 5
+  Brandt Werke       █████ 5
+  Scuderia Aurora    ██ 2
+  Solaro Corse       ██ 2
+  Mirage GP          █ 1
 ```
 
-Quello che questi numeri dicono: il mondo **non si congela** (cinque scuderie diverse vincono, e Nordvik — l'ultima forza al primo anno — ne vince nove), **non si svuota** (dieci piloti attivi dopo quarant'anni) e **non si gonfia** (il livello medio resta ancorato, quindi i record del 2031 valgono ancora nel 2070).
+Quello che questi numeri dicono: il mondo **non si congela** (sette scuderie
+diverse vincono, e Nordvik e Brandt — penultima e terzultima al primo anno —
+ne vincono cinque a testa), **non si svuota** (sedici piloti in griglia dopo
+quarant'anni) e **non si gonfia** (il livello medio resta ancorato, quindi i
+record del 2031 valgono ancora nel 2070). Le scuderie del computer aprono e
+chiudono i loro progetti di sviluppo da sole: se non lo facessero, il giocatore
+vincerebbe tutto in tre stagioni senza aver deciso niente.
 
 > Questa è esattamente la ragione per cui il motore viene prima dell'interfaccia.
 > La prima simulazione a 40 stagioni dava **29 titoli su 40 a una sola scuderia**:
@@ -127,14 +144,15 @@ una torre dei tempi i numeri devono incolonnarsi.
 
 | Schermata | Impaginazione |
 |---|---|
-| **Paddock** | tre colonne: il tuo pilota e il contratto · il prossimo weekend e la classifica piloti · la scuderia e la classifica costruttori |
-| **Pilota** | tre fasce: chi è (nome, scuderia, contratto, overall e potenziale) · di cosa è fatto (ruoli a stelle, attributi in colonne, anagrafica) · come sta (morale, condizione, forma, stagione). Da qui si apre l'albero |
+| **Paddock** | tre colonne: la tua scuderia e i tuoi piloti · il prossimo weekend e la classifica piloti · i reparti al lavoro e la classifica costruttori. Quello che potrebbe fermarti — un sedile vuoto, un reparto fermo, la cassa agli sgoccioli — compare qui ed è cliccabile |
+| **Scuderia** | chi sei (prestigio, personale) · cosa hai (la monoposto voce per voce, con la griglia come tacca) · quanto reggi (cassa e conto della stagione) |
+| **Sviluppo** | quattro riquadri, uno per reparto: quanto vali rispetto alla griglia, cosa ci sta lavorando, o i tre progetti che puoi aprirci. Il motivo per cui non puoi è scritto dove premeresti |
+| **Piloti** | in alto si sceglie il pilota, sotto il suo piano settimanale a sinistra e gli attributi che si muovono a destra. Da qui si aprono la scheda e l'albero |
+| **Scheda pilota** | tre fasce: chi è (nome, contratto, overall e potenziale) · di cosa è fatto (ruoli a stelle, attributi in colonne, anagrafica) · come sta (morale, condizione, forma, **crescita**, stagione) |
 | **Abilità** | un'area alla volta come grafo ramificato, schede in alto, dettaglio del nodo scelto in basso |
-| **Allenamento** | piano settimanale a sinistra con i pip di allocazione, a destra gli attributi che si muovono |
+| **Mercato** | i piloti liberi in tabella, con quanto chiedono **per venire da te** · a destra il foglio dell'offerta, con il pulsante di firma inchiodato in fondo |
 | **Calendario** | due viste: griglia mensile a sette colonne, o l'anno intero in tabella · a destra la settimana corrente e il resto della stagione |
-| **Finanze** | entrate · uscite · il netto isolato in una colonna sua |
-| **Scuderia** | la squadra · i piloti in schede · lo sviluppo, in sola lettura |
-| **Contratti** | profilo e stagione a sinistra, a destra il contratto in corso o le offerte da firmare |
+| **Bilancio** | entrate · uscite · cassa e **autonomia**: a quanto stai spendendo, quante settimane di lavoro hai davanti |
 | **Classifiche** | piloti in tabella (V, P, OVR, PT) · scuderie in schede con passo, affidabilità e prestigio |
 | **Storia** | albo d'oro · titoli per scuderia · ordine d'arrivo dell'ultima gara |
 
@@ -196,18 +214,168 @@ Conseguenze pratiche: una gara si riproduce identica per il debug, un salvataggi
 
 ---
 
-## Le due modalità
+## La scuderia: fondarla e tenerla in piedi
 
-Sono due valori dello stesso campo. Non due giochi.
+Si entra da **nona scuderia**, che è la posizione più scomoda del paddock: la
+griglia passa da sedici a diciotto monoposto e le due nuove sono le più lente
+di tutte.
 
-```ts
-type Seat =
-  | { mode: 'pilota';   driverId: string }
-  | { mode: 'scuderia'; teamId: string }
-  | { mode: 'osservatore' };
+| Cosa hai all'inizio | Valore | Perché |
+|---|---|---|
+| Monoposto | 64 / 65 / 63, affidabilità 70 | sei punti sotto l'ultima della griglia |
+| Prestigio | 14 | nessuno ti conosce, e i piloti se ne accorgono |
+| Reparto tecnico | 44 / 42 / 40 | gente brava non lavora ancora per te |
+| Piloti | **nessuno** | i sedili li riempi tu, o non prendi il via |
+| Cassa | 40, 75 o 120 milioni | è la difficoltà, ed è dichiarata |
+
+La monoposto parte sei punti sotto l'ultima, non dodici. Dodici era il primo
+valore, e non funzionava: il bilancio di una scuderia ultima classificata
+compra due aggiornamenti all'anno, e con quelli non si recuperano dodici punti
+su una griglia che nel frattempo si muove. La sonda mostrava otto stagioni
+tutte al nono posto — che non è difficoltà, è l'assenza di un gioco.
+
+### Il capitale iniziale è la difficoltà, e si vede
+
+Niente moltiplicatori nascosti: la scelta è quante settimane di sviluppo ti
+puoi permettere prima che comincino a entrare i premi di fine stagione.
+**Garagista** (40 M) compra un progetto maggiore e poco altro; **Costruttore**
+(120 M) tiene due reparti al lavoro per tutto il primo anno.
+
+### Il mercato, dal lato di chi ingaggia
+
+Nel gioco di prima si aspettavano le offerte. Adesso le si fanno, e la colonna
+che decide non è quanto vale un pilota ma **quanto chiede per venire da te**:
+
+```
+prezzo = valore di mercato × (1 + quanto gli costa scendere di squadra)
 ```
 
-Cambia soltanto **quali decisioni prende l'IA al posto tuo**. La schermata «Scuderia», che in Modalità Pilota è in sola lettura — vedi che il tuo team sta sbagliando lo sviluppo e non puoi farci niente — in Modalità Scuderia diventa il centro del gioco. Scritta una volta, usata due.
+Il secondo fattore dipende dal tuo prestigio, e arriva a moltiplicare per 3,4.
+Oltre mezza griglia di distacco fra il suo posto e il tuo, non firma a nessuna
+cifra — senza un limite duro, la cassa iniziale comprerebbe subito il miglior
+pilota del mondo e il primo anno non sarebbe più il primo anno di nessuno.
+
+All'apertura del mondo, oltre ai ragazzi dell'academy, ci sono **cinque piloti
+già formati senza contratto**. Senza di loro tutti i sedili sarebbero occupati
+e una scuderia che nasce non avrebbe nessuna scelta da fare, solo giovani da
+prendere. Con loro la prima decisione vera esiste: un ventenne da far crescere,
+o un trentenne che porta punti subito e costa tutto il bilancio.
+
+### Rinnovare, e perché è la decisione che si dimentica
+
+Un contratto che scade manda il pilota sul mercato generale, e una scuderia
+più grande se lo prende. La sonda lo mostrava come un difetto di crescita — i
+piloti della squadra restavano fermi a 71 di overall per otto stagioni — mentre
+era un difetto di mercato: **non erano gli stessi piloti**, ogni due anni si
+ricominciava con qualcun altro. Rinnovare costa il prezzo di adesso, non quello
+di quando l'hai preso: un giovane cresciuto va pagato per quello che è
+diventato, ed è il conto che si presenta a chi ha lavorato bene.
+
+### I conti
+
+| Entrate | | Uscite | |
+|---|---|---|---|
+| Premio di classifica | 62–114 M | Ingaggi piloti | 0,3–24 M |
+| Sponsor (dal prestigio) | 0–30 M | Gestione (dal personale) | 24–51 M |
+
+Lo sviluppo non compare: i progetti si pagano **a settimana**, ed è proprio
+quello che rende la cassa una cosa da guardare durante la stagione invece che a
+dicembre.
+
+I primi numeri che avevo messo rendevano il gioco impossibile, e la sonda lo ha
+mostrato subito: una scuderia nuova incassava 32 milioni e ne spendeva 40 solo
+per esistere, chiudeva il primo anno in rosso, il secondo peggio, e dal terzo
+non poteva più nemmeno pagare un pilota. Non era difficoltà, era una sottrazione
+senza uscita. Adesso la base del premio è quasi il doppio e la forbice più
+stretta: l'ultimo chiude in attivo di una ventina di milioni, che sono circa due
+aggiornamenti all'anno. Pochi, e questo è il punto — ma sono suoi, e crescono
+con lui.
+
+---
+
+## Lo sviluppo a progetti di reparto
+
+È il cuore del gestionale, e sostituisce lo sviluppo automatico di fine
+stagione che il gioco aveva prima. Quello era un numero che arrivava a
+dicembre: nessuna decisione, nessun rischio, nessun modo di sbagliare.
+
+| Progetto | Durata | Costo | Guadagno atteso |
+|---|---|---|---|
+| Pacchetto | 6 settimane | 1,6 M | +0,27 |
+| Aggiornamento | 12 settimane | 4,0 M | +0,63 |
+| Progetto maggiore | 22 settimane | 8,4 M | +1,38 |
+
+**Tre vincoli, e la decisione sta dove si incrociano.**
+
+1. **Un reparto alla volta.** Aerodinamica, motore, telaio e affidabilità
+   lavorano in parallelo, ma ciascuno su un progetto solo: aprire il secondo
+   vuol dire chiudere il primo, e quello che era a metà è perso.
+2. **Le settimane.** Un progetto maggiore occupa il reparto per mezza stagione.
+   Deciderlo a marzo vuol dire vederlo in pista ad agosto, e nel frattempo gli
+   altri hanno portato due pacchetti piccoli.
+3. **I soldi.** Qui sta il vincolo vero. Il calendario non ti ferma: ti ferma la
+   cassa. Un progetto rimasto senza fondi **non si annulla e non indebita la
+   scuderia** — si ferma, e riparte quando la cassa torna.
+
+### Il rischio non è decorazione
+
+Un progetto non rende quello che prometteva: rende quello che prometteva
+moltiplicato per come è andata. La resa si taglia a −0,45, il che vuol dire che
+**un progetto maggiore può peggiorare la macchina**. Senza quel taglio,
+«rischio» sarebbe solo una parola per «guadagni un po' meno».
+
+### Quattro correttivi, e ognuno risponde a un difetto misurato
+
+- **Rendimenti calanti.** Portare l'aerodinamica da 70 a 71 è lavoro normale,
+  da 95 a 96 è mezza stagione. Senza, la scuderia di vertice accumula
+  all'infinito.
+- **Handicap al vincitore.** Chi ha vinto sviluppa meno, come le ore di
+  galleria del vento assegnate al contrario della classifica.
+- **Il reparto tecnico.** Gli stessi soldi in mani migliori rendono di più: è
+  ciò che rende il personale una spesa e non un numero decorativo.
+- **Il recupero.** Chi è molto indietro guadagna di più per ogni euro. È il più
+  importante dei quattro e l'avevo perso strada facendo, togliendo lo sviluppo
+  automatico: la sonda mostrava una scuderia nuova che restava nona per otto
+  stagioni di fila, perché il suo bilancio da ultima comprava due aggiornamenti
+  all'anno contro gli otto di chi stava davanti. Senza recupero, la classifica
+  di partenza è la classifica per sempre.
+
+### L'ancora che tiene fermi i numeri
+
+I rating delle monoposto si gonfiavano e basta: ogni scuderia sviluppa, nessuna
+regredisce, e in otto stagioni la media della griglia passava da 82 a 90,
+schiacciata contro il tetto di 99. L'azzeramento regolamentare non lo impediva,
+perché faceva convergere tutti verso la media **di allora** — cioè spostava
+tutti nello stesso punto, sempre più in alto.
+
+Il danno peggiore non era l'inflazione in sé ma cosa faceva al gioco: **una
+scuderia nuova inseguiva un bersaglio che scappava più in fretta di quanto lei
+potesse correre**, e non raggiungeva mai il gruppo per quanto bene giocasse.
+
+Adesso l'azzeramento riporta le monoposto a un livello di riferimento fisso
+(`CAR_ANCHOR = 78`) e lascia in piedi **metà** del vantaggio di chi era avanti.
+È l'equivalente di `talentAnchor` per le macchine, ed è quello che rende
+l'azzeramento un'occasione vera per chi insegue — oltre a chiudere i cantieri
+aperti, perché un progetto costruito sulle regole di prima non serve più.
+
+### `npm run check:team`
+
+Dieci scuderie fondate da zero, sedici stagioni, un giocatore di riferimento
+che gioca in modo **ragionevole** e non ottimo:
+
+```
+st   posizione   passo vs media   piloti
+  1      8.7           −12.8        71.9
+  4      7.3            −7.5        77.4
+  8      6.8            −3.9        75.7
+ 12      5.4            −0.7        75.7
+ 16      4.3            −1.1        77.1
+```
+
+Si entra ultimi e si sale, su entrambe le leve: la monoposto arriva alla pari
+attorno alla dodicesima stagione, i piloti crescono di cinque punti. Il
+giocatore di riferimento non arriva al vertice, e deve essere così: se ci
+arrivasse, vorrebbe dire che le decisioni non contano.
 
 ---
 
@@ -410,7 +578,7 @@ mondo di ventiquattro ore.
 
 | Giorno | Cosa succede | Durata |
 |---|---|---|
-| Mar (e Gio) | **Allenamento**: una sessione se nel weekend c'è la gara, due se non c'è | 30 s |
+| Mar (e Gio) | **Allenamento dei tuoi piloti**, uno per uno: una sessione se nel weekend c'è la gara, due se non c'è | 30 s |
 | Mer | **Il minigioco della settimana**, una sola partita | 40 s |
 | Gio | **Trasferta** verso il circuito | — |
 | Ven | **Libere**: scegli una direzione di assetto | 20 s |
@@ -488,23 +656,6 @@ Il minigioco della settimana **non è casuale**: è quello della categoria in cu
 
 ---
 
-## I contratti si firmano, non si subiscono
-
-Gli altri diciannove piloti vengono assegnati d'ufficio dal mercato. Il
-giocatore no: quando il contratto scade riceve **fino a tre offerte** e sceglie
-lui. Finché non firma, il suo sedile resta vuoto e la stagione non riparte —
-l'interfaccia apre da sola la schermata e disabilita il pulsante che fa passare
-il tempo.
-
-Perché questo non lasci buchi in griglia, le scuderie interessate **tengono un
-posto libero** durante il mercato, e i posti rimasti si riempiono nell'istante
-in cui il giocatore firma. Una squadra di coda offre sempre: restare senza
-sedile a vent'anni sarebbe una fine di carriera decisa da un tiro di dado.
-
-`npm run check:offers` verifica il flusso: nel gioco quelle schermate compaiono
-solo dopo due o tre stagioni, quindi il mondo viene fatto avanzare dal motore,
-iniettato nel salvataggio e controllato nell'interfaccia.
-
 ## I salvataggi sopravvivono agli aggiornamenti
 
 Il mondo è un oggetto che cresce a ogni funzione nuova: `offers` non esisteva
@@ -535,7 +686,10 @@ morto.
 ## L'albero delle abilità
 
 È il posto dove finisce quello che un pilota impara correndo, e che nessun
-allenamento settimanale può dare: non punti in più ma **regole diverse**. Un
+allenamento settimanale può dare: non punti in più ma **regole diverse**.
+L'albero è di ogni pilota, non della scuderia: i punti li accumulano loro
+correndo, e li spendi tu — per ciascuno dei due, che è un altro modo in cui due
+monoposto sono due decisioni e non una. Un
 nodo alza un tetto, uno cambia il degrado delle gomme, uno rende un sorpasso
 più probabile, uno fa sì che il muretto ascolti quando parli.
 
@@ -601,39 +755,6 @@ quindi non deve sapere che l'albero esiste.
 
 ---
 
-## Soldi e staff personale
-
-L'ingaggio non è un numero di vanità: è la risorsa che finanzia la tua crescita. È questo che trasforma la schermata dei contratti nella più importante del gioco.
-
-| Offerta | Il ragionamento |
-|---|---|
-| Nordvik, 1.2 M, prima guida | corri sempre, ma ti permetti poco staff: cresci piano |
-| Aurora, 2.0 M, seconda guida | staff migliore, cresci in fretta — ma resti dietro al compagno |
-| Mirage, 2.4 M, prima guida | il massimo… se il progetto non fallisce |
-
-**Entrate**: ingaggio, bonus (15 k a punto, 150 k a podio, 400 k a vittoria) e sponsor personali legati alla **reputazione**, non ai risultati.
-**Uscite**: stipendi dello staff, percentuale del procuratore (5–13 %), spese fisse (15 % del lordo).
-
-### La regola che impedisce il disastro
-
-Soldi → crescita → risultati → più soldi è un anello che si autoalimenta: alla sesta stagione saresti imbattibile e il gioco finirebbe. Si spezza **per costruzione**:
-
-> **Il potenziale è fissato alla nascita del pilota e nessuno staff lo alza. Lo staff cambia solo la velocità con cui ci arrivi.**
-
-```ts
-crescita = base
-         × f(qualitàStaff)          // 1.00 → 1.40 al massimo teorico
-         × curvaEtà(età)            // dopo i 32 è zero, qualunque cosa tu spenda
-         × moltiplicatoreMinigioco  // 0.85 → 1.30
-         × (cap − attuale)          // ← il freno vero: si azzera al tetto
-```
-
-Uno staff di primo livello ti porta al tuo tetto a 24 anni invece che a 28: quattro stagioni di prime in più, enormi ma **limitate**. E un pilota con potenziale 78 resta un pilota da 78.
-
-Due freni secondari: **costo superlineare, effetto sublineare** (`staffPrice` cresce con `quality^3.1`) e la **reputazione come cancello** — i professionisti migliori rifiutano un pilota sconosciuto a qualunque cifra (`minReputation`).
-
----
-
 ## La gara che si gioca
 
 Il weekend si ferma sulla **griglia di partenza**: lì si vede la qualifica, si
@@ -647,7 +768,8 @@ sceglie la gomma di partenza e si decide se correre o simulare. Poi la pista.
 | **Torre dei tempi** | chi è davanti a chi, distacco dal leader. Segue il giocatore invece di lasciarlo fuori schermo |
 | **Striscia dei distacchi** | i secondi dal leader su una scala. È la vista funzionale: il trenino, chi si stacca, l'undercut |
 | **Comandi** | mescola e box, modalità motore, attacco quando sei entro un secondo |
-| **Velocità** | pausa, 1×, 4×, 8×, più «simula il resto» |
+| **Velocità** | pausa, ½×, 1×, 2×, più «simula il resto» |
+| **Le tue due monoposto** | si passa dall'una all'altra senza uscire dalla gara: la strategia si decide per ciascuna |
 
 **Il gioco rallenta da solo.** Quando entri in zona DRS, quando sei sotto
 attacco, quando le gomme sono finite o esce la safety car, la simulazione torna
@@ -1121,9 +1243,9 @@ src/
   ui/
     shell/          rail di navigazione, barra di stato, blocco orientamento
     components/     primitive (Panel, Stat, Bar, Btn, Note)
-    screens/        Paddock, Pilota, Allenamento, Calendario, Finanze,
-                    Scuderia, Contratti, Classifiche, Storia, overlay di fine
-                    weekend e di fine anno
+    screens/        Paddock, Scuderia, Sviluppo, Piloti, Mercato, Calendario,
+                    Bilancio, Classifiche, Storia, scheda pilota, albero delle
+                    abilità, overlay di fine weekend e di fine anno
     race/           griglia di partenza, tracciato, torre dei tempi, striscia
                     dei distacchi, comandi, forma procedurale del circuito
   state/raceSession.ts  la gara in corso, fuori dallo store: contiene il
@@ -1132,7 +1254,9 @@ engine/
   rng.ts            generatore deterministico, fork etichettati, clamp
   types.ts          modello dati completo del mondo
   driver.ts         creazione, newgen, overall, curve di età, ritiro
-  staff.ts          staff personale, prezzi, moltiplicatore di crescita
+  team.ts           fondare la scuderia, ingaggi, rinnovi, conti di stagione
+  projects.ts       progetti di reparto: costi, settimane, resa, rischio
+  staff.ts          chi segue i piloti: efficienza dell'entourage
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
   layout.ts         la forma del giro: settori, pesi della monoposto, derivate
   qualifying.ts     le tre decisioni del sabato, le manche, il loro prezzo
@@ -1150,8 +1274,9 @@ engine/
   migrate.ts        recupera i salvataggi scritti da versioni precedenti
   race.ts           il modello: formule di gara, gara veloce, qualifica
   liveRace.ts       la stessa gara avanzata a passi, con i comandi del giocatore
-  regulations.ts    sviluppo monoposto, handicap, budget cap, prestigio, reset
-  market.ts         valore di mercato, ingaggi, mercato piloti, finanze
+  regulations.ts    budget cap, prestigio, azzeramento regolamentare e ancora
+  market.ts         valore di mercato, scala comune, mercato delle altre otto
+  careerCurve.ts    la forma di una carriera, misurata sui mondiali veri
   season.ts         weekend, classifiche, aggregati storici
   world.ts          createWorld, advanceDay, advanceWeek, endSeason, simulateSeason
   data/
@@ -1185,7 +1310,7 @@ sparsi nei componenti, e cambiare tema ne lasciava indietro metà.
 
 Gli otto colori delle scuderie non sono decorativi: sono anche i colori delle
 barre in tutte le classifiche, quindi devono funzionare come palette
-categorica. `npm run check:palette` verifica quattro cose:
+categorica. `npm run check:palette` verifica cinque cose:
 
 1. contrasto di ogni tinta sul pannello bianco ≥ 4.5:1, così il testo bianco
    sopra è sempre leggibile;
@@ -1194,7 +1319,20 @@ categorica. `npm run check:palette` verifica quattro cose:
    protanopia, deuteranopia e tritanopia;
 4. che `src/engine/data/teams.ts` non sia divergente dal tema — il motore
    porta il colore nel salvataggio e non può importare la presentazione,
-   quindi le due liste vanno confrontate invece che condivise.
+   quindi le due liste vanno confrontate invece che condivise;
+5. che i **colori offerti al giocatore** siano distinguibili da tutte e otto
+   le scuderie, sempre nelle quattro visioni.
+
+Il quinto controllo è nato da un difetto: la prima tavolozza di creazione
+offriva le stesse tinte delle otto squadre esistenti, e sette su otto erano
+**copie esatte** — la tua scuderia sarebbe stata indistinguibile da una già in
+griglia, in classifica e sul tracciato.
+
+Fra loro, invece, i sei colori del giocatore **non** devono distinguersi, e
+chiederlo sarebbe stato un errore: se ne sceglie uno solo, e due tinte simili
+nella tavolozza non si incontrano mai. Pretendere anche quella separazione
+costringeva la scelta su sei toni di blu, perché lo spazio che la griglia
+lascia libero è stretto.
 
 Il controllo non è cerimoniale: lanciato sulla vecchia palette scura ha
 trovato **tre coppie indistinguibili** che la documentazione dava per
@@ -1206,14 +1344,14 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 138 test
+npm test               # vitest, 145 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
 npm run sim:long       # con il dettaglio anno per anno
 npm run sim -- --seasons 100 --seed 7 --verbose
-npm run check:career   # 60 carriere contro la curva dei mondiali veri
-npm run check:offers   # il flusso dei contratti di fine stagione
+npm run check:team     # 10 scuderie fondate da zero × 16 stagioni
+npm run check:career   # la forma di una carriera contro i mondiali veri
 npm run check:migration
 npm run check:palette
 ```
@@ -1241,35 +1379,37 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 
 ## Cosa manca
 
-**Fatto** — la Modalità Pilota è navigabile:
+**Fatto** — il gioco si chiude da capo a fondo: si fonda una scuderia, si
+ingaggia, si sviluppa, si corre, si chiude l'anno e si ricomincia.
 
 - [x] Vite + React + TypeScript + Tailwind, layout orizzontale
-- [x] Hub: Paddock, Pilota, Allenamento, Calendario, Finanze, Scuderia, Contratti, Classifiche, Storia
+- [x] Creazione della scuderia: nome, sigla, colore, capitale iniziale
+- [x] Schede: Paddock, Scuderia, Sviluppo, Piloti, Mercato, Calendario, Bilancio, Classifiche, Storia
+- [x] Sviluppo a progetti di reparto, con settimane, costi settimanali e rischio
+- [x] Mercato dal lato di chi ingaggia: offerte, rinnovi, rescissioni
+- [x] Allenamento e albero delle abilità per ciascuno dei tuoi due piloti
 - [x] Il tempo scorre a giorni: *Avanza* di ventiquattro ore, *Al weekend* per saltare ai giorni che contano
-- [x] Ciclo settimanale completo: allenamento → weekend → fine stagione
 - [x] Calendario ricalcato su quello vero: date reali, giro del mondo per regioni, triple header, pausa d'agosto, orari locali e italiani
-- [x] Salvataggio automatico con Zustand `persist`, con migrazione dei salvataggi vecchi
-
-- [x] Vista gara: griglia, tracciato SVG, torre dei tempi, striscia dei distacchi, strategia
+- [x] Vista gara a diciotto monoposto, con le tue due comandabili entrambe
+- [x] Qualifica giocabile: le tre decisioni del sabato
+- [x] Forma dei circuiti misurata sulla geometria reale
+- [x] Salvataggio automatico, con recupero dei salvataggi della vecchia Modalità Pilota
 
 **Prossimo passo**:
 
 - [ ] I tre minigiochi in React, con il risultato scritto all'avvio della partita
 - [ ] Libere: la direzione di assetto
-- [x] Albero delle abilità, dal profilo pilota
-- [x] Qualifica giocabile: le tre decisioni del sabato
-- [x] Forma dei circuiti misurata sulla geometria reale
-- [ ] Mercato dello staff personale (il motore c'è già, manca la schermata)
+- [ ] Assumere e licenziare il personale tecnico (adesso segue il prestigio da solo)
+- [ ] Strategia separata per le due monoposto già prima del via
 - [ ] Slot di salvataggio multipli
 
 **Poi**:
 
-- [ ] Modalità Scuderia (interfaccia sui sistemi che il motore ha già)
 - [ ] Livree come dati: pattern procedurali, editor, codice condivisibile
-- [ ] Personaggio a strati e casco 3D (three.js) — l'unica schermata WebGL
 - [ ] Momenti pre-renderizzati: garage, podio, firma del contratto
-- [ ] Ingegnere personale, addetto stampa, analista dati (staff che dà informazioni invece di statistiche)
+- [ ] Sponsor come contratti da negoziare, non solo un numero dal prestigio
 - [ ] Meteo dinamico in gara e gomme da bagnato
+- [ ] Limiti sui componenti della power unit, con penalità in griglia
 - [ ] Build Android con Capacitor
 
 ---
@@ -1279,7 +1419,7 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 I tre prototipi che hanno definito il gioco prima della prima riga di motore:
 
 - **Vista gara** — tracciato, torre dei tempi, striscia dei distacchi, strategia
-- **Hub carriera** — le sette schede, finanze e staff personale
+- **Hub carriera** — la struttura a schede, da cui viene quella di adesso
 - **Sala allenamento** — i tre minigiochi giocabili
 
 Sono prototipi HTML autonomi, con dati inventati: servono al confronto visivo, non sono codice di produzione.

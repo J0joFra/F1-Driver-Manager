@@ -1,5 +1,6 @@
 import type { CarRating, World } from './types.js';
-import { skillEffects } from './skills.js';
+import { CAR_KEYS } from './types.js';
+export { CAR_KEYS } from './types.js';
 import { carPaceOn, NEUTRAL_MIX } from './layout.js';
 import { clamp, type Rng } from './rng.js';
 
@@ -11,8 +12,6 @@ import { clamp, type Rng } from './rng.js';
  * sportivo muore. Il regolamento che cambia ogni 4–6 anni rimescola le carte,
  * ed è anche ciò che succede davvero in Formula 1.
  */
-
-export const CAR_KEYS = ['aero', 'engine', 'chassis', 'reliability'] as const;
 
 /**
  * Quanto vale una monoposto in generale: il suo passo su un tracciato medio.
@@ -31,55 +30,52 @@ function meanCarPace(world: World): number {
 }
 
 /**
- * Sviluppo annuale.
+ * La cassa con cui una scuderia gestita dal computer comincia il mondo.
  *
- * `standingOrder` è la classifica costruttori dell'anno appena chiuso, dal primo
- * all'ultimo. Chi ha vinto sviluppa di meno: è la contromisura al congelamento
- * della griglia, ed è anche ciò che fa davvero la Formula 1 con le ore di
- * galleria del vento assegnate al contrario della classifica.
+ * Proporzionata al prestigio, perché è il prestigio a decidere quanto
+ * incasserà. Partire tutte uguali regalerebbe alla squadra di coda un anno di
+ * sviluppo che non potrà permettersi mai più, e la griglia del primo anno
+ * direbbe il falso.
  */
-export function developCars(world: World, rng: Rng, standingOrder: string[] = []): void {
-  const mean = meanCarPace(world);
-  const teamCount = Object.keys(world.teams).length;
-  for (const team of Object.values(world.teams)) {
-    const rank = standingOrder.indexOf(team.id);
-    // Primo in classifica ≈ 0.72×, ultimo ≈ 1.34×.
-    const handicap = rank < 0 ? 1 : clamp(0.72 + (rank / Math.max(1, teamCount - 1)) * 0.62, 0.7, 1.4);
-    const spendRatio = team.budget / 135_000_000;
-    const efficiency = team.crew.technical / 100;
-    // Chi è indietro recupera un po' più in fretta: senza questo la griglia si blocca.
-    const catchUp = clamp(1 + (mean - carPace(team.car)) * 0.030, 0.75, 1.35);
-    // Un pilota che sa dire agli ingegneri cosa fa la macchina vale mesi di
-    // galleria del vento: il riscontro migliore fra i due piloti conta.
-    const feedback = team.driverIds.reduce((best, id) => {
-      const d = world.drivers[id];
-      return d ? Math.max(best, skillEffects(d).development) : best;
-    }, 0);
-    const points = spendRatio * efficiency * catchUp * handicap * rng.range(2.4, 5.2)
-      * (1 - team.futureFocus * 0.5) * (1 + feedback * 0.06);
-
-    // Ogni scuderia ha una priorità di sviluppo, e non sempre è quella giusta.
-    const weights = { aero: rng.range(0.2, 0.5), engine: rng.range(0.1, 0.35), chassis: rng.range(0.15, 0.4), reliability: rng.range(0.1, 0.3) };
-    const total = weights.aero + weights.engine + weights.chassis + weights.reliability;
-
-    for (const k of CAR_KEYS) {
-      const share = weights[k] / total;
-      // Rendimenti calanti: più sei vicino a 99, meno rende ogni euro.
-      const headroom = (99 - team.car[k]) / 40;
-      team.car[k] = clamp(team.car[k] + points * share * clamp(headroom, 0.30, 1.2), 40, 99);
-    }
-  }
+export function initialCash(prestige: number): number {
+  return Math.round(34_000_000 + (prestige / 100) * 96_000_000);
 }
 
-/** Azzeramento tecnico: le monoposto convergono verso la media e si rimescolano. */
+/**
+ * Il livello assoluto a cui il regolamento riporta le monoposto.
+ *
+ * È l'equivalente di `talentAnchor` per le macchine, e serve allo stesso
+ * scopo. Senza, i rating si gonfiano e basta: ogni scuderia sviluppa, nessuna
+ * regredisce, e in otto stagioni la media della griglia passava da 82 a 90,
+ * schiacciata contro il tetto di 99. L'azzeramento che si limitava a far
+ * convergere verso la media di allora non lo impediva — spostava tutti nello
+ * stesso punto, sempre più in alto.
+ *
+ * Il danno peggiore non era l'inflazione in sé ma cosa faceva al gioco: una
+ * scuderia nuova insegue un bersaglio che scappa più in fretta di quanto lei
+ * possa correre, e non raggiunge mai il gruppo per quanto bene giochi.
+ */
+export const CAR_ANCHOR = 78;
+
+/**
+ * Azzeramento tecnico: le monoposto tornano al livello di riferimento e si
+ * rimescolano.
+ *
+ * Della gerarchia precedente resta metà: chi era avanti riparte un po' avanti
+ * — competenza e struttura non svaniscono con un cambio di regolamento — ma
+ * metà del vantaggio sì, ed è quello che rende l'azzeramento un'occasione
+ * vera per chi insegue.
+ */
 export function applyRegulationReset(world: World, rng: Rng): void {
   const mean = meanCarPace(world);
   for (const team of Object.values(world.teams)) {
     for (const k of CAR_KEYS) {
-      // Convergenza forte più una scossa: dopo un reset la gerarchia va riletta da zero.
-      const pull = (mean - team.car[k]) * 0.42;
-      team.car[k] = clamp(team.car[k] + pull + rng.normal() * 7.5, 45, 97);
+      const edge = (team.car[k] - mean) * 0.5;
+      team.car[k] = clamp(CAR_ANCHOR + edge + rng.normal() * 6.5, 45, 97);
     }
+    // Un regolamento nuovo azzera anche i cantieri: quello che era in
+    // costruzione era costruito sulle regole di prima.
+    team.projects = [];
   }
   world.regulations.lastResetYear = world.year;
   world.regulations.nextResetYear = world.year + rng.int(4, 6);

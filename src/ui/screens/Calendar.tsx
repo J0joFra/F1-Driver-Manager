@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, Flag, Moon, Snowflake, Sun, Wrench } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
-import { player } from '../../engine/selectors.js';
+import { focusedDriver } from '../../engine/selectors.js';
 import { getTrack, isNightRace } from '../../engine/data/tracks.js';
 import { layoutName, type SectorMix } from '../../engine/layout.js';
 import {
@@ -58,8 +58,11 @@ const KIND_COLOUR: Record<WeekKind, string> = {
  */
 export function Calendar() {
   const world = useGame((s) => s.world)!;
-  const plan = useGame((s) => s.plan);
-  const me = player(world)!;
+  const plans = useGame((s) => s.plans);
+  const selected = useGame((s) => s.selected);
+  const me = focusedDriver(world, selected);
+  // Il calendario racconta il programma del pilota che stai guardando.
+  const plan = (me ? plans[me.id] : null) ?? null;
   const current = world.schedule[world.week];
   const totalRaces = raceCountOf(world.schedule);
 
@@ -127,7 +130,7 @@ function NavButton({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 /** L'anno intero in tabella: serve a cercare, dove il mese serve a pianificare. */
-function SeasonList({ world, me }: { world: World; me: Driver }) {
+function SeasonList({ world, me }: { world: World; me: Driver | null }) {
   const scroller = useRef<HTMLDivElement>(null);
   const currentRow = useRef<HTMLDivElement>(null);
 
@@ -173,7 +176,7 @@ function SeasonList({ world, me }: { world: World; me: Driver }) {
             const month = shown.getUTCMonth();
             const showMonth = month !== lastMonth;
             lastMonth = month;
-            const mine = result?.race.find((r) => r.driverId === me.id);
+            const mine = me ? result?.race.find((r) => r.driverId === me.id) : undefined;
             const Icon = KIND_ICON[week.kind];
 
             return (
@@ -234,7 +237,7 @@ function SeasonList({ world, me }: { world: World; me: Driver }) {
 function SidePanels({ world, current, me, totalRaces }: {
   world: World;
   current: SeasonWeek | undefined;
-  me: Driver;
+  me: Driver | null;
   totalRaces: number;
 }) {
   return (
@@ -322,7 +325,10 @@ function SidePanels({ world, current, me, totalRaces }: {
           <div className="grid grid-cols-2 gap-y-3">
             <Stat value={world.round} label="Gare corse" />
             <Stat value={totalRaces - world.round} label="Rimaste" tone="accent" />
-            <Stat value={Math.round(me.fatigue)} label="Stanchezza" tone={me.fatigue > 70 ? 'accent' : undefined} />
+            <Stat
+              value={me ? Math.round(me.fatigue) : '—'} label="Stanchezza"
+              tone={me && me.fatigue > 70 ? 'accent' : undefined}
+            />
             <Stat value={`${world.week + 1}/${world.schedule.length}`} label="Settimana" />
           </div>
 

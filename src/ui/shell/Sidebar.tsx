@@ -1,6 +1,5 @@
 import {
-  Sparkles,
-  BookOpen, Building2, CalendarDays, FileText, Flag, Gauge, Trophy, User, Wallet,
+  BookOpen, Building2, CalendarDays, Gauge, Trophy, Users, Wallet, Wrench, UserPlus,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useGame, type Screen } from '../../state/useGame.js';
@@ -14,14 +13,13 @@ import { useGame, type Screen } from '../../state/useGame.js';
  */
 const ITEMS: { id: Screen; label: string; icon: LucideIcon }[] = [
   { id: 'paddock', label: 'Paddock', icon: Gauge },
-  { id: 'pilota', label: 'Pilota', icon: User },
-  { id: 'allenamento', label: 'Allenamento', icon: Flag },
-  { id: 'calendario', label: 'Calendario', icon: CalendarDays },
-  { id: 'finanze', label: 'Finanze', icon: Wallet },
   { id: 'scuderia', label: 'Scuderia', icon: Building2 },
-  { id: 'contratti', label: 'Contratti', icon: FileText },
+  { id: 'sviluppo', label: 'Sviluppo', icon: Wrench },
+  { id: 'piloti', label: 'I tuoi piloti', icon: Users },
+  { id: 'mercato', label: 'Mercato piloti', icon: UserPlus },
+  { id: 'calendario', label: 'Calendario', icon: CalendarDays },
+  { id: 'finanze', label: 'Bilancio', icon: Wallet },
   { id: 'classifiche', label: 'Classifiche', icon: Trophy },
-  { id: 'abilita', label: 'Abilità', icon: Sparkles },
   { id: 'storia', label: 'Storia', icon: BookOpen },
 ];
 

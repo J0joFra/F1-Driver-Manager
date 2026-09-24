@@ -15,10 +15,12 @@ let current: { prepared: PreparedWeekend; race: LiveRace } | null = null;
 
 export function beginRace(world: World, trackId: string, playerCompound: Compound = 'M') {
   const prepared = prepareWeekend(world, trackId);
-  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : undefined;
+  const playerIds = world.seat.mode === 'scuderia'
+    ? world.teams[world.seat.teamId]?.driverIds ?? []
+    : [];
   const race = createLiveRace(prepared.track, prepared.entries, prepared.raceRng, {
     wet: prepared.wet,
-    ...(playerId ? { playerId, playerCompound } : {}),
+    ...(playerIds.length > 0 ? { playerIds, playerCompound } : {}),
   });
   current = { prepared, race };
   return current;
