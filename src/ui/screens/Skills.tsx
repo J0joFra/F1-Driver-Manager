@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Lock, Sparkles } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
-import { player } from '../../engine/selectors.js';
+import { focusedDriver } from '../../engine/selectors.js';
 import {
   BRANCHES, GRID_COLS, SKILL_TREE, TOTAL_COST, prerequisitesOf, skillEffects,
   unlockRefusal, type BranchKey, type SkillEffects, type SkillNode,
@@ -24,12 +24,23 @@ import { Panel } from '../components/kit.js';
 export function Skills() {
   const world = useGame((s) => s.world)!;
   const unlock = useGame((s) => s.unlockSkill);
-  const me = player(world)!;
+  const focus = useGame((s) => s.selected);
+  const me = focusedDriver(world, focus);
   const [branch, setBranch] = useState<BranchKey>('pace');
-  const [selected, setSelected] = useState<string>(SKILL_TREE[0]!.id);
+  const [picked, setPicked] = useState<string>(SKILL_TREE[0]!.id);
+
+  if (!me) {
+    return (
+      <Panel title="Abilità">
+        <p className="font-mono text-2xs text-dim">
+          Nessun pilota sotto contratto: l'albero è del pilota, non della scuderia.
+        </p>
+      </Panel>
+    );
+  }
 
   const nodes = SKILL_TREE.filter((n) => n.branch === branch);
-  const node = SKILL_TREE.find((n) => n.id === selected) ?? nodes[0]!;
+  const node = SKILL_TREE.find((n) => n.id === picked) ?? nodes[0]!;
   const refusal = unlockRefusal(me, node);
   const effects = skillEffects(me);
   const spent = me.perks.reduce((s, id) => s + (SKILL_TREE.find((n) => n.id === id)?.cost ?? 0), 0);
@@ -54,7 +65,7 @@ export function Skills() {
               key={b.key}
               type="button"
               data-testid={`tab-${b.key}`}
-              onClick={() => { setBranch(b.key); setSelected(SKILL_TREE.find((n) => n.branch === b.key)!.id); }}
+              onClick={() => { setBranch(b.key); setPicked(SKILL_TREE.find((n) => n.branch === b.key)!.id); }}
               className={`flex-1 rounded border px-2 py-1 text-left transition
                 ${active ? 'bg-panel border-primary' : 'bg-panel2 border-line hover:border-dim'}`}
             >
@@ -76,7 +87,7 @@ export function Skills() {
 
       <Panel bodyClass="p-2 min-h-0" className="flex-1">
         <Graph nodes={nodes} perks={me.perks} selected={node.id}
-          canTake={(n) => unlockRefusal(me, n) === null} onSelect={setSelected} />
+          canTake={(n) => unlockRefusal(me, n) === null} onSelect={setPicked} />
       </Panel>
 
       <div className="h-[72px] shrink-0 grid grid-cols-[1fr_190px] gap-2">
@@ -106,7 +117,7 @@ export function Skills() {
             <button
               type="button"
               data-testid="unlock-skill"
-              onClick={() => unlock(node.id)}
+              onClick={() => unlock(me.id, node.id)}
               disabled={refusal !== null}
               className="w-full rounded bg-primary text-white font-sans text-xs font-semibold
                 py-1.5 disabled:opacity-35 disabled:cursor-not-allowed hover:brightness-110 transition"

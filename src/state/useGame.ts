@@ -1,10 +1,17 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { RaceResult, TrainingPlan, World } from '../engine/types.js';
+import type { CarKey, ProjectSize, RaceResult, TrainingPlan, World } from '../engine/types.js';
 import { unlockSkill as unlock } from '../engine/skills.js';
 import type { QualifyingPlan } from '../engine/qualifying.js';
-import { advanceDay, endSeason, finishPendingRace, playerDriver, takeOffer, type DayReport, type SeasonSummary, type WeekReport } from '../engine/world.js';
-import { startCareer, type StartCareerOptions } from '../engine/career.js';
+import {
+  advanceDay, endSeason, finishPendingRace,
+  type DayReport, type SeasonSummary, type WeekReport,
+} from '../engine/world.js';
+import {
+  releaseDriver, renewDriver, signDriver, startTeam,
+  type StartTeamOptions, type Terms,
+} from '../engine/team.js';
+import { cancelProject, startProject } from '../engine/projects.js';
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
 import { migrateWorld } from '../engine/migrate.js';
 import { beginRace, currentRace, endRace } from './raceSession.js';
@@ -17,31 +24,33 @@ import { beginRace, currentRace, endRace } from './raceSession.js';
 
 export type Screen =
   | 'paddock'
-  | 'pilota'
-  | 'allenamento'
+  | 'scuderia'
+  | 'sviluppo'
+  | 'piloti'
+  | 'profilo'
+  | 'mercato'
   | 'calendario'
   | 'finanze'
-  | 'scuderia'
-  | 'contratti'
   | 'classifiche'
   | 'abilita'
   | 'storia';
 
-/** Si può avanzare solo se non c'è una gara da giocare o un contratto da firmare. */
+/** Si può avanzare solo se non c'è una gara da giocare. */
 function canAdvance(world: World | null, pendingRace: string | null): world is World {
-  if (!world || world.week >= SEASON_WEEKS || pendingRace) return false;
-  return (world.offers?.length ?? 0) === 0;
+  return !(!world || world.week >= SEASON_WEEKS || pendingRace);
 }
 
 /**
- * Un giorno di mondo. Se il giocatore è in griglia il weekend si ferma prima
- * del via: la gara la corre lui, e sarà `completeRace` a registrarla.
+ * Un giorno di mondo. Il weekend si ferma prima del via: la gara la guarda il
+ * giocatore, e sarà `completeRace` a registrarla.
  */
-function stepDay(world: World, plan: TrainingPlan, minigameScore?: number): DayReport {
+function stepDay(
+  world: World, plans: Record<string, TrainingPlan>, minigameScore?: number,
+): DayReport {
   return advanceDay(world, {
-    plan,
+    plans,
     ...(minigameScore !== undefined ? { minigameScore } : {}),
-    deferRace: world.seat.mode === 'pilota',
+    deferRace: true,
   });
 }
 
@@ -69,12 +78,25 @@ function commitStep(
   });
 }
 
+/** Il programma con cui parte un pilota appena ingaggiato. */
+export function defaultPlan(): TrainingPlan {
+  return { simulator: 1, fitness: 0, engineering: 0, media: 0 };
+}
+
 interface GameState {
   world: World | null;
   screen: Screen;
-  /** piano di allenamento corrente: si conserva da una settimana all'altra */
-  plan: TrainingPlan;
-  setPlan: (plan: TrainingPlan) => void;
+  /**
+   * Il programma settimanale di ciascun pilota, per id.
+   *
+   * Uno per pilota e non uno solo: due monoposto vogliono dire anche decidere
+   * che uno lavori al simulatore mentre l'altro sta in palestra.
+   */
+  plans: Record<string, TrainingPlan>;
+  setPlan: (driverId: string, plan: TrainingPlan) => void;
+  /** il pilota aperto nelle schede di dettaglio */
+  selected: string | null;
+  select: (driverId: string | null) => void;
   /** ultimo weekend corso, da mostrare come riepilogo */
   lastWeek: WeekReport | null;
   /** l'ultimo giorno avanzato: cosa è successo, per la barra di stato */
@@ -91,65 +113,74 @@ interface GameState {
    * un nuovo render.
    */
   gridReady: boolean;
+  /** l'ultimo rifiuto del mercato, da mostrare accanto al pulsante */
+  refusal: string | null;
   openGrid: () => void;
   startRace: () => void;
   completeRace: (results: RaceResult[], safetyCars: number) => void;
-  /** accetta una delle offerte in attesa; senza, la stagione non riparte */
-  acceptOffer: (teamId: string) => void;
-  newGame: (opts: StartCareerOptions) => void;
+  newGame: (opts: StartTeamOptions) => void;
   abandon: () => void;
   goTo: (screen: Screen) => void;
-  /** avanza di un giorno: è l'unità di tempo del gioco */
   /** fissa le tre decisioni della qualifica di sabato */
   setQualifyingPlan: (plan: QualifyingPlan) => void;
-  /** spende un punto abilità sul nodo scelto */
-  unlockSkill: (id: string) => void;
-  advance: (plan: TrainingPlan, minigameScore?: number) => DayReport | null;
+  /** spende un punto abilità di un tuo pilota sul nodo scelto */
+  unlockSkill: (driverId: string, id: string) => void;
+  sign: (driverId: string, terms: Terms) => void;
+  renew: (driverId: string, terms: Terms) => void;
+  release: (driverId: string) => void;
+  openProject: (area: CarKey, size: ProjectSize) => void;
+  closeProject: (projectId: string) => void;
+  /** avanza di un giorno: è l'unità di tempo del gioco */
+  advance: (minigameScore?: number) => DayReport | null;
   /** avanza fino al venerdì del prossimo weekend di gara, o alla fine della stagione */
-  skipToWeekend: (plan: TrainingPlan) => DayReport | null;
+  skipToWeekend: () => DayReport | null;
   closeSeason: () => SeasonSummary | null;
   dismissSummary: () => void;
 }
 
 /**
  * Sale a ogni campo nuovo nel mondo. La `migrate` qui sotto riempie ciò che
- * manca: un salvataggio vecchio deve continuare una carriera, non cancellarla.
+ * manca: un salvataggio vecchio deve continuare una partita, non cancellarla.
  */
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 
 export const useGame = create<GameState>()(
   persist(
     (set, get) => ({
       world: null,
       screen: 'paddock',
-      // Una sola sessione: è quanto concede una settimana di gara, che è
-      // dove una carriera comincia.
-      plan: { simulator: 1, fitness: 0, engineering: 0, media: 0 },
-      setPlan: (plan) => set({ plan }),
+      plans: {},
+      selected: null,
       lastWeek: null,
       lastDay: null,
       lastSeason: null,
       pendingRace: null,
       raceRunning: false,
       gridReady: false,
+      refusal: null,
+
+      setPlan: (driverId, plan) => set({ plans: { ...get().plans, [driverId]: plan } }),
+      select: (driverId) => set({ selected: driverId }),
 
       newGame: (opts) => {
         endRace();
         set({
-          world: startCareer(opts), screen: 'paddock',
-          lastWeek: null, lastSeason: null, pendingRace: null, raceRunning: false, gridReady: false,
+          world: startTeam(opts), screen: 'mercato', plans: {}, selected: null,
+          lastWeek: null, lastSeason: null, pendingRace: null,
+          raceRunning: false, gridReady: false, refusal: null,
         });
       },
 
       abandon: () => {
         endRace();
         set({
-          world: null, lastWeek: null, lastDay: null, lastSeason: null,
-          pendingRace: null, raceRunning: false, gridReady: false, screen: 'paddock',
+          world: null, lastWeek: null, lastDay: null, lastSeason: null, plans: {},
+          selected: null, pendingRace: null, raceRunning: false, gridReady: false,
+          screen: 'paddock', refusal: null,
         });
       },
 
-      goTo: (screen) => set({ screen }),
+      goTo: (screen) => set({ screen, refusal: null }),
 
       setQualifyingPlan: (plan) => {
         const world = get().world;
@@ -158,18 +189,55 @@ export const useGame = create<GameState>()(
         set({ world: { ...world } });
       },
 
-      unlockSkill: (id) => {
+      unlockSkill: (driverId, id) => {
         const world = get().world;
-        const me = world ? playerDriver(world) : null;
-        if (!world || !me) return;
-        if (unlock(me, id)) set({ world: { ...world } });
+        const d = world?.drivers[driverId];
+        if (!world || !d) return;
+        if (unlock(d, id)) set({ world: { ...world } });
       },
 
-      advance: (plan, minigameScore) => {
+      sign: (driverId, terms) => {
+        const world = get().world;
+        if (!world) return;
+        const refusal = signDriver(world, driverId, terms);
+        set({ world: { ...world }, refusal });
+      },
+
+      renew: (driverId, terms) => {
+        const world = get().world;
+        if (!world) return;
+        const refusal = renewDriver(world, driverId, terms);
+        set({ world: { ...world }, refusal });
+      },
+
+      release: (driverId) => {
+        const world = get().world;
+        if (!world) return;
+        const refusal = releaseDriver(world, driverId);
+        set({ world: { ...world }, refusal, selected: null });
+      },
+
+      openProject: (area, size) => {
+        const world = get().world;
+        const team = world?.seat.mode === 'scuderia' ? world.teams[world.seat.teamId] : null;
+        if (!world || !team) return;
+        startProject(team, area, size, world.year, world.week);
+        set({ world: { ...world }, refusal: null });
+      },
+
+      closeProject: (projectId) => {
+        const world = get().world;
+        const team = world?.seat.mode === 'scuderia' ? world.teams[world.seat.teamId] : null;
+        if (!world || !team) return;
+        cancelProject(team, projectId);
+        set({ world: { ...world } });
+      },
+
+      advance: (minigameScore) => {
         const world = get().world;
         if (!canAdvance(world, get().pendingRace)) return null;
-        const report = stepDay(world!, plan, minigameScore);
-        commitStep(set, world!, report);
+        const report = stepDay(world, get().plans, minigameScore);
+        commitStep(set, world, report);
         return report;
       },
 
@@ -178,18 +246,18 @@ export const useGame = create<GameState>()(
        * prossimo weekend sarebbe un lavoro, non una scelta. Questo salta ai
        * giorni che contano e si ferma appena succede qualcosa.
        */
-      skipToWeekend: (plan) => {
+      skipToWeekend: () => {
         const world = get().world;
         if (!canAdvance(world, get().pendingRace)) return null;
         let report: DayReport | null = null;
         for (let guard = 0; guard < SEASON_WEEKS * 7; guard++) {
-          report = stepDay(world!, plan);
+          report = stepDay(world, get().plans);
           if (report.pendingRace || report.raceRun || report.seasonOver) break;
           // Ci si ferma al venerdì di un weekend di gara: da lì in avanti ogni
           // giorno ha qualcosa da decidere.
-          if (world!.schedule[world!.week]?.trackId && world!.dayOfWeek >= 4) break;
+          if (world.schedule[world.week]?.trackId && world.dayOfWeek >= 4) break;
         }
-        if (report) commitStep(set, world!, report);
+        if (report) commitStep(set, world, report);
         return report;
       },
 
@@ -224,12 +292,6 @@ export const useGame = create<GameState>()(
         return summary;
       },
 
-      acceptOffer: (teamId) => {
-        const world = get().world;
-        if (!world) return;
-        if (takeOffer(world, teamId)) set({ world: { ...world } });
-      },
-
       dismissSummary: () => set({ lastWeek: null, lastSeason: null }),
     }),
     {
@@ -244,7 +306,9 @@ export const useGame = create<GameState>()(
       },
       // La gara in corso non si salva: contiene un generatore casuale, che è
       // una chiusura. Chi chiude l'app in gara la ritrova da rigiocare.
-      partialize: (s) => ({ world: s.world, screen: s.screen, pendingRace: s.pendingRace }) as never,
+      partialize: (s) => ({
+        world: s.world, screen: s.screen, pendingRace: s.pendingRace, plans: s.plans,
+      }) as never,
     },
   ),
 );

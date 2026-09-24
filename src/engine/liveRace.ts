@@ -77,14 +77,21 @@ export interface LiveRace {
   safetyCarsUsed: number;
   finished: boolean;
   events: RaceEvent[];
-  playerId: string | null;
+  /**
+   * Le monoposto che comanda il giocatore.
+   *
+   * Sono due, non una: si gestisce una scuderia, e lasciare che il motore
+   * chiamasse ai box la seconda vettura vorrebbe dire che metà della
+   * strategia si decide da sola.
+   */
+  playerIds: readonly string[];
   rng: Rng;
 }
 
 export interface LiveRaceOptions {
   wet?: boolean;
-  playerId?: string;
-  /** mescola di partenza del giocatore */
+  playerIds?: readonly string[];
+  /** mescola di partenza delle vetture del giocatore */
   playerCompound?: Compound;
 }
 
@@ -101,7 +108,7 @@ export function createLiveRace(
   const wet = opts.wet ?? rng.chance(track.rain);
 
   const cars: LiveCar[] = entries.map((entry) => {
-    const isPlayer = entry.driverId === opts.playerId;
+    const isPlayer = opts.playerIds?.includes(entry.driverId) ?? false;
     const startCompound: Compound = isPlayer && opts.playerCompound
       ? opts.playerCompound
       : track.tyreWear > 1.2 ? 'M' : rng.chance(0.4) ? 'S' : 'M';
@@ -129,7 +136,7 @@ export function createLiveRace(
   const race: LiveRace = {
     track, cars, t: 0, lap: 1, wet,
     safetyCarUntil: 0, safetyCarsUsed: 0, finished: false,
-    events: [], playerId: opts.playerId ?? null, rng,
+    events: [], playerIds: opts.playerIds ?? [], rng,
   };
 
   // Il via: qui contano le partenze, non la macchina.
@@ -239,7 +246,7 @@ export function stepRace(race: LiveRace, dt: number): void {
     // Ritiro: la probabilità per giro, riscalata sulla frazione percorsa.
     if (rng.chance(retirementChancePerLap(c.entry, c.tyre, race.wet, 0, c.dirtyAir) * fraction)) {
       c.dnf = true;
-      log(race, { kind: 'retire', drivers: [c.entry.driverId], key: c.entry.driverId === race.playerId });
+      log(race, { kind: 'retire', drivers: [c.entry.driverId], key: race.playerIds.includes(c.entry.driverId) });
       continue;
     }
 
@@ -284,7 +291,7 @@ export function stepRace(race: LiveRace, dt: number): void {
        */
       const planned = c.plan[c.stops] ?? Infinity;
       const worthIt = track.laps - c.lap >= 3;
-      if (c.entry.driverId !== race.playerId && c.pitArmed === null && !sc && worthIt) {
+      if (!race.playerIds.includes(c.entry.driverId) && c.pitArmed === null && !sc && worthIt) {
         if (c.lap >= planned || c.tyre.wear > 82) {
           c.pitArmed = c.tyre.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S';
         }
@@ -299,7 +306,7 @@ export function stepRace(race: LiveRace, dt: number): void {
         c.pitUntil = race.t + PIT_STATIONARY;
         log(race, {
           kind: 'pit', drivers: [c.entry.driverId], compound: c.tyre.compound,
-          key: c.entry.driverId === race.playerId,
+          key: race.playerIds.includes(c.entry.driverId),
         });
       }
     }
@@ -329,7 +336,8 @@ export function stepRace(race: LiveRace, dt: number): void {
       log(race, {
         kind: 'overtake',
         drivers: [fol.entry.driverId, lead.entry.driverId],
-        key: fol.entry.driverId === race.playerId || lead.entry.driverId === race.playerId,
+        key: race.playerIds.includes(fol.entry.driverId)
+          || race.playerIds.includes(lead.entry.driverId),
       });
     } else {
       fol.progress = lead.progress - MIN_GAP / track.baseLap;

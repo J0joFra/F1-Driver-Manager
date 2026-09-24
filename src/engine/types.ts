@@ -164,6 +164,27 @@ export interface CarRating {
   reliability: number;
 }
 
+/** I quattro reparti tecnici. Sono anche le voci della monoposto. */
+export const CAR_KEYS = ['aero', 'engine', 'chassis', 'reliability'] as const;
+export type CarKey = (typeof CAR_KEYS)[number];
+
+export type ProjectSize = 'piccolo' | 'medio' | 'grande';
+
+/** Un progetto di sviluppo in corso in un reparto. */
+export interface Project {
+  id: string;
+  area: CarKey;
+  size: ProjectSize;
+  /** durata totale in settimane */
+  weeks: number;
+  /** settimane ancora da lavorare; un progetto senza fondi non scende */
+  weeksLeft: number;
+  /** costo totale in euro, distribuito sulle settimane */
+  cost: number;
+  /** quanto è già stato pagato: non torna indietro se si annulla */
+  spent: number;
+}
+
 export interface Team {
   id: string;
   name: string;
@@ -172,13 +193,25 @@ export interface Team {
   car: CarRating;
   /** budget cap annuo in euro */
   budget: number;
+  /**
+   * Soldi in cassa, in euro.
+   *
+   * Il budget è quanto ti è **permesso** spendere in un anno; la cassa è
+   * quanto hai davvero. La differenza non era mai contata perché non
+   * serviva: lo sviluppo arrivava gratis a dicembre. Adesso che i progetti si
+   * pagano a settimana, è la cassa a decidere quanti reparti puoi tenere al
+   * lavoro — ed è il vincolo attorno a cui ruota tutto il gioco.
+   */
+  cash: number;
   /** 0–100: attrattiva sul mercato piloti */
   prestige: number;
   /** qualità dello staff tecnico della scuderia */
   crew: { technical: number; trackEngineer: number; pitCrew: number };
   driverIds: string[];
-  /** quota di budget dedicata all'anno successivo (0–1) */
-  futureFocus: number;
+  /** progetti di sviluppo aperti, al massimo uno per reparto */
+  projects: Project[];
+  /** vero solo per la scuderia fondata dal giocatore */
+  founded?: boolean;
 }
 
 /** Macro-area geografica: decide l'ordine delle tappe nel calendario. */
@@ -268,20 +301,20 @@ export interface Regulations {
   nextResetYear: number;
 }
 
-/** Un'offerta di contratto rivolta al giocatore a fine stagione. */
-export interface ContractOffer {
-  teamId: string;
-  years: number;
-  /** ingaggio annuo lordo in euro */
-  salary: number;
-  role: 'prima' | 'seconda';
-  /** 0–100: quanto la scuderia ti vuole */
-  interest: number;
-}
-
-/** Chi è il giocatore. Lo stesso mondo regge entrambe le modalità. */
+/**
+ * Chi è il giocatore.
+ *
+ * Una modalità sola: si fonda una scuderia e la si porta avanti.
+ * `osservatore` non è una modalità di gioco — è il mondo che gira senza
+ * nessuno al comando, e serve al simulatore da riga di comando, che corre
+ * quaranta stagioni per verificare che la griglia si regga da sola.
+ *
+ * C'era anche una Modalità Pilota, in cui si guidava una carriera invece di
+ * una squadra. È stata tolta: due modalità significavano due interfacce e due
+ * insiemi di decisioni sopra lo stesso motore, e nessuna delle due arrivava
+ * in fondo.
+ */
 export type Seat =
-  | { mode: 'pilota'; driverId: string }
   | { mode: 'scuderia'; teamId: string }
   | { mode: 'osservatore' };
 
@@ -316,11 +349,6 @@ export interface World {
   results: WeekendResult[];
   /** minigioco assegnato la settimana scorsa: non può ripetersi */
   lastMinigame: MinigameKind | null;
-  /**
-   * Offerte in attesa di risposta dal giocatore. Finché ce ne sono, il suo
-   * sedile resta vuoto e la stagione non può ripartire.
-   */
-  offers: ContractOffer[];
   /** albo d'oro: anno → id del campione */
   champions: { year: number; driverId: string; teamId: string }[];
 }

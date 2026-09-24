@@ -1,5 +1,6 @@
 import type { World } from './types.js';
 import { POTENTIAL_ANCHOR } from './market.js';
+import { initialCash } from './regulations.js';
 import { TEAM_SEEDS } from './data/teams.js';
 import {
   buildCalendar, capacityOf, seasonStartDay, SEASON_WEEKS, type SeasonWeek,
@@ -64,7 +65,6 @@ export function migrateWorld(raw: unknown): World | null {
     }
   }
 
-  if (!Array.isArray(w.offers)) w.offers = [];
   if (typeof w.talentAnchor !== 'number') w.talentAnchor = POTENTIAL_ANCHOR;
   if (!Array.isArray(w.academy)) w.academy = [];
   if (!Array.isArray(w.results)) w.results = [];
@@ -78,12 +78,34 @@ export function migrateWorld(raw: unknown): World | null {
   if (w.qualifyingPlan === undefined) w.qualifyingPlan = null;
   if (typeof w.round !== 'number') w.round = 0;
   if (!w.seat) w.seat = { mode: 'osservatore' };
+  // C'era una Modalità Pilota, e i salvataggi che la usavano esistono ancora.
+  //
+  // Non si può proseguire quella carriera — la modalità non c'è più — ma si
+  // può non buttare via il mondo: il giocatore prende in mano la scuderia del
+  // pilota che guidava, con tutto quello che c'era attorno. Se era senza
+  // sedile si riparte dalla creazione, che è l'unica cosa onesta da fare.
+  const legacy = w.seat as { mode: string; driverId?: string };
+  if (legacy.mode === 'pilota') {
+    const teamId = legacy.driverId ? w.drivers[legacy.driverId]?.teamId : null;
+    if (!teamId || !w.teams[teamId]) return null;
+    w.seat = { mode: 'scuderia', teamId };
+  }
+  // Il mercato si faceva dal lato del pilota: le offerte in attesa non hanno
+  // più un destinatario.
+  delete (w as Record<string, unknown>).offers;
   if (!w.regulations) {
     w.regulations = { lastResetYear: w.year, nextResetYear: w.year + 5 };
   }
 
-  // `short` è arrivato dopo: senza, le colonne strette mostrano "undefined".
   for (const team of Object.values(w.teams)) {
+    // La cassa e i progetti sono arrivati con lo sviluppo a reparti. Una
+    // squadra senza cassa non potrebbe aprire un cantiere e resterebbe ferma
+    // per sempre: si parte da quanto il suo prestigio giustifica.
+    if (typeof team.cash !== 'number') team.cash = initialCash(team.prestige ?? 40);
+    if (!Array.isArray(team.projects)) team.projects = [];
+    delete (team as unknown as Record<string, unknown>).futureFocus;
+
+    // `short` è arrivato dopo: senza, le colonne strette mostrano "undefined".
     if (!team.short) {
       const seed = TEAM_SEEDS.find((t) => t.id === team.id);
       team.short = seed?.short ?? team.name.replace(/^Scuderia\s+/i, '').split(' ')[0] ?? team.name;

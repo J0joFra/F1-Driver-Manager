@@ -1,6 +1,6 @@
 import { PALETTE } from '../palette.js';
 import { useGame } from '../../state/useGame.js';
-import { player } from '../../engine/selectors.js';
+import { focusedDriver } from '../../engine/selectors.js';
 import { getTrack } from '../../engine/data/tracks.js';
 import { Panel } from '../components/kit.js';
 
@@ -10,7 +10,8 @@ import { Panel } from '../components/kit.js';
  */
 export function History() {
   const world = useGame((s) => s.world)!;
-  const me = player(world)!;
+  const selected = useGame((s) => s.selected);
+  const me = focusedDriver(world, selected)!;
   const champions = [...world.champions].reverse();
 
   const byTeam = new Map<string, number>();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { migrateWorld } from '../src/engine/migrate.js';
-import { startCareer } from '../src/engine/career.js';
+import { startTeam } from '../src/engine/team.js';
 
 /**
  * Regressione: aggiungere `world.offers` senza una migrazione mandava in crash
@@ -9,12 +9,17 @@ import { startCareer } from '../src/engine/career.js';
  */
 describe('salvataggi di versioni precedenti', () => {
   function oldSave() {
-    const w = startCareer({ seed: 5, name: 'L. Marchetti', nationality: 'ITA' }) as unknown as Record<string, unknown>;
+    const w = startTeam({
+      seed: 5, name: 'Prova', short: 'PRV', colour: '#C8102E', budget: 'indipendente',
+    }) as unknown as Record<string, unknown>;
     // Com'era il mondo prima dei contratti, dell'anti-inflazione e dei nomi brevi.
-    delete w.offers;
+    w.offers = [];
     delete w.talentAnchor;
     for (const team of Object.values(w.teams as Record<string, Record<string, unknown>>)) {
       delete team.short;
+      delete team.cash;
+      delete team.projects;
+      team.futureFocus = 0;
     }
     for (const d of Object.values(w.drivers as Record<string, Record<string, unknown>>)) {
       delete d.fatigue;
@@ -26,10 +31,12 @@ describe('salvataggi di versioni precedenti', () => {
   it('riempie i campi che non esistevano', () => {
     const migrated = migrateWorld(oldSave());
     expect(migrated).not.toBeNull();
-    expect(migrated!.offers).toEqual([]);
+    expect((migrated as unknown as Record<string, unknown>).offers).toBeUndefined();
     expect(typeof migrated!.talentAnchor).toBe('number');
     for (const team of Object.values(migrated!.teams)) {
       expect(team.short, team.name).toBeTruthy();
+      expect(typeof team.cash, team.name).toBe('number');
+      expect(Array.isArray(team.projects), team.name).toBe(true);
     }
     for (const d of Object.values(migrated!.drivers)) {
       expect(typeof d.fatigue, d.name).toBe('number');
@@ -64,9 +71,44 @@ describe('salvataggi di versioni precedenti', () => {
   });
 
   it('un mondo già aggiornato resta uguale', () => {
-    const w = startCareer({ seed: 9, name: 'Test', nationality: 'ITA' });
+    const w = startTeam({
+      seed: 9, name: 'Test', short: 'TST', colour: '#C8102E', budget: 'indipendente',
+    });
     const migrated = migrateWorld(structuredClone(w))!;
-    expect(migrated.offers).toEqual(w.offers);
     expect(migrated.talentAnchor).toBe(w.talentAnchor);
+    expect(migrated.seat).toEqual(w.seat);
+  });
+
+  /**
+   * C'era una Modalità Pilota, e chi ci stava giocando ha ancora il suo
+   * salvataggio. Non si può proseguire quella carriera, ma buttare via il
+   * mondo sarebbe la cosa peggiore da fare: si prende in mano la scuderia di
+   * quel pilota, e tutto il resto resta dov'era.
+   */
+  describe('salvataggi della Modalità Pilota', () => {
+    function pilotSave() {
+      const w = startTeam({
+        seed: 77, name: 'Prova', short: 'PRV', colour: '#C8102E', budget: 'indipendente',
+      }) as unknown as Record<string, unknown>;
+      const drivers = w.drivers as Record<string, { id: string; teamId: string | null }>;
+      const seated = Object.values(drivers).find((d) => d.teamId)!;
+      w.seat = { mode: 'pilota', driverId: seated.id };
+      return { save: w, driverId: seated.id, teamId: seated.teamId! };
+    }
+
+    it('il giocatore prende in mano la scuderia del suo pilota', () => {
+      const { save, teamId } = pilotSave();
+      const migrated = migrateWorld(save)!;
+      expect(migrated).not.toBeNull();
+      expect(migrated.seat).toEqual({ mode: 'scuderia', teamId });
+      // Il mondo resta intero: non è un reset mascherato da migrazione.
+      expect(Object.keys(migrated.drivers).length).toBeGreaterThan(10);
+    });
+
+    it('un pilota senza sedile non ha una scuderia da ereditare', () => {
+      const { save, driverId } = pilotSave();
+      (save.drivers as Record<string, { teamId: string | null }>)[driverId]!.teamId = null;
+      expect(migrateWorld(save)).toBeNull();
+    });
   });
 });

@@ -67,29 +67,70 @@ async function noVerticalScroll(where) {
 }
 
 await page.goto('http://localhost:4173/', { waitUntil: 'networkidle' });
-await shot('01-nuova-carriera');
+await shot('01-nuova-scuderia');
 
-await page.fill('#driver-name', 'L. Marchetti');
-await page.click('[data-testid=start-career]');
+await page.fill('#team-name', 'Corse Aurora');
+await page.fill('#team-short', 'AURORA');
+await page.click('[data-testid=budget-indipendente]');
+await page.click('[data-testid=start-team]');
 await page.waitForTimeout(300);
-await shot('02-paddock');
-await noVerticalScroll('paddock');
+
+// Il gioco si apre sul mercato: senza piloti non si corre, ed è la prima cosa
+// da fare. Se ne ingaggiano due, così le schermate successive hanno un roster.
+await shot('02-mercato');
+await noVerticalScroll('mercato');
+for (let seat = 0; seat < 2; seat++) {
+  const rows = page.locator('main button:has-text("firmerebbe")');
+  if (!(await rows.count())) break;
+  // Il primo che firmerebbe è anche il più forte: è la scelta che farebbe
+  // chiunque, e riempie il roster per le schermate successive.
+  await rows.first().click({ timeout: 4000 });
+  await page.waitForTimeout(200);
+  const sign = page.locator('[data-testid=sign-driver]');
+  if (await sign.isEnabled()) await sign.click({ timeout: 4000 });
+  else console.warn('la firma è disabilitata:', await page.locator('main').innerText());
+  await page.waitForTimeout(250);
+}
+
+// Qualche reparto al lavoro, o la schermata dello sviluppo è vuota.
+await page.click('[data-testid=nav-sviluppo]');
+await page.waitForTimeout(150);
+for (const area of ['aero', 'engine']) {
+  const btn = page.locator(`[data-testid=dev-${area}-medio]:not([disabled])`);
+  if (await btn.count()) await btn.click();
+  await page.waitForTimeout(120);
+}
 
 for (const [screen, file] of [
-  ['allenamento', '03-allenamento'],
-  ['pilota', '04-pilota'],
-  ['calendario', '04b-calendario'],
-  ['abilita', '04c-abilita'],
-  ['finanze', '05-finanze'],
-  ['scuderia', '06-scuderia'],
-  ['contratti', '07-contratti'],
-  ['classifiche', '08-classifiche'],
-  ['storia', '09-storia'],
+  ['paddock', '03-paddock'],
+  ['scuderia', '04-scuderia'],
+  ['sviluppo', '05-sviluppo'],
+  ['piloti', '06-piloti'],
+  ['calendario', '07-calendario'],
+  ['finanze', '08-bilancio'],
+  ['classifiche', '09-classifiche'],
+  ['storia', '09b-storia'],
 ]) {
   await page.click(`[data-testid=nav-${screen}]`);
-  await page.waitForTimeout(120);
+  await page.waitForTimeout(150);
   await shot(file);
   await noVerticalScroll(screen);
+}
+
+// La scheda del pilota e l'albero si aprono dai piloti, non dal menu.
+await page.click('[data-testid=nav-piloti]');
+await page.waitForTimeout(120);
+if (await page.locator('[data-testid=open-profile]').count()) {
+  await page.click('[data-testid=open-profile]');
+  await page.waitForTimeout(150);
+  await shot('06b-scheda-pilota');
+  await noVerticalScroll('scheda pilota');
+  await page.click('[data-testid=profile-back]');
+  await page.waitForTimeout(120);
+  await page.click('[data-testid=open-skills]');
+  await page.waitForTimeout(150);
+  await shot('06c-abilita');
+  await noVerticalScroll('abilità');
 }
 
 // Avanza fino alla prima gara. Il tempo scorre a giorni, quindi si usa il
@@ -97,7 +138,7 @@ for (const [screen, file] of [
 // qualifica prende lo schermo: si decide e si va avanti.
 for (let i = 0; i < 40; i++) {
   if (await page.locator('[data-testid=go-qualifying]').count()) {
-    await shot('09b-qualifica');
+    await shot('10-qualifica');
     await noVerticalScroll('qualifica');
     await page.click('[data-testid=go-qualifying]');
     await page.waitForTimeout(250);
@@ -109,21 +150,21 @@ for (let i = 0; i < 40; i++) {
   else await page.click('[data-testid=advance]', { timeout: 4000 });
   await page.waitForTimeout(150);
 }
-await shot('10-griglia');
+await shot('11-griglia');
 await noVerticalScroll('griglia');
 
 await page.click('[data-testid=go-racing]');
 await page.waitForTimeout(2500);
-await shot('11-gara');
+await shot('12-gara');
 await noVerticalScroll('gara');
 
 await page.click('button:has-text("2×")');
 await page.waitForTimeout(2500);
-await shot('12-gara-veloce');
+await shot('13-gara-veloce');
 
 await page.click('[data-testid=skip-race]');
 await page.waitForTimeout(900);
-await shot('13-risultato');
+await shot('14-risultato');
 await noVerticalScroll('risultato');
 
 console.log(`Schermate salvate in ${out}/`);

@@ -16,19 +16,23 @@ export function TopBar({
   onAdvance, onSkip, busy,
 }: { onAdvance: () => void; onSkip: () => void; busy: boolean }) {
   const world = useGame((s) => s.world)!;
-  const plan = useGame((s) => s.plan);
+  const plans = useGame((s) => s.plans);
   const race = nextRace(world);
   const raceWeek = isRaceWeek(world);
   const raceDay = isRaceDay(world);
   const seasonOver = world.week >= seasonWeeks;
   const week = currentWeek(world);
   const date = today(world);
-  const offersOpen = (world.offers?.length ?? 0) > 0;
+  // Una scuderia senza piloti non può correre: è la cosa più urgente che
+  // esista, e va detta dove il giocatore guarda per avanzare.
+  const seatsEmpty = world.seat.mode === 'scuderia'
+    && (world.teams[world.seat.teamId]?.driverIds.length ?? 0) === 0;
 
   // Che cosa c'è in programma oggi: è la riga che sostituisce il "che
   // settimana è" di prima, e dice al giocatore se vale la pena fermarsi.
   const agenda = week
-    ? (weekActivities(week, plan)[world.dayOfWeek] ?? []).map((a) => a.label).join(' · ')
+    ? (weekActivities(week, Object.values(plans)[0] ?? null)[world.dayOfWeek] ?? [])
+        .map((a) => a.label).join(' · ')
     : '';
 
   return (
@@ -40,8 +44,8 @@ export function TopBar({
       </span>
       <span className="text-dim truncate hidden md:inline">{agenda || weekLabel(world)}</span>
       <span className="truncate">
-        {offersOpen ? (
-          <span className="text-accent">CONTRATTO SCADUTO · scegli dove correre</span>
+        {seatsEmpty ? (
+          <span className="text-accent">NESSUN PILOTA · la scuderia non prende il via</span>
         ) : seasonOver ? (
           <span className="text-accent">STAGIONE CONCLUSA</span>
         ) : race ? (
@@ -56,7 +60,7 @@ export function TopBar({
 
       <span className="flex-1" />
 
-      {!offersOpen && !seasonOver && !raceDay && (
+      {!seatsEmpty && !seasonOver && !raceDay && (
         <button
           type="button"
           data-testid="skip"
@@ -76,12 +80,12 @@ export function TopBar({
         type="button"
         data-testid="advance"
         onClick={onAdvance}
-        disabled={busy || offersOpen}
+        disabled={busy || seatsEmpty}
         className="shrink-0 inline-flex items-center gap-1.5 rounded bg-primary px-3 py-1 text-[11px]
           font-sans font-semibold text-[#04231A] disabled:opacity-40 hover:brightness-110 transition"
       >
         <ChevronsRight className="w-3.5 h-3.5" />
-        {offersOpen ? 'Firma un contratto'
+        {seatsEmpty ? 'Ingaggia un pilota'
           : seasonOver ? 'Chiudi anno'
           : raceDay ? 'Vai alla gara'
           : 'Avanza'}

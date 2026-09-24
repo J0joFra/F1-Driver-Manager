@@ -4,17 +4,16 @@ import { TEAM_SEEDS } from './data/teams.js';
 import { buildCalendar, raceCountOf, WEEK_RECOVERY, type SeasonWeek, type WeekKind } from './calendar.js';
 import { commitDay, DAYS_IN_WEEK, RACE_DAY, type DayActivity, weekActivities } from './days.js';
 import { applyAging, createVeteran, overall, retirementChance } from './driver.js';
-import {
-  acceptOffer as marketAcceptOffer, intakeNewgens, POTENTIAL_ANCHOR,
-  runTransferMarket, settleFinances,
-} from './market.js';
-import { developCars, maybeReset, updatePrestige, updateTeamResources } from './regulations.js';
+import { intakeNewgens, POTENTIAL_ANCHOR, runTransferMarket, settleFinances } from './market.js';
+import { initialCash, maybeReset, updatePrestige, updateTeamResources } from './regulations.js';
+import { advanceProjects, aiProjectPlan } from './projects.js';
 import { constructorStandings, driverStandings, rngFor, runWeekend, SEASON_WEEKS, seasonTotalsFor } from './season.js';
 import {
   aiTrainingPlan, applyTraining, clampPlan, MINIGAME_AUTO, minigameMultiplier,
   pickMinigame, trainingLimits,
 } from './training.js';
 import { entourageEfficiency } from './staff.js';
+import { isPlayerTeam, settleTeamSeason, teamCoaching } from './team.js';
 import { POINTS_FOR_TITLE, spendPointsAsAi } from './skills.js';
 
 /**
@@ -56,7 +55,6 @@ export function createWorld(opts: CreateWorldOptions): World {
     results: [],
     champions: [],
     lastMinigame: null,
-    offers: [],
   };
 
   for (const seed of TEAM_SEEDS) {
@@ -68,9 +66,10 @@ export function createWorld(opts: CreateWorldOptions): World {
       car: { ...seed.car },
       budget: seed.budget,
       prestige: seed.prestige,
+      cash: initialCash(seed.prestige),
       crew: { ...seed.crew },
       driverIds: [],
-      futureFocus: 0,
+      projects: [],
     };
     world.constructorStandings[seed.id] = 0;
   }
@@ -92,12 +91,38 @@ export function createWorld(opts: CreateWorldOptions): World {
   }
 
   intakeNewgens(world, rng, 6);
+
+  /*
+   * Qualche pilota già fatto, senza contratto.
+   *
+   * Senza questi, all'apertura del mondo tutti i sedili sono occupati e gli
+   * unici liberi sono i ragazzi dell'academy: una scuderia che nasce non
+   * avrebbe nessuna scelta da fare, solo giovani da prendere. Con loro la
+   * prima decisione vera esiste — un ventenne da far crescere, o un
+   * trentenne che porta punti subito e costa tutto il bilancio.
+   */
+  for (let i = 0; i < 5; i++) {
+    const d = createVeteran(
+      rng, POTENTIAL_ANCHOR + rng.normal() * 7, rng.int(26, 35),
+      `d${year}f${i}`, takenNames,
+    );
+    takenNames.add(d.name);
+    world.drivers[d.id] = d;
+    world.academy.push(d.id);
+  }
+
   return world;
 }
 
 export interface WeekOptions {
-  /** piano di allenamento del giocatore; se assente lo sceglie l'IA */
-  plan?: TrainingPlan;
+  /**
+   * I programmi settimanali dei piloti della tua scuderia, per id.
+   *
+   * Uno per pilota, non uno solo: gestire due monoposto vuol dire anche
+   * decidere che uno lavori al simulatore mentre l'altro sta in palestra, e
+   * un piano unico per tutti toglierebbe metà della decisione.
+   */
+  plans?: Record<string, TrainingPlan>;
   /** punteggio 0–1 nel minigioco; se assente vale l'allenamento automatico */
   minigameScore?: number;
   /**
@@ -117,9 +142,11 @@ export interface WeekReport {
   seasonOver: boolean;
 }
 
-/** Il pilota controllato dal giocatore, se la modalità è "pilota". */
-export function playerDriver(world: World) {
-  return world.seat.mode === 'pilota' ? world.drivers[world.seat.driverId] ?? null : null;
+/** Gli id dei piloti sotto contratto con la scuderia del giocatore. */
+function myDriverIds(world: World): Set<string> {
+  return new Set(world.seat.mode === 'scuderia'
+    ? world.teams[world.seat.teamId]?.driverIds ?? []
+    : []);
 }
 
 export interface DayReport {
@@ -150,7 +177,7 @@ function commitWeekWork(world: World, week: SeasonWeek | undefined, opts: WeekOp
   const kind: WeekKind = week?.kind ?? 'free';
   const capacity = week?.training ?? 0;
   const rng = rngFor(world, 'week');
-  const player = playerDriver(world);
+  const mine = myDriverIds(world);
   let minigame: MinigameKind | null = null;
 
   for (const d of Object.values(world.drivers)) {
@@ -160,27 +187,54 @@ function commitWeekWork(world: World, week: SeasonWeek | undefined, opts: WeekOp
       d.fatigue = Math.max(0, d.fatigue - WEEK_RECOVERY[kind]);
     }
     const limits = trainingLimits(d, capacity);
+    const team = d.teamId ? world.teams[d.teamId] : null;
+    const plan = mine.has(d.id) ? opts.plans?.[d.id] : undefined;
 
-    if (d === player && opts.plan) {
+    if (plan) {
       // Il piano sopravvive da una settimana all'altra, le capienze no: si
       // riporta dentro i limiti invece di rifiutarlo.
-      const plan = clampPlan(opts.plan, limits);
-      minigame = pickMinigame(plan, world.lastMinigame);
+      const clamped = clampPlan(plan, limits);
+      // Il minigioco è uno a settimana: se ne occupa il primo pilota che ne
+      // ha diritto, perché è una cosa che il giocatore gioca a mano e due
+      // alla settimana sarebbero un lavoro, non una scelta.
+      const game: MinigameKind | null = minigame ?? pickMinigame(clamped, world.lastMinigame);
       const mult = opts.minigameScore === undefined
         ? MINIGAME_AUTO
         : minigameMultiplier(opts.minigameScore);
-      applyTraining(d, plan, minigame ? mult : MINIGAME_AUTO, capacity);
+      applyTraining(
+        d, clamped, minigame === null && game ? mult : MINIGAME_AUTO, capacity,
+        team ? teamCoaching(team) : undefined,
+      );
+      if (minigame === null) minigame = game;
     } else {
-      const team = d.teamId ? world.teams[d.teamId] : null;
       applyTraining(
         d, aiTrainingPlan(d, limits, rng.next()), MINIGAME_AUTO, capacity,
-        entourageEfficiency(team?.prestige ?? 30),
+        team ? teamCoaching(team) : entourageEfficiency(30),
       );
     }
   }
 
   if (minigame) world.lastMinigame = minigame;
   return minigame;
+}
+
+/**
+ * Una settimana di lavoro dei reparti, per tutta la griglia.
+ *
+ * Le scuderie gestite dal computer aprono i loro progetti da sole: senza,
+ * la griglia resterebbe con la macchina del primo anno mentre il giocatore
+ * sviluppa, e in tre stagioni vincerebbe tutto senza aver deciso niente.
+ */
+function commitWeekFactory(world: World): void {
+  const order = constructorStandings(world).map((c) => c.teamId);
+  const rng = rngFor(world, 'reparti');
+
+  for (const team of Object.values(world.teams)) {
+    if (isPlayerTeam(world, team.id)) continue;
+    aiProjectPlan(world, team, rng);
+  }
+
+  advanceProjects(world, order, rng);
 }
 
 /** Sposta il cursore di un giorno, cambiando settimana quando serve. */
@@ -204,10 +258,17 @@ export function advanceDay(world: World, opts: WeekOptions = {}): DayReport {
   const week = world.schedule[world.week];
   const trackId = week?.trackId ?? null;
   const day = world.dayOfWeek;
-  const activities = week ? weekActivities(week, opts.plan ?? null)[day] ?? [] : [];
+  // Il riassunto della giornata mostra il programma del primo pilota: è
+  // quello che il calendario ha lo spazio per dire.
+  const firstPlan = Object.values(opts.plans ?? {})[0] ?? null;
+  const activities = week ? weekActivities(week, firstPlan)[day] ?? [] : [];
 
   const trainingApplied = day === commitDay(week?.training ?? 0);
-  const minigame = trainingApplied ? commitWeekWork(world, week, opts) : null;
+  let minigame: MinigameKind | null = null;
+  if (trainingApplied) {
+    minigame = commitWeekWork(world, week, opts);
+    commitWeekFactory(world);
+  }
 
   const raceToday = trackId !== null && day === RACE_DAY;
   if (raceToday && opts.deferRace) {
@@ -307,9 +368,7 @@ export function endSeason(world: World): SeasonSummary {
     championDriver.career.titles += 1;
     // Un titolo insegna quanto mezzo ramo dell'albero.
     championDriver.skillPoints += POINTS_FOR_TITLE;
-    if (championDriver.id !== (world.seat.mode === 'pilota' ? world.seat.driverId : null)) {
-      spendPointsAsAi(championDriver);
-    }
+    if (!myDriverIds(world).has(championDriver.id)) spendPointsAsAi(championDriver);
     world.champions.push({ year: world.year, driverId: championDriver.id, teamId: championTeamId });
   }
 
@@ -345,7 +404,7 @@ export function endSeason(world: World): SeasonSummary {
   const newgens = Math.max(3, retired.length + rng.int(0, 2));
   intakeNewgens(world, rng, newgens);
   runTransferMarket(world, rng);
-  developCars(world, rng, standingOrder);
+  for (const team of Object.values(world.teams)) settleTeamSeason(world, team, standingOrder);
 
   world.year += 1;
   const regulationReset = maybeReset(world, rng);
@@ -368,16 +427,6 @@ export function endSeason(world: World): SeasonSummary {
     newgens,
     regulationReset,
   };
-}
-
-/**
- * Accetta una delle offerte in attesa. Finché ce ne sono il sedile del
- * giocatore resta vuoto, quindi questa è l'unica via per ripartire.
- */
-export function takeOffer(world: World, teamId: string): boolean {
-  const offer = world.offers.find((o) => o.teamId === teamId);
-  if (!offer) return false;
-  return marketAcceptOffer(world, offer, rngFor(world, `offer:${teamId}`));
 }
 
 /** Corre una stagione intera senza input del giocatore. */

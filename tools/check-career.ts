@@ -1,145 +1,127 @@
 /**
- * La carriera del giocatore, misurata contro i campionati veri.
+ * La carriera di un pilota, misurata contro i campionati veri.
  *
- * Simula sessanta carriere di otto stagioni e confronta la curva che ne esce
- * con i limiti di `careerCurve.ts`, che vengono dallo storico dei mondiali.
- * Serve a tenere ferma una promessa precisa: chi comincia una carriera non
- * resta in coda per sempre, e l'allenamento e l'esperienza si vedono.
+ * Il gioco non ha più una Modalità Pilota, ma i piloti crescono ancora — è
+ * metà di quello che una scuderia compra quando ingaggia un giovane. Questa
+ * sonda verifica che la forma di una carriera nel mondo simulato assomigli a
+ * quella dei mondiali veri, con lo **stesso metodo** con cui i dati sono stati
+ * estratti da Supabase: una coorte fissa di piloti che hanno corso almeno otto
+ * stagioni, seguiti uno per uno.
+ *
+ * Seguire una coorte fissa è il punto. La media di tutti i piloti migliora da
+ * sola perché i peggiori smettono, e misurarla vorrebbe dire scambiare la
+ * selezione per crescita — l'errore che i dati veri mostravano e che qui
+ * sarebbe altrettanto facile ripetere.
  *
  *   npm run check:career
  */
-import { advanceWeek, endSeason, takeOffer } from '../src/engine/world.js';
-import { overall, potentialOverall } from '../src/engine/driver.js';
-import { startCareer } from '../src/engine/career.js';
+import { createWorld, endSeason } from '../src/engine/world.js';
 import { SEASON_WEEKS } from '../src/engine/calendar.js';
+import { advanceWeek } from '../src/engine/world.js';
 import { driverStandings } from '../src/engine/season.js';
-import { spendPointsAsAi } from '../src/engine/skills.js';
+import { overall } from '../src/engine/driver.js';
 import { CAREER_BOUNDS, CAREER_PERCENTILE } from '../src/engine/careerCurve.js';
-import type { TrainingCategory, TrainingPlan } from '../src/engine/types.js';
 
-const CAREERS = 60;
-const SEASONS = 8;
+const WORLDS = 6;
+const YEARS = 16;
+/** Quante stagioni deve aver corso un pilota per entrare nella coorte. */
+const MIN_SEASONS = 8;
 
-/**
- * Il giocatore di riferimento: ruota le tre categorie che allenano attributi.
- *
- * Non è un dettaglio della sonda. Un piano fisso su una sola categoria lascia
- * fermo il 34% dell'overall — gomme, freddezza, partenze, bagnato non si
- * allenano al simulatore — e misurarlo così faceva sembrare la crescita
- * bloccata quando invece era solo squilibrata.
- */
-const ROTATION: readonly TrainingCategory[] = ['simulator', 'fitness', 'engineering'];
+const percentile: number[][] = Array.from({ length: MIN_SEASONS }, () => []);
+const ability: number[][] = Array.from({ length: MIN_SEASONS }, () => []);
+const improved: number[][] = Array.from({ length: MIN_SEASONS - 1 }, () => []);
 
-const pct: number[][] = Array.from({ length: SEASONS }, () => []);
-const prestige: number[][] = Array.from({ length: SEASONS }, () => []);
-const ovr: number[][] = Array.from({ length: SEASONS }, () => []);
-const tail: number[][] = Array.from({ length: SEASONS }, () => []);
-const start: number[] = [];
-const potential: number[] = [];
+for (let w = 0; w < WORLDS; w++) {
+  const world = createWorld({ seed: 4000 + w });
 
-for (let i = 0; i < CAREERS; i++) {
-  const world = startCareer({
-    seed: 1000 + i, name: 'Prova', nationality: 'ITA',
-  });
-  const id = world.seat.mode === 'pilota' ? world.seat.driverId : '';
-  start.push(overall(world.drivers[id]!.attrs));
-  potential.push(potentialOverall(world.drivers[id]!));
+  /** id → percentile e overall di ogni sua stagione, in ordine. */
+  const career = new Map<string, { pct: number; ovr: number }[]>();
 
-  for (let s = 0; s < SEASONS; s++) {
-    while (world.week < SEASON_WEEKS) {
-      const plan: TrainingPlan = { simulator: 0, fitness: 0, engineering: 0, media: 0 };
-      plan[ROTATION[world.week % ROTATION.length]!] = 4;
-      advanceWeek(world, { plan });
-    }
-    // Il giocatore spende i punti abilità come li spendono i piloti IA:
-    // misurare un giocatore che non usa l'albero misura un altro gioco.
-    spendPointsAsAi(world.drivers[id]!);
+  for (let year = 0; year < YEARS; year++) {
+    while (world.week < SEASON_WEEKS) advanceWeek(world);
 
     const table = driverStandings(world);
-    const pos = table.findIndex((r) => r.driverId === id) + 1;
-    const me = world.drivers[id]!;
-    if (pos > 0) {
-      pct[s]!.push(pos / table.length);
-      tail[s]!.push(pos >= table.length - 1 ? 1 : 0);
+    for (const row of table) {
+      const d = world.drivers[row.driverId];
+      // Chi non ha corso non ha una stagione da registrare: a fine anno il
+      // sedile ce l'ha solo chi era in griglia.
+      if (!d || !d.teamId || d.retired) continue;
+      const seasons = career.get(d.id) ?? [];
+      seasons.push({ pct: row.position / table.length, ovr: overall(d.attrs) });
+      career.set(d.id, seasons);
     }
-    prestige[s]!.push(me.teamId ? world.teams[me.teamId]!.prestige : 0);
-    ovr[s]!.push(overall(me.attrs));
 
     endSeason(world);
-    // Firma per la squadra migliore fra quelle che lo vogliono: le offerte
-    // arrivano ordinate per interesse, e l'interesse è massimo proprio dove
-    // il prestigio è minimo.
-    const best = [...(world.offers ?? [])]
-      .sort((a, b) => world.teams[b.teamId]!.prestige - world.teams[a.teamId]!.prestige)[0];
-    if (best) takeOffer(world, best.teamId);
+  }
+
+  // La coorte: solo chi è arrivato a otto stagioni, e solo le sue prime otto.
+  for (const seasons of career.values()) {
+    if (seasons.length < MIN_SEASONS) continue;
+    for (let s = 0; s < MIN_SEASONS; s++) {
+      percentile[s]!.push(seasons[s]!.pct);
+      ability[s]!.push(seasons[s]!.ovr);
+      if (s > 0) improved[s - 1]!.push(seasons[s]!.pct < seasons[s - 1]!.pct ? 1 : 0);
+    }
   }
 }
 
-const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
+const avg = (a: number[]) => (a.length > 0 ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
+const at = (rows: number[][], s: number) => avg(rows[s - 1]!);
 
-const improvement: number[] = [];
-for (let s = 1; s < SEASONS; s++) {
-  let better = 0;
-  const n = Math.min(pct[s]!.length, pct[s - 1]!.length);
-  for (let i = 0; i < n; i++) if (pct[s]![i]! < pct[s - 1]![i]!) better += 1;
-  improvement.push(n > 0 ? better / n : NaN);
-}
-
-console.log(`${CAREERS} carriere × ${SEASONS} stagioni`);
-console.log('');
-console.log('st   gioco   reale   prestigio   overall   ultimi due');
-for (let s = 0; s < SEASONS; s++) {
+const cohort = percentile[0]!.length;
+console.log(`${WORLDS} mondi × ${YEARS} stagioni — coorte di ${cohort} piloti con almeno ${MIN_SEASONS} stagioni\n`);
+console.log('st   gioco   reale   overall   migliora');
+for (let s = 0; s < MIN_SEASONS; s++) {
+  const rate = s > 0 ? `${(100 * avg(improved[s - 1]!)).toFixed(0)}%` : '—';
   console.log(
-    ` ${s + 1}   ${avg(pct[s]!).toFixed(3)}   ${CAREER_PERCENTILE[s]!.toFixed(3)}` +
-    `       ${avg(prestige[s]!).toFixed(0)}      ${avg(ovr[s]!).toFixed(1)}` +
-    `        ${(100 * avg(tail[s]!)).toFixed(0)}%`,
+    ` ${s + 1}   ${avg(percentile[s]!).toFixed(3)}   ${CAREER_PERCENTILE[s]!.toFixed(3)}` +
+    `    ${avg(ability[s]!).toFixed(1)}      ${rate}`,
   );
 }
-console.log('');
-console.log(`overall alla partenza ${avg(start).toFixed(1)} → ${avg(ovr[SEASONS - 1]!).toFixed(1)}` +
-  `  (potenziale ${avg(potential).toFixed(1)})`);
-console.log(`si migliora nel ${(100 * avg(improvement)).toFixed(0)}% dei passaggi di stagione` +
-  ` (reale: 52%, primo passaggio 63%)`);
 console.log('');
 
 const problems: string[] = [];
 const check = (ok: boolean, msg: string) => { if (!ok) problems.push(msg); };
 
-const s1 = avg(pct[0]!);
-const s8 = avg(pct[SEASONS - 1]!);
-check(s1 >= CAREER_BOUNDS.season1[0] && s1 <= CAREER_BOUNDS.season1[1],
-  `prima stagione ${s1.toFixed(3)} fuori da ${CAREER_BOUNDS.season1.join('–')}`);
-check(s8 >= CAREER_BOUNDS.season8[0] && s8 <= CAREER_BOUNDS.season8[1],
-  `ottava stagione ${s8.toFixed(3)} fuori da ${CAREER_BOUNDS.season8.join('–')}`);
-check(s1 - avg(pct[1]!) >= CAREER_BOUNDS.minFirstStep,
-  `il gradino fra prima e seconda stagione è ${(s1 - avg(pct[1]!)).toFixed(3)},` +
+check(cohort >= 20, `la coorte è di soli ${cohort} piloti: la misura non è affidabile`);
+
+// Il gradino più grande è il primo: è il fatto più netto dei dati veri, il
+// 63% di piloti che migliorano fra la prima e la seconda stagione contro il
+// 52% di tutte le altre.
+const firstStep = at(percentile, 1) - at(percentile, 2);
+check(firstStep >= CAREER_BOUNDS.minFirstStep,
+  `il gradino fra prima e seconda stagione è ${firstStep.toFixed(3)},` +
   ` sotto ${CAREER_BOUNDS.minFirstStep}`);
+// Il vincolo vero: il primo gradino è il più grande di tutti.
+const steps = Array.from({ length: MIN_SEASONS - 1 },
+  (_, i) => at(percentile, i + 1) - at(percentile, i + 2));
+check(steps.every((step, i) => i === 0 || step <= steps[0]!),
+  'il gradino fra prima e seconda stagione non è il più grande della carriera');
+check(at(improved, 1) > at(improved, 4),
+  'migliorare alla seconda stagione non è più probabile che a metà carriera');
 
-const gain = avg(ovr[SEASONS - 1]!) - avg(start);
-check(gain >= CAREER_BOUNDS.minOverallGain,
-  `l'overall cresce di ${gain.toFixed(1)} punti, sotto ${CAREER_BOUNDS.minOverallGain}`);
+// Si migliora, e poi si smette: il picco dei dati veri è alla sesta stagione.
+check(at(percentile, 6) < at(percentile, 1),
+  'alla sesta stagione un pilota non è andato avanti rispetto al debutto');
 
-const rate = avg(improvement);
+// L'abilità cresce in modo affidabile, la posizione no. È la regola di
+// progetto del gioco, ed è quella che va verificata per prima.
+for (let s = 2; s <= MIN_SEASONS; s++) {
+  check(at(ability, s) >= at(ability, s - 1) - 0.4,
+    `l'overall medio cala fra la stagione ${s - 1} e la ${s}: allenarsi non paga`);
+}
+check(at(ability, MIN_SEASONS) - at(ability, 1) >= CAREER_BOUNDS.minOverallGain,
+  `in otto stagioni l'overall cresce di ${(at(ability, MIN_SEASONS) - at(ability, 1)).toFixed(1)}` +
+  ' punti soli: la crescita non si vede');
+
+// E la posizione resta incerta, come nella realtà.
+const rate = avg(improved.map(avg));
 check(rate >= CAREER_BOUNDS.improvementRate[0] && rate <= CAREER_BOUNDS.improvementRate[1],
   `si migliora nel ${(100 * rate).toFixed(0)}% dei passaggi,` +
   ` fuori da ${CAREER_BOUNDS.improvementRate.map((x) => `${100 * x}%`).join('–')}`);
 
-for (let s = 1; s < SEASONS; s++) {
-  check(avg(tail[s]!) <= CAREER_BOUNDS.maxTailRate,
-    `alla stagione ${s + 1} si chiude negli ultimi due posti nel` +
-    ` ${(100 * avg(tail[s]!)).toFixed(0)}% dei casi`);
-}
-
-// La carriera deve migliorare, non oscillare: dalla seconda stagione in poi
-// nessuna deve essere peggiore di due stagioni prima.
-for (let s = 3; s < SEASONS; s++) {
-  check(avg(pct[s]!) <= avg(pct[s - 2]!),
-    `la stagione ${s + 1} (${avg(pct[s]!).toFixed(3)}) va peggio della` +
-    ` ${s - 1} (${avg(pct[s - 2]!).toFixed(3)})`);
-}
-
 if (problems.length === 0) {
-  console.log('ok — la curva di carriera sta dentro i limiti misurati sui mondiali veri');
+  console.log('ok — la carriera ha la forma di quelle vere');
 } else {
   for (const p of problems) console.log(`  ✗ ${p}`);
   process.exitCode = 1;

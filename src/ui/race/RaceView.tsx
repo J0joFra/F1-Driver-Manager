@@ -44,7 +44,15 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
   const finished = useRef(false);
 
   const race = session?.race ?? null;
-  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
+  // Le tue due monoposto, e quella che stai guardando. Gestendo una scuderia
+  // non c'è «la tua macchina»: ce ne sono due, e la strategia si decide per
+  // ciascuna.
+  const myIds = world.seat.mode === 'scuderia'
+    ? world.teams[world.seat.teamId]?.driverIds ?? []
+    : [];
+  const focus = useGame((s) => s.selected);
+  const select = useGame((s) => s.select);
+  const playerId = myIds.includes(focus ?? '') ? focus : myIds[0] ?? null;
   const me = race && playerId ? carOf(race, playerId) ?? null : null;
 
   const rows = race ? order(race) : [];
@@ -163,6 +171,30 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
             </button>
           ))}
         </div>
+        {/* Le due monoposto: la strategia si decide per ciascuna, quindi da
+            qui si passa dall'una all'altra senza uscire dalla gara. */}
+        {myIds.length > 1 && (
+          <div className="flex gap-0.5">
+            {myIds.map((id, i) => {
+              const d = world.drivers[id];
+              const car = race ? carOf(race, id) : undefined;
+              const pos = car ? order(race!).indexOf(car) + 1 : 0;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  data-testid={`focus-car-${i}`}
+                  onClick={() => select(id)}
+                  className={`font-mono text-2xs px-2 py-1 rounded-sm border ${
+                    id === playerId ? 'bg-ink border-ink text-ground' : 'bg-panel2 border-line text-muted'
+                  }`}
+                >
+                  {(d?.name ?? '').split(' ').at(-1)}{pos > 0 ? ` P${pos}` : ''}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <button
           type="button"
           data-testid="skip-race"

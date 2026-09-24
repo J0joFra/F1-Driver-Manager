@@ -52,35 +52,34 @@ export const IMPROVEMENT_RATE = [0.63, 0.51, 0.52, 0.54, 0.53, 0.35] as const;
 /**
  * I limiti entro cui deve stare una carriera simulata.
  *
- * Non sono i numeri veri copiati: due differenze sono volute e vanno
- * spiegate, perché senza spiegazione sembrerebbero errori.
+ * Si misurano con lo stesso metodo dei dati veri — coorte fissa di piloti con
+ * almeno otto stagioni — ma su una coorte che nel gioco è **più selezionata**
+ * di quella reale: arrivano a otto stagioni i piloti che il mercato ha tenuto
+ * in griglia, cioè i migliori. Partono quindi più in alto della coorte vera
+ * (0.47 contro 0.634) e non calano alla fine, perché a otto stagioni dal
+ * debutto hanno ventisette anni e sono nel loro momento migliore, mentre la
+ * coorte vera contiene anche chi ha debuttato a trenta.
  *
- * 1. **La prima stagione è più dura del vero** (il gioco sta sopra 0.75, la
- *    realtà a 0.634). Una carriera comincia sempre sul sedile della scuderia
- *    meno prestigiosa; la coorte vera contiene esordienti entrati ovunque,
- *    anche in macchine da podio.
- * 2. **Le ultime stagioni sono migliori del vero** (il gioco sotto 0.40, la
- *    realtà risale a 0.415). Alla ottava stagione il pilota del gioco ha 26
- *    anni ed è nel suo momento migliore; la coorte vera a quel punto contiene
- *    anche chi ha debuttato a trent'anni ed è già in calo.
+ * Quello che deve combaciare è la **forma**, e in particolare due fatti che
+ * nei dati veri sono i più netti:
  *
- * Quello che deve combaciare è la **forma**: partenza netta, gradino grande
- * fra la prima e la seconda stagione, miglioramento che continua ma rallenta.
+ * 1. il gradino più grande di una carriera è sempre il primo;
+ * 2. dopo, migliorare è poco più di una monetina, perché il risultato in
+ *    pista lo decide soprattutto la macchina.
  */
 export const CAREER_BOUNDS = {
-  /** Il primo anno è duro, ma non è un anno perso. */
-  season1: [0.72, 0.95],
-  /** All'ottava stagione il pilota è nella metà alta, senza essere garantito campione. */
-  season8: [0.12, 0.42],
-  /** Il gradino più grande è sempre il primo. */
-  minFirstStep: 0.18,
-  /** Quanto overall guadagna dalla partenza all'ottava stagione, come minimo. */
-  minOverallGain: 12,
+  /**
+   * Quanto vale il primo gradino, in percentile.
+   *
+   * Il numero è basso perché la coorte del gioco parte già a metà griglia:
+   * non c'è lo spazio di recupero che ha un esordiente vero, che parte
+   * dietro. Il vincolo che conta davvero non è questa soglia ma il fatto che
+   * il primo gradino sia il più grande di tutti, e quello lo verifica
+   * `check:career` confrontandolo con gli altri.
+   */
+  minFirstStep: 0.08,
+  /** Quanto overall guadagna, come minimo, in otto stagioni. */
+  minOverallGain: 4,
   /** Quante volte si migliora, in media, da una stagione all'altra. */
   improvementRate: [0.45, 0.82],
-  /**
-   * Quanto spesso si chiude negli ultimi due posti, dalla seconda stagione in
-   * poi. È la misura del difetto originale: «finisce sempre ultimo».
-   */
-  maxTailRate: 0.08,
 } as const;
