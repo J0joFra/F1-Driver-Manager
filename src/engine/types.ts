@@ -166,6 +166,8 @@ export interface Team {
 /** Macro-area geografica: decide l'ordine delle tappe nel calendario. */
 export type Region = 'oceania' | 'asia' | 'middleEast' | 'europe' | 'americas';
 
+import type { SectorMix } from './layout.js';
+
 export interface Track {
   id: string;
   name: string;
@@ -173,9 +175,24 @@ export interface Track {
   /** tempo sul giro di riferimento in secondi per una macchina da 100 */
   baseLap: number;
   laps: number;
-  /** 0.6 = sorpassi facili, 0.25 = quasi impossibili */
+  /**
+   * La forma del giro: quanta parte in rettilineo, curve lente, medie e
+   * veloci. Le quattro frazioni sommano a uno, e da qui discendono il passo
+   * della monoposto, quello del pilota, i sorpassi e il degrado.
+   */
+  layout: SectorMix;
+  /**
+   * Quanto è larga la pista: 0 è un canyon fra i muretti, 1 una pista moderna
+   * dove ci stanno tre macchine affiancate. È un fatto del posto, non una
+   * manopola di bilanciamento, ed è la ragione vera per cui su un cittadino
+   * non si passa — non la velocità delle curve.
+   */
+  width: number;
+  /** zone DRS: aiutano a passare, ma solo dove ci sono rettilinei */
+  drsZones: number;
+  /** 0.6 = sorpassi facili, 0.25 = quasi impossibili — derivato dalla forma */
   overtaking: number;
-  /** moltiplicatore di degrado gomme */
+  /** moltiplicatore di degrado gomme — derivato dalla forma */
   tyreWear: number;
   /** probabilità di safety car per gara */
   safetyCar: number;

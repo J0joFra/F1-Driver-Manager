@@ -13,7 +13,7 @@ function field(): RaceEntry[] {
     driverId: `d${i}`, teamId: `t${i >> 1}`,
     carPace: 95 - i * 1.4, reliability: 92,
     speed: 90 - i, consistency: 88 - i * 0.8, tyres: 85 - i * 0.6,
-    starts: 80, wet: 75, composure: 82, pitCrew: 80, grid: i + 1,
+    starts: 80, wet: 75, composure: 82, technical: 78, pitCrew: 80, grid: i + 1,
   }));
 }
 

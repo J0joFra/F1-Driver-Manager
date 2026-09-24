@@ -16,10 +16,11 @@ export const DAY_STYLE: Record<DayKind, { chip: string; icon: LucideIcon }> = {
   race:       { chip: 'bg-aurora/25 text-aurora border-l-2 border-aurora', icon: Flag },
   qualifying: { chip: 'bg-nordvik/20 text-nordvik border-l-2 border-nordvik', icon: Timer },
   practice:   { chip: 'bg-solaro/18 text-solaro border-l-2 border-solaro', icon: Timer },
-  training:   { chip: 'bg-vantar/15 text-vantar', icon: Dumbbell },
+  training:   { chip: 'bg-vantar/12 text-vantar', icon: Dumbbell },
   test:       { chip: 'bg-panel3 text-muted', icon: Wrench },
   minigame:   { chip: 'bg-accent/15 text-accent', icon: Timer },
-  recovery:   { chip: 'bg-primary/15 text-primary', icon: HeartPulse },
+  // Non rosso: il rosso di marca significa «premi qui», non «riposa».
+  recovery:   { chip: 'bg-kestrel/15 text-kestrel', icon: HeartPulse },
   travel:     { chip: 'text-dim', icon: Plane },
   rest:       { chip: 'text-dim', icon: Bed },
   break:      { chip: 'bg-accent/10 text-accent/70', icon: Sun },

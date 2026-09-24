@@ -6,6 +6,7 @@ import {
   wearPerLap as tyreWearPerLap, type TyreState,
 } from './tyres.js';
 import { DRS_RANGE, overtakeChance as overtakeProbability } from './overtaking.js';
+import { driverInfluence, driverSkillOn, NEUTRAL_MIX } from './layout.js';
 import { driverErrorChance, mechanicalFailureChance, safetyCarChancePerLap } from './incidents.js';
 
 export { COMPOUND_PACE, COMPOUND_WEAR } from './tyres.js';
@@ -37,6 +38,8 @@ export interface RaceEntry {
   starts: number;
   wet: number;
   composure: number;
+  /** sensibilità tecnica: conta nelle curve lente, dove si guida di fino */
+  technical: number;
   /** qualità dei meccanici: incide sul tempo di sosta */
   pitCrew: number;
   grid: number;
@@ -55,11 +58,17 @@ export const MODE_PACE: Record<EngineMode, number> = { conserve: 0.45, normal: 0
 export const MODE_WEAR: Record<EngineMode, number> = { conserve: 0.7, normal: 1, push: 1.35 };
 
 /** Abilità del pilota pesata per le condizioni. */
-export function driverSkillOf(e: RaceEntry, wet: boolean): number {
-  return (
-    e.speed * 0.42 + e.consistency * 0.22 + e.tyres * 0.18 + e.composure * 0.1 +
-    (wet ? e.wet * 0.08 : e.speed * 0.08)
-  );
+/**
+ * Quanto vale il pilota su questo tracciato.
+ *
+ * Non è una media fissa dei suoi attributi: fra i muretti contano la
+ * sensibilità e la freddezza, in un curvone il coraggio, su un rettilineo
+ * quasi niente. `driverInfluence` dice inoltre quanta parte del giro è in
+ * mano sua: 0.62× su un tracciato di solo gas, 1.34× fra i tornanti.
+ */
+export function driverSkillOf(e: RaceEntry, wet: boolean, track?: Track): number {
+  const mix = track?.layout ?? NEUTRAL_MIX;
+  return driverSkillOn(e, mix, wet);
 }
 
 export interface LapContext {
@@ -84,7 +93,7 @@ export function lapTimeFor(e: RaceEntry, ctx: LapContext, rng: Rng): number {
   let t = track.baseLap;
   // La monoposto pesa circa il doppio del pilota: è la Formula 1, non i kart.
   t += (100 - e.carPace) * 0.092;
-  t += (100 - driverSkillOf(e, ctx.wet)) * 0.03;
+  t += (100 - driverSkillOf(e, ctx.wet, track)) * 0.03 * driverInfluence(track.layout);
   t += COMPOUND_PACE[ctx.tyre.compound];
   t += tyreLapPenalty(ctx.tyre, e.tyres, track);
   t += (track.laps - ctx.lap) * 0.046;

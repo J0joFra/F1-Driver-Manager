@@ -7,7 +7,7 @@ function entry(id: string, carPace: number, skill: number, grid: number): RaceEn
   return {
     driverId: id, teamId: `t-${id}`, carPace, reliability: 92,
     speed: skill, consistency: skill, tyres: skill, starts: skill,
-    wet: skill, composure: skill, pitCrew: 80, grid,
+    wet: skill, composure: skill, technical: skill, pitCrew: 80, grid,
   };
 }
 
