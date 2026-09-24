@@ -1,5 +1,6 @@
 import type { CarRating, World } from './types.js';
 import { skillEffects } from './skills.js';
+import { carPaceOn, NEUTRAL_MIX } from './layout.js';
 import { clamp, type Rng } from './rng.js';
 
 /**
@@ -13,8 +14,15 @@ import { clamp, type Rng } from './rng.js';
 
 export const CAR_KEYS = ['aero', 'engine', 'chassis', 'reliability'] as const;
 
+/**
+ * Quanto vale una monoposto in generale: il suo passo su un tracciato medio.
+ *
+ * Serve alle classifiche, allo sviluppo e all'interfaccia, dove «passo» deve
+ * restare un numero solo. In gara non si usa mai: lì conta `carPaceOn`, che
+ * pesa motore, ala e telaio secondo la forma del circuito.
+ */
 export function carPace(car: CarRating): number {
-  return car.aero * 0.38 + car.engine * 0.34 + car.chassis * 0.28;
+  return carPaceOn(car, NEUTRAL_MIX);
 }
 
 function meanCarPace(world: World): number {

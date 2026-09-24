@@ -23,6 +23,7 @@ con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 - [L'albero delle abilità](#lalbero-delle-abilità)
 - [Soldi e staff personale](#soldi-e-staff-personale)
 - [Il modello di gara](#il-modello-di-gara)
+- [La forma del circuito](#la-forma-del-circuito)
 - [Le regole che tengono in piedi il bilanciamento](#le-regole-che-tengono-in-piedi-il-bilanciamento)
 - [Struttura del progetto](#struttura-del-progetto)
 - [Comandi](#comandi)
@@ -52,7 +53,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 115 test
+npm test                      # 125 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -724,6 +725,76 @@ maggiori di uno. Una sigmoide sta sempre fra 0 e 1 e ha coefficienti che si
 leggono uno per uno: il distacco pesa più di tutto, poi il passo, poi la
 differenza di abilità; la difficoltà del circuito sottrae.
 
+## La forma del circuito
+
+In Formula 1 non esiste «la macchina più veloce»: esiste la macchina più
+veloce *su quel tracciato*. Monza premia la potenza, Monaco la trazione,
+Silverstone il carico aerodinamico. Finché il passo della monoposto è stato un
+numero solo, una scuderia che sviluppava l'ala andava forte ovunque, e il
+campionato perdeva la cosa che lo rende interessante — che certi circuiti
+stanno a pennello a certe macchine.
+
+Un tracciato è quindi descritto da **come si spende un giro**: quanta parte in
+rettilineo, quanta nelle curve lente, medie e veloci. Le quattro frazioni
+sommano a uno.
+
+```ts
+layout: { straight: 0.48, slow: 0.18, medium: 0.22, fast: 0.12 }   // di potenza
+layout: { straight: 0.16, slow: 0.48, medium: 0.28, fast: 0.08 }   // fra i muretti
+```
+
+Ogni tipo di settore ha un profilo — il rettilineo è quasi tutto motore, la
+curva veloce quasi tutta ala, la lenta soprattutto telaio — e i pesi di una
+monoposto sono la media pesata sui settori del giro. **Sommano sempre a uno**,
+quindi un tracciato non rende le macchine più veloci in assoluto: cambia solo
+*quale* macchina è veloce. Un test lo verifica: una monoposto media vale 80
+ovunque, ma una da 95 di motore guadagna sei punti di passo — mezzo secondo
+al giro — passando da Monaco a Monza.
+
+### Quattro numeri che ne eliminano due
+
+Sorpassi e degrado non si scrivono più a mano: **discendono dalla forma**.
+
+Erano due valori autorevoli per ogni circuito e potevano contraddire il
+tracciato che dicevano di descrivere — un circuito di soli rettilinei con i
+sorpassi impossibili. Ora la forma è il dato e quelli sono la conseguenza:
+cambiare la forma cambia tutto insieme, in modo coerente.
+
+| Quantità | Da cosa discende |
+|---|---|
+| **Sorpassi** | rettilinei (scia e staccata) e larghezza della pista, meno le curve medie in sequenza |
+| **Degrado gomme** | carico laterale: le curve veloci mangiano le gomme, i rettilinei no |
+| **Peso del pilota** | 0.62× su un tracciato di solo gas, 1.34× fra i tornanti |
+
+La **larghezza** è l'unico numero che ho aggiunto a mano, e ci è voluto un
+errore per capirlo: al primo tentativo avevo dedotto i sorpassi dalla sola
+forma, e i cittadini risultavano *facili* — hanno tante curve lente, cioè
+tante staccate. Ma la ragione vera per cui a Monaco non si passa non è la
+velocità delle curve: è che non c'è dove mettere la macchina. La larghezza è
+un fatto del posto, non una manopola di bilanciamento, ed entra come
+moltiplicatore: fra i muretti nemmeno il rettilineo più lungo basta.
+
+### L'errore che ha congelato il campionato
+
+La prima versione pesava gli attributi del pilota secondo la forma, e per
+farlo diluiva la velocità pura fra sensibilità tecnica e freddezza. Sembrava
+più ricco. In quarant'anni di simulazione una scuderia vinceva **trentasei
+titoli su quaranta**.
+
+Il motivo: nella griglia la velocità è l'attributo con più varianza, mentre
+sensibilità e freddezza si assomigliano molto fra piloti. Diluirla ha
+appiattito le differenze fra piloti, e quando il pilota non fa differenza
+decide solo la macchina — cioè vince sempre la stessa. Rimesso il peso della
+velocità dov'era, lo stesso seme è passato da 36 titoli a 14.
+
+La forma del tracciato deve **spostare** il peso, non appiattire le
+differenze. È una distinzione che si vede solo misurando, e un test la
+difende: su quattro forme diverse, la velocità resta sempre il guadagno
+maggiore, ma la sensibilità tecnica rende di più fra i muretti che in
+rettilineo.
+
+---
+
 ## La gara, due cadenze
 
 Un solo modello, due cadenze. `race.ts` definisce le formule — tempo sul giro,
@@ -797,6 +868,7 @@ engine/
   driver.ts         creazione, newgen, overall, curve di età, ritiro
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
+  layout.ts         la forma del giro: settori, pesi della monoposto, derivate
   roles.ts          quanto un pilota vale in ciascun mestiere del weekend
   skills.ts         l'albero delle abilità: nodi, punti, effetti
   days.ts           la settimana giorno per giorno: attività, giorno di bilancio
@@ -815,10 +887,10 @@ engine/
   season.ts         weekend, classifiche, aggregati storici
   world.ts          createWorld, advanceDay, advanceWeek, endSeason, simulateSeason
   data/
-    tracks.ts       31 circuiti di fantasia con regione, fuso e ora di partenza
+    tracks.ts       31 circuiti: forma del giro, larghezza, regione, fuso, orari
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              115 test: rng, curve e modelli, gara, gara live,
+tests/              125 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -866,7 +938,7 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 115 test
+npm test               # vitest, 125 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo

@@ -1,7 +1,7 @@
 import type { Driver, QualifyingResult, RaceResult, SeasonTotals, Track, WeekendResult, World } from './types.js';
 import { clamp, createRng, hashSeed, type Rng } from './rng.js';
 import { getTrack } from './data/tracks.js';
-import { carPace } from './regulations.js';
+import { carPaceOn } from './layout.js';
 import { simulateQualifying, simulateRace, type RaceEntry } from './race.js';
 import { RACE_FATIGUE } from './progression.js';
 import { pointsForRace, skillEffects, spendPointsAsAi } from './skills.js';
@@ -15,7 +15,15 @@ export function rngFor(world: World, label: string): Rng {
   return createRng(hashSeed(`${label}:${world.year}:${world.week}:${world.round}`, world.seed));
 }
 
-export function buildEntries(world: World): RaceEntry[] {
+/**
+ * Gli ingressi della gara, **per questo tracciato**.
+ *
+ * Il passo della monoposto non è un numero che la macchina si porta dietro:
+ * dipende da dove si corre. Una scuderia che ha sviluppato la potenza va
+ * forte dove ci sono rettilinei e fatica fra i muretti, ed è da qui che
+ * quella storia entra nel campionato.
+ */
+export function buildEntries(world: World, track: Track): RaceEntry[] {
   const entries: RaceEntry[] = [];
   for (const team of Object.values(world.teams)) {
     for (const driverId of team.driverIds) {
@@ -28,7 +36,7 @@ export function buildEntries(world: World): RaceEntry[] {
       entries.push({
         driverId: d.id,
         teamId: team.id,
-        carPace: carPace(team.car),
+        carPace: carPaceOn(team.car, track.layout),
         reliability: team.car.reliability,
         speed: clamp(d.attrs.speed + formShift, 1, 99),
         consistency: clamp(d.attrs.consistency + formShift, 1, 99),
@@ -36,6 +44,7 @@ export function buildEntries(world: World): RaceEntry[] {
         starts: clamp(d.attrs.starts + skills.start, 1, 99),
         wet: clamp(d.attrs.wet + skills.wet, 1, 99),
         composure: clamp(d.attrs.composure + (d.morale - 50) * 0.08, 1, 99),
+        technical: d.attrs.technical,
         pitCrew: team.crew.pitCrew,
         grid: 0,
         overtakeMod: skills.overtake,
@@ -65,7 +74,7 @@ export interface PreparedWeekend {
 export function prepareWeekend(world: World, trackId: string): PreparedWeekend {
   const track = getTrack(trackId);
   const rng = rngFor(world, `weekend:${trackId}`);
-  const entries = buildEntries(world);
+  const entries = buildEntries(world, track);
 
   const wet = rng.chance(track.rain);
   const qualifying = simulateQualifying(track, entries, rng, wet && rng.chance(0.5));

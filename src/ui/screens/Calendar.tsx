@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
 import { player } from '../../engine/selectors.js';
 import { getTrack, isNightRace } from '../../engine/data/tracks.js';
+import { layoutName, type SectorMix } from '../../engine/layout.js';
 import {
   formatDay, formatHour, formatShortDay, monthName, raceCountOf, raceHourInItaly,
   weekendDays, weekMonday, WEEK_LABEL,
@@ -28,6 +29,14 @@ const REGION_LABEL: Record<Region, string> = {
   europe: 'Europa',
   americas: 'Americhe',
 };
+
+/** Le quattro parti di un giro, dal veloce al lento. */
+const SECTOR_BARS: [keyof SectorMix, string, string][] = [
+  ['straight', 'bg-vantar', 'Rettilinei'],
+  ['fast', 'bg-kestrel', 'Curve veloci'],
+  ['medium', 'bg-mirage', 'Curve medie'],
+  ['slow', 'bg-aurora', 'Curve lente'],
+];
 
 const KIND_COLOUR: Record<WeekKind, string> = {
   testing: 'text-vantar',
@@ -254,8 +263,25 @@ function SidePanels({ world, current, me, totalRaces }: {
                   <div className="mt-2 pt-2 border-t border-line">
                     <div className="font-sans text-xs font-bold truncate">{track.name}</div>
                     <div className="font-mono text-2xs text-dim flex items-center gap-1">
-                      {REGION_LABEL[track.region]}
+                      {REGION_LABEL[track.region]} · {layoutName(track.layout)}
                       {isNightRace(track) && <Moon className="w-2.5 h-2.5 text-accent" strokeWidth={2} />}
+                    </div>
+                    {/* La forma del giro: dove si spende il tempo, e quindi
+                        che macchina serve. Quattro barre dicono più di un
+                        aggettivo. */}
+                    <div className="mt-1.5 flex gap-px h-[5px] rounded-sm overflow-hidden">
+                      {SECTOR_BARS.map(([key, colour, label]) => (
+                        <span
+                          key={key}
+                          title={`${label}: ${Math.round(track.layout[key] * 100)}% del giro`}
+                          className={colour}
+                          style={{ width: `${track.layout[key] * 100}%` }}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-1 flex justify-between font-mono text-[8px] text-dim">
+                      <span>{Math.round(track.layout.straight * 100)}% dritto</span>
+                      <span>{Math.round((track.layout.slow + track.layout.medium + track.layout.fast) * 100)}% curve</span>
                     </div>
                     <div className="mt-1.5 flex flex-col gap-[3px]">
                       {([
