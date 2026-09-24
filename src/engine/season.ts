@@ -77,7 +77,13 @@ export function prepareWeekend(world: World, trackId: string): PreparedWeekend {
   const entries = buildEntries(world, track);
 
   const wet = rng.chance(track.rain);
-  const qualifying = simulateQualifying(track, entries, rng, wet && rng.chance(0.5));
+  // Le tre decisioni del giocatore entrano da qui; per tutti gli altri le
+  // sceglie l'IA dentro `simulateQualifying`.
+  const playerId = world.seat.mode === 'pilota' ? world.seat.driverId : null;
+  const plans = playerId && world.qualifyingPlan
+    ? new Map([[playerId, world.qualifyingPlan]])
+    : undefined;
+  const qualifying = simulateQualifying(track, entries, rng, wet && rng.chance(0.5), plans);
   const gridById = new Map(qualifying.map((q) => [q.driverId, q.position]));
   for (const e of entries) e.grid = gridById.get(e.driverId) ?? entries.length;
 
@@ -150,6 +156,8 @@ export function commitWeekend(
   };
   world.results.push(result);
   world.round += 1;
+  // Le decisioni valgono per un weekend solo: il prossimo si ridecide.
+  world.qualifyingPlan = null;
   return result;
 }
 

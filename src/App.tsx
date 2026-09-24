@@ -4,6 +4,9 @@ import { OrientationGate } from './ui/shell/OrientationGate.js';
 import { Sidebar } from './ui/shell/Sidebar.js';
 import { TopBar } from './ui/shell/TopBar.js';
 import { Skills } from './ui/screens/Skills.js';
+import { Qualifying } from './ui/screens/Qualifying.js';
+import { isRaceWeek } from './engine/selectors.js';
+import { QUALIFYING_DAY } from './engine/days.js';
 import { NewGame } from './ui/screens/NewGame.js';
 import { Paddock } from './ui/screens/Paddock.js';
 import { Training } from './ui/screens/Training.js';
@@ -75,6 +78,28 @@ export function App() {
     return (
       <OrientationGate>
         <NewGame />
+      </OrientationGate>
+    );
+  }
+
+  /*
+   * Sabato di un weekend di gara il giocatore decide la qualifica prima di
+   * poter avanzare. Prende lo schermo come la gara: sono decisioni, non una
+   * scheda da consultare, e lasciarle in un angolo le renderebbe saltabili.
+   */
+  if (
+    world.seat.mode === 'pilota' && !pendingRace && !offersOpen
+    && isRaceWeek(world) && world.dayOfWeek === QUALIFYING_DAY
+    && world.qualifyingPlan === null
+  ) {
+    return (
+      <OrientationGate>
+        <div className="h-full flex flex-col bg-ground">
+          <TopBar onAdvance={onAdvance} onSkip={onSkip} busy={busy} />
+          <main className="flex-1 min-h-0 p-2">
+            <Qualifying onDone={onAdvance} />
+          </main>
+        </div>
       </OrientationGate>
     );
   }

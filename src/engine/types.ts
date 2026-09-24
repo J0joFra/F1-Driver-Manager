@@ -167,6 +167,7 @@ export interface Team {
 export type Region = 'oceania' | 'asia' | 'middleEast' | 'europe' | 'americas';
 
 import type { SectorMix } from './layout.js';
+import type { QualifyingPlan } from './qualifying.js';
 
 export interface Track {
   id: string;
@@ -219,6 +220,10 @@ export interface RaceResult {
 }
 
 export interface QualifyingResult {
+  /** cosa è successo nel giro, dalle tre decisioni */
+  note?: string;
+  /** usura con cui si parte in gara, lasciata dal giro di lancio */
+  startWear?: number;
   driverId: string;
   position: number;
   lapTime: number;
@@ -264,6 +269,8 @@ export interface World {
   week: number;
   /** giorno della settimana corrente, 0 = lunedì */
   dayOfWeek: number;
+  /** le tre decisioni scelte dal giocatore per la qualifica di sabato */
+  qualifyingPlan: QualifyingPlan | null;
   /** gare già corse quest'anno */
   round: number;
   drivers: Record<string, Driver>;

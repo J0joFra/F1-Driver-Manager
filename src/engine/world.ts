@@ -42,6 +42,7 @@ export function createWorld(opts: CreateWorldOptions): World {
     year,
     week: 0,
     dayOfWeek: 0,
+    qualifyingPlan: null,
     round: 0,
     drivers: {},
     teams: {},

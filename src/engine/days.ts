@@ -21,6 +21,9 @@ export const DAYS_IN_WEEK = 7;
 /** La domenica: il giorno della gara. */
 export const RACE_DAY = 6;
 
+/** Il sabato: il giorno della qualifica. */
+export const QUALIFYING_DAY = 5;
+
 export const WEEKDAY_NAMES = [
   'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica',
 ] as const;

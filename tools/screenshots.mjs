@@ -93,8 +93,16 @@ for (const [screen, file] of [
 }
 
 // Avanza fino alla prima gara. Il tempo scorre a giorni, quindi si usa il
-// salto al weekend finché c'è, e gli ultimi giorni uno alla volta.
+// salto al weekend finché c'è, e gli ultimi giorni uno alla volta. Sabato la
+// qualifica prende lo schermo: si decide e si va avanti.
 for (let i = 0; i < 40; i++) {
+  if (await page.locator('[data-testid=go-qualifying]').count()) {
+    await shot('09b-qualifica');
+    await noVerticalScroll('qualifica');
+    await page.click('[data-testid=go-qualifying]');
+    await page.waitForTimeout(250);
+    continue;
+  }
   if (await page.locator('[data-testid=go-racing]').count()) break;
   const skip = page.locator('[data-testid=skip]');
   if (await skip.count()) await skip.click({ timeout: 4000 });
@@ -109,7 +117,7 @@ await page.waitForTimeout(2500);
 await shot('11-gara');
 await noVerticalScroll('gara');
 
-await page.click('button:has-text("4×")');
+await page.click('button:has-text("2×")');
 await page.waitForTimeout(2500);
 await shot('12-gara-veloce');
 

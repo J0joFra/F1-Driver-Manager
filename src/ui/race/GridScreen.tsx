@@ -30,6 +30,7 @@ export function GridScreen() {
   const me = playerId ? carOf(race, playerId) : undefined;
   const myGrid = prepared.qualifying.find((q) => q.driverId === playerId)?.position ?? 0;
   const pole = prepared.qualifying[0];
+  const myNote = prepared.qualifying.find((q) => q.driverId === playerId)?.note ?? null;
 
   const choose = (c: Compound) => {
     setCompound(c);
@@ -88,6 +89,15 @@ export function GridScreen() {
             Parti {myGrid ? `P${myGrid}` : '—'} su {prepared.qualifying.length}
             {prepared.wet && ' · pista bagnata'}
           </div>
+          {/* L'esito delle tre decisioni di sabato: senza questo il giocatore
+              sceglie al buio e non impara mai cosa gli è costato cosa. */}
+          {myNote && (
+            <div className={`font-mono text-2xs mt-1.5 ${
+              myNote.includes('compromesso') ? 'text-bad' : 'text-kestrel'}`}
+            >
+              {myNote}
+            </div>
+          )}
         </div>
 
         <div className="panel p-3 flex-1 min-h-0">
