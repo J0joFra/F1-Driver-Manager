@@ -103,6 +103,17 @@ export function migrateWorld(raw: unknown): World | null {
       driver.skillPoints = Math.floor((driver.career?.starts ?? 0) / 5)
         + (driver.career?.podiums ?? 0) + (driver.career?.wins ?? 0) * 2;
     }
+    // La crescita mostrata nel profilo ha bisogno di un punto di partenza.
+    // Un salvataggio vecchio non ce l'ha: si parte da dove il pilota è
+    // adesso, così la prima stagione dopo l'aggiornamento mostra zero invece
+    // di un guadagno inventato.
+    if (!driver.seasonStartAttrs) driver.seasonStartAttrs = { ...driver.attrs };
+    // Stesso discorso per le stagioni già archiviate: l'overall di allora non
+    // è ricostruibile, e zero sarebbe un grafico che crolla. Si omette il
+    // punto, e la curva parte da quando il dato esiste.
+    for (const season of driver.history) {
+      if (typeof season.overall !== 'number') season.overall = 0;
+    }
     if (typeof driver.experience !== 'number') {
       // Si stima dalle gare già disputate, così un veterano non riparte da
       // zero: l'esperienza è ciò che lo tiene competitivo.

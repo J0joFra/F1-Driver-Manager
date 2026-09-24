@@ -70,6 +70,7 @@ export function DriverScreen() {
           <Panel key={column.title} title={column.title} bodyClass="p-0 scroll-y">
             {column.keys.map((key) => (
               <AttrCell key={key} label={ATTR_LABELS[key]!} value={me.attrs[key]} cap={me.caps[key]}
+                since={me.seasonStartAttrs?.[key] ?? me.attrs[key]}
                 colour={ATTRIBUTE_COLOURS[key]} />
             ))}
           </Panel>
@@ -87,9 +88,10 @@ export function DriverScreen() {
         </Panel>
       </div>
 
-      <div className="h-[86px] shrink-0 grid grid-cols-[1fr_1fr_1fr_2fr] gap-2">
+      <div className="h-[86px] shrink-0 grid grid-cols-[0.85fr_0.85fr_1fr_1.35fr_1.75fr] gap-2">
         <Gauge label="Morale" value={me.morale} hint={moodOf(me.morale)} />
         <Gauge label="Condizione" value={100 - me.fatigue} hint={fitnessOf(me.fatigue)} invert />
+        <Growth me={me} year={world.year} />
         <Panel title="Forma" bodyClass="p-2">
           <div className="flex gap-1 items-end h-[26px]">
             {raced.slice(-5).map((r, i) => (
@@ -124,12 +126,70 @@ export function DriverScreen() {
   );
 }
 
+/**
+ * La crescita, stagione per stagione.
+ *
+ * È la risposta a una domanda che il gioco non sapeva dare: **sto
+ * migliorando?** Allenarsi rende due decimi a settimana, e in una schermata
+ * che mostra solo il valore di adesso quel lavoro è invisibile. Qui ogni
+ * colonna è una stagione chiusa, l'ultima è quella in corso, e l'altezza è
+ * l'overall di fine anno.
+ *
+ * ## La scala è quella dei dati, non quella del potenziale
+ *
+ * La prima versione scalava le colonne fra la stagione peggiore e il tetto, e
+ * non funzionava: il tetto di un giovane sta venti punti sopra dove si trova,
+ * quindi ogni colonna restava schiacciata in fondo al pannello e una carriera
+ * intera sembrava piatta. Qui la scala è quella delle stagioni che ci sono,
+ * allargata di poco — è la **differenza fra un anno e l'altro** che va letta,
+ * e il potenziale è già scritto nell'intestazione.
+ *
+ * Le stagioni archiviate prima che il gioco registrasse l'overall hanno 0 e
+ * vengono saltate: meglio una curva che comincia tardi di una che finge un
+ * crollo che non c'è mai stato.
+ */
+function Growth({ me, year }: { me: Driver; year: number }) {
+  const now = overall(me.attrs);
+  const past = me.history.filter((h) => h.overall > 0).slice(-7);
+  const points = [...past.map((h) => ({ year: h.year, value: h.overall, done: true })),
+    { year, value: now, done: false }];
+
+  const values = points.map((p) => p.value);
+  const low = Math.min(...values) - 1.5;
+  const span = Math.max(1.5, Math.max(...values) + 0.5 - low);
+
+  const sinceStart = now - overall(me.seasonStartAttrs ?? me.attrs);
+  const career = points.length > 1 ? now - points[0]!.value : sinceStart;
+  const sign = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}`;
+
+  return (
+    <Panel title="Crescita" tag={points.length > 1 ? sign(career) : ''} bodyClass="p-2">
+      <div className="flex gap-[3px] items-end h-[26px]">
+        {points.map((p) => (
+          <span
+            key={p.year}
+            title={`${p.year}: overall ${p.value.toFixed(1)}`}
+            className={`flex-1 rounded-sm ${p.done ? 'bg-primary/40' : 'bg-primary'}`}
+            style={{ height: `${Math.max(18, ((p.value - low) / span) * 100)}%` }}
+          />
+        ))}
+      </div>
+      <p className="font-mono text-[8px] text-dim mt-1 truncate">
+        {points.length > 1
+          ? `${sign(sinceStart)} quest\u2019anno \u00b7 ${points.length} stagioni`
+          : `${sign(sinceStart)} da inizio stagione`}
+      </p>
+    </Panel>
+  );
+}
+
 /** La fascia d'intestazione: tutto quello che identifica il pilota, su una riga. */
 function Header({ me, teamName, colour, onSkills }: {
   me: Driver; teamName: string; colour: string; onSkills: () => void;
 }) {
   const now = Math.round(overall(me.attrs));
   const peak = Math.round(overall(me.caps));
+  const gain = overall(me.attrs) - overall(me.seasonStartAttrs ?? me.attrs);
   return (
     <div className="shrink-0 panel flex items-center gap-3 px-3 py-2"
       style={{ borderLeft: `3px solid ${colour}` }}
@@ -160,7 +220,7 @@ function Header({ me, teamName, colour, onSkills }: {
       </button>
       <div className="w-px self-stretch bg-line" />
 
-      <HeaderStat label="Overall" value={now} tone="text-ink" />
+      <HeaderStat label="Overall" value={now} tone="text-ink" gain={gain} />
       <HeaderStat label="Potenziale" value={peak} tone="text-primary" />
       <div className="w-px self-stretch bg-line" />
       <HeaderStat label="Titoli" value={me.career.titles} tone="text-accent" />
@@ -171,35 +231,74 @@ function Header({ me, teamName, colour, onSkills }: {
   );
 }
 
-function HeaderStat({ label, value, tone }: { label: string; value: number; tone: string }) {
+function HeaderStat({ label, value, tone, gain }: {
+  label: string; value: number; tone: string; gain?: number;
+}) {
   return (
     <div className="text-center px-1.5">
-      <div className={`font-display text-xl font-bold leading-none tnum ${tone}`}>{value}</div>
+      <div className={`font-display text-xl font-bold leading-none tnum ${tone}`}>
+        {value}
+        {/* Il guadagno della stagione sta attaccato al numero che è cresciuto,
+            non in una riga a parte: è così che si legge come una variazione. */}
+        {gain !== undefined && gain >= 0.05 && (
+          <span className="font-mono text-[9px] font-normal text-good align-super ml-px tnum">
+            +{gain.toFixed(1)}
+          </span>
+        )}
+      </div>
       <div className="field-label mt-0.5">{label}</div>
     </div>
   );
 }
 
 /**
- * Una riga di attributo: nome, barra, valore, e il tetto come tacca.
+ * Una riga di attributo: nome, barra, valore, il tetto come tacca e quanto è
+ * cresciuto quest'anno.
  *
  * Il potenziale non è un numero accanto ma un segno sulla barra: quanto manca
  * si vede senza sottrarre, ed è quello che guida ogni scelta di allenamento.
+ *
+ * La crescita è il tratto più chiaro della barra, non solo il `+1.8` scritto
+ * accanto. Un guadagno settimanale è di due decimi: scritto com'è, è un
+ * numero che non si muove mai e che nessuno guarda. Disegnato come il pezzo
+ * di barra che si è aggiunto da marzo, si vede a colpo d'occhio **dove** è
+ * andato il lavoro dell'anno — ed è esattamente la domanda che ci si fa
+ * guardando questa schermata.
  */
-function AttrCell({ label, value, cap, colour }: {
-  label: string; value: number; cap: number; colour: string;
+function AttrCell({ label, value, cap, since, colour }: {
+  label: string; value: number; cap: number; since: number; colour: string;
 }) {
+  const gain = value - since;
+  const grown = gain >= 0.05;
   return (
     <div className="px-2.5 py-[7px] border-b border-line/60 last:border-0">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-sans text-2xs text-ink truncate">{label}</span>
-        <span className="font-mono text-xs font-bold tnum" style={{ color: colour }}>
-          {Math.round(value)}
+        <span className="flex items-baseline gap-1 shrink-0">
+          {grown && (
+            <span className="font-mono text-[8.5px] text-good tnum">
+              +{gain.toFixed(1)}
+            </span>
+          )}
+          {gain <= -0.05 && (
+            <span className="font-mono text-[8.5px] text-bad tnum">
+              {gain.toFixed(1)}
+            </span>
+          )}
+          <span className="font-mono text-xs font-bold tnum" style={{ color: colour }}>
+            {Math.round(value)}
+          </span>
         </span>
       </div>
       <div className="relative mt-1 h-[5px] rounded-sm bg-panel3 overflow-hidden">
+        {/* Dove era a inizio stagione: pieno. */}
         <div className="absolute inset-y-0 left-0 rounded-sm"
-          style={{ width: `${value}%`, background: colour }} />
+          style={{ width: `${Math.min(value, since)}%`, background: colour, opacity: 0.55 }} />
+        {/* Quello che ha guadagnato da allora: acceso. */}
+        {grown && (
+          <div className="absolute inset-y-0"
+            style={{ left: `${since}%`, width: `${gain}%`, background: colour }} />
+        )}
         <div className="absolute inset-y-0 w-px bg-ink/45" style={{ left: `${cap}%` }} />
       </div>
     </div>
