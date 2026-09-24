@@ -165,11 +165,60 @@ export function qualifyingOutcome(
  * e porta a casa il giro. Chi ha una macchina lenta deve provarci, perché una
  * fila guadagnata vale più del rischio di perderne una.
  */
-export function aiQualifyingPlan(e: RaceEntry, rng: Rng): QualifyingPlan {
-  const disperato = e.carPace < 72;
-  const timing: OutTiming = disperato || rng.chance(0.25) ? 'tardi'
+export function aiQualifyingPlan(e: RaceEntry, rng: Rng, pressure = 0.5): QualifyingPlan {
+  // Chi ha la macchina forte non ha motivo di rischiare in Q1; chi è sul filo
+  // del taglio sì, e in Q3 rischiano tutti perché non c'è più niente da
+  // conservare. È `pressure` a dirlo.
+  const osa = pressure > 0.7 || e.carPace < 72;
+  const timing: OutTiming = osa || rng.chance(0.2 * pressure) ? 'tardi'
     : rng.chance(0.15) ? 'presto' : 'meta';
-  const outLap: OutLap = disperato || e.technical > 70 ? 'spinto'
+  const outLap: OutLap = osa || e.technical > 70 ? 'spinto'
     : rng.chance(0.2) ? 'scarico' : 'standard';
-  return { timing, compound: 'S', outLap };
+  // La soft si tiene per quando serve: in Q1 con la macchina buona basta la media.
+  const compound: QualCompound = pressure < 0.35 && e.carPace > 84 ? 'M' : 'S';
+  return { timing, compound, outLap };
+}
+
+/**
+ * Le tre manche.
+ *
+ * Non è una formalità: cambia la natura della decisione. In Q1 basta
+ * sopravvivere, e rischiare per due decimi che non servono a niente è
+ * stupido; in Q3 i due decimi sono la pole. La stessa scelta ha un prezzo
+ * diverso a seconda di quanto hai da perdere, ed è questo che rende la
+ * qualifica una cosa da giocare invece che da guardare.
+ *
+ * Le gomme non si azzerano fra una manche e l'altra: chi passa il taglio con
+ * il cuore in gola ci arriva in Q3 con un treno in meno e la gomma segnata.
+ */
+export interface Segment {
+  key: 'Q1' | 'Q2' | 'Q3';
+  /** quanti restano in pista dopo questa manche */
+  survivors: number;
+  /** cosa c'è in palio, per chi gioca */
+  stake: string;
+}
+
+export const SEGMENTS: readonly Segment[] = [
+  { key: 'Q1', survivors: 15, stake: 'Passa il taglio: gli ultimi cinque sono fuori' },
+  { key: 'Q2', survivors: 10, stake: 'Entra nei dieci' },
+  { key: 'Q3', survivors: 0, stake: 'La pole' },
+];
+
+/** In che manche si trova un pilota che è arrivato fin qui. */
+export function segmentFor(index: number): Segment {
+  return SEGMENTS[Math.min(index, SEGMENTS.length - 1)]!;
+}
+
+/**
+ * Quanto è avventato rischiare, in questa manche e con questa macchina.
+ *
+ * Serve all'IA e alla schermata: un pilota al sicuro in Q1 non ha motivo di
+ * uscire all'ultimo momento, uno sul filo del taglio sì.
+ */
+export function pressureOf(segment: Segment, rank: number, field: number): number {
+  if (segment.key === 'Q3') return 1;
+  const margin = (segment.survivors - rank) / Math.max(1, field);
+  // Chi è appena sopra il taglio ha tutto da perdere e quindi tutto da osare.
+  return clamp(1 - margin * 3, 0.15, 1);
 }

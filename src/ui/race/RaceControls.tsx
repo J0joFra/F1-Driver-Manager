@@ -1,4 +1,5 @@
 import { PALETTE } from '../palette.js';
+import { breaksCompoundRule } from '../../engine/rules.js';
 import type { Compound, EngineMode } from '../../engine/types.js';
 import type { LiveCar, LiveRace } from '../../engine/liveRace.js';
 import { ATTACK_COOLDOWN, isAttacking } from '../../engine/liveRace.js';
@@ -31,6 +32,8 @@ export function RaceControls({
   onAttack: () => void;
 }) {
   const attacking = isAttacking(race, car);
+  const mustChange = !race.wet
+    && breaksCompoundRule([...car.compounds, car.tyre.compound], race.wet);
   const cooling = race.t < attackReadyAt;
   const canAttack = gapAhead !== null && gapAhead < 1 && !cooling && !attacking && !car.dnf;
   const wear = Math.min(100, car.tyre.wear);
@@ -68,11 +71,19 @@ export function RaceControls({
         <button
           type="button"
           onClick={onBox}
+          // La regola delle due mescole si dice prima, non si scopre a fine
+          // gara: una penalità che non potevi vedere arrivare non è una
+          // regola, è una punizione. Lo dice il pulsante, senza righe in più.
+          title={mustChange ? 'Servono due mescole diverse: 25″ di penalità se finisci senza' : undefined}
           className={`font-display text-xs font-bold uppercase tracking-[0.1em] py-1.5 rounded-sm border ${
-            car.pitArmed ? 'bg-warn border-warn text-[#2B2200]' : 'bg-panel2 border-line text-ink'
+            car.pitArmed ? 'bg-warn border-warn text-white'
+              : mustChange ? 'bg-panel2 border-warn text-warn'
+              : 'bg-panel2 border-line text-ink'
           }`}
         >
-          {car.pitArmed ? `Box armato · ${car.pitArmed}` : 'Box a fine giro'}
+          {car.pitArmed ? `Box armato · ${car.pitArmed}`
+            : mustChange ? 'Box · seconda mescola'
+            : 'Box a fine giro'}
         </button>
       </div>
 

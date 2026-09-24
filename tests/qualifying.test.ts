@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../src/engine/rng.js';
 import { getTrack } from '../src/engine/data/tracks.js';
-import { simulateQualifying, type RaceEntry } from '../src/engine/race.js';
+import { simulateQualifying, simulateRace, type RaceEntry } from '../src/engine/race.js';
+import { TRACKS } from '../src/engine/data/tracks.js';
+import { MAX_RACE_LAPS, breaksCompoundRule, raceLaps } from '../src/engine/rules.js';
 import {
   COMPOUNDS, DEFAULT_PLAN, OUT_LAPS, TIMINGS, aiQualifyingPlan, qualifyingOutcome,
   type QualifyingPlan,
@@ -81,5 +83,47 @@ describe('qualifica', () => {
       if (aiQualifyingPlan(entry({ carPace: 92 }), createRng(i)).timing === 'tardi') velociTardi++;
     }
     expect(lentiTardi).toBeGreaterThan(velociTardi);
+  });
+});
+
+describe('regolamento', () => {
+  it('la distanza di gara è la più corta che superi i 305 km', () => {
+    expect(raceLaps(5.79)).toBe(53);   // Monza: 53 giri, come nella realtà
+    expect(raceLaps(7.00)).toBe(44);   // Spa: 44
+    expect(raceLaps(5.86)).toBe(53);   // Silverstone: 52 nella realtà, 53 qui
+    for (const t of TRACKS) {
+      const km = t.lengthKm * t.laps;
+      // Sempre oltre i 305, tranne dove il tetto ai giri lo impedisce.
+      if (t.laps < MAX_RACE_LAPS) expect(km, t.id).toBeGreaterThanOrEqual(305);
+      expect(km, t.id).toBeLessThan(312);
+    }
+  });
+
+  it('il tetto ai giri è la ragione per cui Monaco è più corta', () => {
+    // Non c'è un caso speciale per Monaco: c'è una regola sola, e su un
+    // tracciato da 3.3 km produce 78 giri e 260 km.
+    const monaco = TRACKS.find((t) => t.id === 'vallmar')!;
+    expect(monaco.laps).toBe(MAX_RACE_LAPS);
+    expect(monaco.lengthKm * monaco.laps).toBeLessThan(280);
+  });
+
+  it('due mescole diverse, su asciutto', () => {
+    expect(breaksCompoundRule(['M'], false)).toBe(true);
+    expect(breaksCompoundRule(['M', 'M'], false)).toBe(true);
+    expect(breaksCompoundRule(['M', 'H'], false)).toBe(false);
+    expect(breaksCompoundRule(['S', 'M', 'H'], false)).toBe(false);
+    // Sul bagnato la regola non vale: si monta quello che serve.
+    expect(breaksCompoundRule(['I'], true)).toBe(false);
+  });
+
+  it('una gara simulata rispetta sempre la regola delle due mescole', () => {
+    const field = Array.from({ length: 16 }, (_, i) => entry({ driverId: `d${i}`, grid: i + 1 }));
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const out = simulateRace(track, field, createRng(seed), { wet: false });
+      // L'IA pianifica sempre almeno una sosta: nessuno deve prendersi i 25″.
+      for (const r of out.results.filter((x) => !x.dnf)) {
+        expect(r.penalised, `seed ${seed} · ${r.driverId}`).toBeFalsy();
+      }
+    }
   });
 });

@@ -5,6 +5,7 @@ import {
   retirementChancePerLap, wearPerLap, type RaceEntry,
 } from './race.js';
 import { DRS_RANGE } from './overtaking.js';
+import { breaksCompoundRule, COMPOUND_RULE_PENALTY } from './rules.js';
 import { safetyCarChancePerLap } from './incidents.js';
 import { freshTyre, updateTemperature, type TyreState } from './tyres.js';
 
@@ -30,6 +31,8 @@ export interface LiveCar {
   bestLap: number;
   /** stato del treno di gomme montato: mescola, usura, temperatura, giri */
   tyre: TyreState;
+  /** le mescole già usate: la regola delle due vale anche qui */
+  compounds: Compound[];
   stops: number;
   mode: EngineMode;
   /** mescola da montare alla prossima sosta; null = non si entra */
@@ -118,6 +121,7 @@ export function createLiveRace(
       dirtyAir: false,
       dnf: false,
       plan: pitStrategy(track, rng),
+      compounds: [],
       finishedAt: null,
     };
   });
@@ -286,6 +290,7 @@ export function stepRace(race: LiveRace, dt: number): void {
         }
       }
       if (c.pitArmed) {
+        c.compounds.push(c.tyre.compound);
         const loss = pitLossFor(c.entry, sc);
         c.progress -= loss / track.baseLap;
         c.tyre = freshTyre(c.pitArmed);
@@ -398,7 +403,9 @@ export function liveResults(race: LiveRace): RaceResult[] {
       grid: c.entry.grid,
       points,
       dnf: false,
-      gap: clamp(gapOf(c), 0, 1e6),
+      gap: clamp(gapOf(c), 0, 1e6)
+        + (breaksCompoundRule([...c.compounds, c.tyre.compound], race.wet) ? COMPOUND_RULE_PENALTY : 0),
+      penalised: breaksCompoundRule([...c.compounds, c.tyre.compound], race.wet),
       stops: c.stops,
       fastestLap: fastest === c,
     };
