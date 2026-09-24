@@ -348,3 +348,41 @@ describe('offerte di contratto al giocatore', () => {
     expect(w.offers).toHaveLength(before);
   });
 });
+
+describe('la crescita è raccontabile', () => {
+  it('ogni stagione archiviata porta con sé l’overall di allora', () => {
+    const world = startCareer({ seed: 55, name: 'Prova', nationality: 'ITA' });
+    const id = world.seat.mode === 'pilota' ? world.seat.driverId : '';
+    for (let s = 0; s < 3; s++) {
+      while (world.week < SEASON_WEEKS) {
+        advanceWeek(world, { plan: { simulator: 2, fitness: 1, engineering: 1, media: 0 } });
+      }
+      endSeason(world);
+      const best = world.offers[0];
+      if (best) takeOffer(world, best.teamId);
+    }
+    const history = world.drivers[id]!.history;
+    expect(history.length).toBeGreaterThanOrEqual(3);
+    for (const season of history) expect(season.overall).toBeGreaterThan(0);
+    // Il senso della registrazione: la curva deve salire, altrimenti non c'è
+    // niente da mostrare nel profilo.
+    expect(history.at(-1)!.overall).toBeGreaterThan(history[0]!.overall);
+  });
+
+  it('il confronto di stagione riparte dopo l’invecchiamento, non prima', () => {
+    const world = startCareer({ seed: 56, name: 'Prova', nationality: 'ITA' });
+    const id = world.seat.mode === 'pilota' ? world.seat.driverId : '';
+    while (world.week < SEASON_WEEKS) {
+      advanceWeek(world, { plan: { simulator: 2, fitness: 1, engineering: 1, media: 0 } });
+    }
+    const me = world.drivers[id]!;
+    // Durante la stagione il riferimento resta quello di marzo: è quello che
+    // rende visibile il guadagno dell'anno.
+    expect(overall(me.attrs)).toBeGreaterThan(overall(me.seasonStartAttrs));
+    endSeason(world);
+    // A stagione chiusa il riferimento si sposta su dove il pilota è adesso,
+    // invecchiamento incluso: il nuovo anno parte da zero, non da un
+    // guadagno che è solo il recupero del calo.
+    expect(overall(me.seasonStartAttrs)).toBeCloseTo(overall(me.attrs), 5);
+  });
+});

@@ -116,6 +116,7 @@ export function createNewgen(rng: Rng, opts: NewgenOptions): Driver {
     nationality: rng.pick(NATIONALITIES),
     age,
     attrs,
+    seasonStartAttrs: { ...attrs },
     caps,
     reputation: clamp(8 + rng.normal() * 4, 1, 30),
     form: 50 + rng.normal() * 8,
@@ -148,6 +149,7 @@ export function createVeteran(
   for (const k of ATTRIBUTE_KEYS) {
     d.attrs[k] = clamp(d.caps[k] * (0.7 + 0.3 * maturity) + rng.normal() * 2, 30, d.caps[k]);
   }
+  d.seasonStartAttrs = { ...d.attrs };
   d.reputation = clamp(overall(d.attrs) - 20 + rng.normal() * 6, 5, 95);
   return d;
 }
@@ -188,4 +190,9 @@ export function applyAging(d: Driver, rng: Rng): void {
   d.experience = clamp(d.experience + experienceGain(d) * 24, 0, 1000);
   // Una stagione lascia il segno, ma l'inverno serve a questo.
   d.fatigue = clamp(d.fatigue * 0.35, 0, 100);
+  // Il nuovo punto di partenza per la crescita che il giocatore vedrà. Va
+  // preso **dopo** il calo dell'età, altrimenti un veterano mostrerebbe come
+  // guadagno del nuovo anno il recupero di quello che gli anni gli hanno
+  // appena tolto.
+  d.seasonStartAttrs = { ...d.attrs };
 }

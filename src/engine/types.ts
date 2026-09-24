@@ -79,6 +79,15 @@ export interface TrainingPlan {
 export interface SeasonTotals {
   year: number;
   teamId: string;
+  /**
+   * L'overall del pilota alla fine di quella stagione.
+   *
+   * Senza questa fotografia la crescita non è raccontabile: `history` sapeva
+   * quanti punti aveva fatto, non quanto era diventato bravo. È la differenza
+   * fra «sesto in campionato nel 2034» e «sesto in campionato nel 2034 perché
+   * nel frattempo era passato da 71 a 76».
+   */
+  overall: number;
   points: number;
   wins: number;
   podiums: number;
@@ -106,6 +115,15 @@ export interface Driver {
   age: number;
   /** valori correnti 1–99 */
   attrs: Attributes;
+  /**
+   * Gli attributi com'erano all'inizio di questa stagione.
+   *
+   * Serve a una cosa sola, e importante: far vedere la crescita mentre
+   * succede. Un guadagno di due decimi a settimana è invisibile; la somma di
+   * quaranta settimane no, ma solo se c'è un punto di partenza con cui
+   * confrontarla.
+   */
+  seasonStartAttrs: Attributes;
   /** tetto invalicabile per ogni attributo, fissato alla nascita del pilota */
   caps: Attributes;
   /** punti abilità non ancora spesi */

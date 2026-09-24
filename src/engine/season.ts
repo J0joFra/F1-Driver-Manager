@@ -5,6 +5,7 @@ import { carPaceOn } from './layout.js';
 import { simulateQualifying, simulateRace, type RaceEntry } from './race.js';
 import { RACE_FATIGUE } from './progression.js';
 import { pointsForRace, skillEffects, spendPointsAsAi } from './skills.js';
+import { overall } from './driver.js';
 
 // La lunghezza della stagione la decide il calendario: qui si riespone perché
 // mezzo motore la usa come limite del ciclo settimanale.
@@ -208,6 +209,7 @@ export function seasonTotalsFor(world: World, d: Driver, championshipPos: number
   return {
     year: world.year,
     teamId: d.teamId ?? '',
+    overall: overall(d.attrs),
     points, wins, podiums, poles, dnf, starts,
     bestFinish: bestFinish === 99 ? 0 : bestFinish,
     championshipPos,

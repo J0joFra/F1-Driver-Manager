@@ -239,10 +239,19 @@ export function runTransferMarket(world: World, rng: Rng): void {
  */
 export function candidateTeams(world: World, driver: Driver, rng?: Rng): ContractOffer[] {
   const scale = marketScale(world);
-  const scored = Object.values(world.teams).map((team) => ({
-    team,
-    interest: teamInterest(scale, driver, team),
-  }));
+  // Solo le squadre che un posto ce l'hanno davvero.
+  //
+  // Senza questo filtro il giocatore riceveva offerte da scuderie già al
+  // completo: `acceptOffer` le rifiuta, la firma non avviene e la stagione si
+  // apre senza sedile — senza un messaggio, senza un errore, semplicemente un
+  // anno sparito dalla carriera. L'ho trovato perché una carriera di tre
+  // stagioni ne archiviava due.
+  //
+  // Quando il mercato tiene un posto libero per il giocatore, `driverIds` di
+  // quelle squadre si ferma a uno: il filtro le lascia passare.
+  const scored = Object.values(world.teams)
+    .filter((team) => team.driverIds.length < SEATS_PER_TEAM)
+    .map((team) => ({ team, interest: teamInterest(scale, driver, team) }));
 
   const wanted = scored.filter((s) => s.interest >= 45).sort((a, b) => b.interest - a.interest);
   const fallback = scored.sort((a, b) => a.team.prestige - b.team.prestige)[0];
