@@ -24,6 +24,7 @@ con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 - [Soldi e staff personale](#soldi-e-staff-personale)
 - [Il modello di gara](#il-modello-di-gara)
 - [La forma del circuito](#la-forma-del-circuito)
+- [La qualifica, tre decisioni](#la-qualifica-tre-decisioni)
 - [Le regole che tengono in piedi il bilanciamento](#le-regole-che-tengono-in-piedi-il-bilanciamento)
 - [Struttura del progetto](#struttura-del-progetto)
 - [Comandi](#comandi)
@@ -53,7 +54,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 125 test
+npm test                      # 132 test
 npm run sim -- --seasons 40 --verbose
 ```
 
@@ -411,7 +412,7 @@ mondo di ventiquattro ore.
 | Mer | **Il minigioco della settimana**, una sola partita | 40 s |
 | Gio | **Trasferta** verso il circuito | — |
 | Ven | **Libere**: scegli una direzione di assetto | 20 s |
-| Sab | **Qualifica**: tre decisioni + il giro lanciato | 90 s |
+| Sab | **Qualifica**: tre decisioni, poi il giro | 60 s |
 | Dom | **Gara** | 3–5 min |
 
 ### Il tempo scorre a giorni, i conti restano a settimane
@@ -639,6 +640,8 @@ sceglie la gomma di partenza e si decide se correre o simulare. Poi la pista.
 | Elemento | Cosa fa |
 |---|---|
 | **Tracciato** | vista dall'alto, una vettura per puntino. È atmosfera: dà contesto, non numeri |
+| **Velocità** | si misura in **giri al secondo**, non in «×». «Un giro al secondo» si capisce; «otto volte più veloce» dipende da quanto è lungo il giro |
+| **Rallenta da sola** | ai box (4 secondi di gara al secondo reale: venti secondi di sosta diventano cinque veri), e nei momenti che chiedono una decisione |
 | **Torre dei tempi** | chi è davanti a chi, distacco dal leader. Segue il giocatore invece di lasciarlo fuori schermo |
 | **Striscia dei distacchi** | i secondi dal leader su una scala. È la vista funzionale: il trenino, chi si stacca, l'undercut |
 | **Comandi** | mescola e box, modalità motore, attacco quando sei entro un secondo |
@@ -736,7 +739,8 @@ stanno a pennello a certe macchine.
 
 Un tracciato è quindi descritto da **come si spende un giro**: quanta parte in
 rettilineo, quanta nelle curve lente, medie e veloci. Le quattro frazioni
-sommano a uno.
+sommano a uno — e non sono indovinate, sono **misurate sulla geometria reale**
+dei tracciati del mondiale.
 
 ```ts
 layout: { straight: 0.48, slow: 0.18, medium: 0.22, fast: 0.12 }   // di potenza
@@ -750,6 +754,32 @@ quindi un tracciato non rende le macchine più veloci in assoluto: cambia solo
 *quale* macchina è veloce. Un test lo verifica: una monoposto media vale 80
 ovunque, ma una da 95 di motore guadagna sei punti di passo — mezzo secondo
 al giro — passando da Monaco a Monza.
+
+### Misurata, non indovinata
+
+Le forme vengono da [`bacinger/f1-circuits`](https://github.com/bacinger/f1-circuits)
+(geometria derivata da OpenStreetMap, © i contributori OSM, ODbL), passata per
+[`tools/derive-layouts.py`](tools/derive-layouts.py). I nomi restano inventati
+— «Formula 1» e i nomi degli autodromi sono marchi — ma Lario ha il 66% di
+rettilineo perché Monza ce l'ha, e Vallmar il 58% di curve lente perché Monaco
+ce l'ha.
+
+Il procedimento usa **due misure diverse**, e il motivo è istruttivo. La
+geometria ha un punto ogni ~36 metri: a quella densità una curva è
+approssimata da una corda, quindi il raggio calcolato punto per punto
+sottostima *sempre* la curvatura. Preso alla lettera diceva che a Marina Bay
+si va dritti per il 75% del giro, il che è falso.
+
+Due grandezze invece reggono al campionamento grossolano:
+
+| Misura | Cosa regge | Cosa ne esce |
+|---|---|---|
+| **gradi/km** — rotazione totale sulla lunghezza | non dipende dalla densità dei punti | la frazione di rettilineo |
+| **distribuzione dei raggi** | sbaglia i valori assoluti ma coglie il *tipo* di curva | la ripartizione lenta/media/veloce |
+
+Monza esce a 171 gradi/km, Monaco a 641. Losail ha curvoni e zero tornanti,
+l'Hungaroring il contrario. Sono i caratteri giusti, e nessuno li ha scritti
+a mano.
 
 ### Quattro numeri che ne eliminano due
 
@@ -792,6 +822,43 @@ differenze. È una distinzione che si vede solo misurando, e un test la
 difende: su quattro forme diverse, la velocità resta sempre il guadagno
 maggiore, ma la sensibilità tecnica rende di più fra i muretti che in
 rettilineo.
+
+---
+
+## La qualifica, tre decisioni
+
+Un giro secco non si guida a comandi: si prepara. Quello che un pilota decide
+davvero è **quando uscire**, **su che gomma** e **come scaldarla**, e poi il
+giro è la conseguenza di quelle tre scelte più il talento.
+
+| Decisione | Il guadagno | Il prezzo |
+|---|---|---|
+| **Ultimo momento** | pista gommata al massimo | traffico e bandiere, e non dipende da te |
+| **Soft** | mezzo secondo | una sola occasione buona, e usura in gara |
+| **Lancio spinto** | gomme nella finestra perfetta | le paghi nel primo stint |
+
+Nessuna ha una risposta giusta, e quanto rischio convenga dipende da dove si
+corre: la schermata mostra la difficoltà dei sorpassi di quel tracciato,
+perché su un cittadino la pole vale una gara e su una pista di potenza molto
+meno.
+
+Gli attributi non spostano il giro qui — quello lo fa già il modello di gara —
+ma decidono **quanto bene riesce ogni scelta**: la sensibilità tecnica serve a
+scaldare le gomme, la freddezza a non buttare il giro quando la pista è
+affollata.
+
+### Rischiare deve convenire
+
+Al primo tentativo uscire tardi guadagnava due decimi e rischiava di perderne
+un secondo: valore atteso negativo, cioè non una scelta ma un errore. E i
+piloti IA con la macchina lenta — quelli che *devono* rischiare — ci
+rimettevano sempre, allargando il divario da soli: il test sul congelamento
+del campionato l'ha preso subito.
+
+Ora perdere il giro costa tre-nove decimi, non un secondo, e ogni opzione
+rischiosa ha valore atteso migliore della prudenza. Un test lo verifica
+mediando quattromila estrazioni per ciascuna delle tre decisioni — perché una
+scelta si giudica sul valore atteso, non su un tiro.
 
 ---
 
@@ -869,6 +936,7 @@ engine/
   staff.ts          staff personale, prezzi, moltiplicatore di crescita
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
   layout.ts         la forma del giro: settori, pesi della monoposto, derivate
+  qualifying.ts     le tre decisioni del sabato e il loro prezzo
   roles.ts          quanto un pilota vale in ciascun mestiere del weekend
   skills.ts         l'albero delle abilità: nodi, punti, effetti
   days.ts           la settimana giorno per giorno: attività, giorno di bilancio
@@ -890,7 +958,7 @@ engine/
     tracks.ts       31 circuiti: forma del giro, larghezza, regione, fuso, orari
     teams.ts        5 scuderie, palette validata per daltonismo
     names.ts        bacino di nomi per la rigenerazione annuale
-tests/              125 test: rng, curve e modelli, gara, gara live,
+tests/              132 test: rng, curve e modelli, gara, gara live,
                     allenamento, mondo, contratti, migrazione
 tools/simulate.ts   simulatore da riga di comando
 tools/screenshots.mjs  schermate a 844×390 + tre controlli di impaginazione
@@ -938,7 +1006,7 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 125 test
+npm test               # vitest, 132 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
@@ -983,9 +1051,10 @@ const summary = endSeason(world);   // campione, ritiri, newgen, reset regolamen
 **Prossimo passo**:
 
 - [ ] I tre minigiochi in React, con il risultato scritto all'avvio della partita
-- [ ] Qualifica: le tre decisioni e il giro lanciato
 - [ ] Libere: la direzione di assetto
 - [x] Albero delle abilità, dal profilo pilota
+- [x] Qualifica giocabile: le tre decisioni del sabato
+- [x] Forma dei circuiti misurata sulla geometria reale
 - [ ] Mercato dello staff personale (il motore c'è già, manca la schermata)
 - [ ] Slot di salvataggio multipli
 

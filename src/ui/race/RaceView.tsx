@@ -13,7 +13,23 @@ import { GapStrip } from './GapStrip.js';
 import { RaceControls } from './RaceControls.js';
 
 /** Il ritmo a cui scorre la gara. 0 = in pausa. */
-const SPEEDS = [0, 1, 4, 8] as const;
+/**
+ * La velocità si misura in **giri al secondo**, non in secondi di gara al
+ * secondo reale. È l'unità che conta per chi guarda: «un giro al secondo» si
+ * capisce, «otto volte più veloce» dipende da quanto è lungo il giro — a
+ * Monaco erano nove secondi a giro, a Spa quindici.
+ */
+const SPEEDS = [0, 0.5, 1, 2] as const;
+const SPEED_LABEL: Record<number, string> = { 0: 'II', 0.5: '½', 1: '1×', 2: '2×' };
+
+/**
+ * Quando succede qualcosa la gara rallenta, e qui si misura in secondi di
+ * gara al secondo reale — perché quello che va guardato è un fatto che dura
+ * dei secondi, non dei giri. La sosta è il momento più lento di tutti: venti
+ * secondi di pit stop diventano cinque secondi veri, il tempo di vederla.
+ */
+const PACE_PIT = 4;
+const PACE_KEY = 14;
 /** Ridisegnare a 60 fps non serve: la gara si legge benissimo a 15. */
 const FRAME_MS = 66;
 
@@ -43,18 +59,24 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
    * gara rallenta da sola a 1×. È questo che rende guardabile una gara da 53
    * giri senza chiedere al giocatore di stare sempre sul pezzo.
    */
+  const inPit = !!race && !!me && race.t < me.pitUntil;
+
   const keyMoment =
     !race || !me || me.dnf
       ? null
-      : underSafetyCar(race)
-        ? 'Safety car · finestra box'
-        : me.tyre.wear > 84
-          ? 'Gomme finite · decidi'
-          : gapAhead !== null && gapAhead < 1
-            ? 'In zona DRS'
-            : gapBehind !== null && gapBehind < 0.8
-              ? 'Sotto attacco'
-              : null;
+      : inPit
+        ? 'Sosta ai box'
+        : me.pitArmed
+          ? 'Box a fine giro'
+          : underSafetyCar(race)
+            ? 'Safety car · finestra box'
+            : me.tyre.wear > 84
+              ? 'Gomme finite · decidi'
+              : gapAhead !== null && gapAhead < 1
+                ? 'In zona DRS'
+                : gapBehind !== null && gapBehind < 0.8
+                  ? 'Sotto attacco'
+                  : null;
 
   useEffect(() => {
     if (!race) return;
@@ -65,8 +87,11 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       if (speed > 0 && !race.finished) {
-        const effective = keyMoment ? Math.min(speed, 1) : speed;
-        const simSeconds = dt * effective;
+        // Fuori dai momenti chiave si va a giri al secondo; dentro, a secondi
+        // di gara al secondo reale. Sono due unità diverse perché sono due
+        // cose diverse: scorrere una gara e guardare un fatto.
+        const rate = inPit ? PACE_PIT : keyMoment ? PACE_KEY : speed * race.track.baseLap;
+        const simSeconds = dt * rate;
         // Passi piccoli e costanti: l'esito non deve dipendere dal frame rate.
         const steps = Math.max(1, Math.ceil(simSeconds / 0.25));
         for (let i = 0; i < steps; i++) stepRace(race, simSeconds / steps);
@@ -83,7 +108,7 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [race, speed, keyMoment, onFinish]);
+  }, [race, speed, keyMoment, inPit, onFinish]);
 
   const skip = useCallback(() => {
     if (!race || finished.current) return;
@@ -134,7 +159,7 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
                 speed === s ? 'bg-ink border-ink text-ground' : 'bg-panel2 border-line text-muted'
               }`}
             >
-              {s === 0 ? 'II' : `${s}×`}
+              {SPEED_LABEL[s]}
             </button>
           ))}
         </div>

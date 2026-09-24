@@ -7,6 +7,7 @@ import {
 } from './tyres.js';
 import { DRS_RANGE, overtakeChance as overtakeProbability } from './overtaking.js';
 import { driverInfluence, driverSkillOn, NEUTRAL_MIX } from './layout.js';
+import { aiQualifyingPlan, qualifyingOutcome, type QualifyingPlan } from './qualifying.js';
 import { driverErrorChance, mechanicalFailureChance, safetyCarChancePerLap } from './incidents.js';
 
 export { COMPOUND_PACE, COMPOUND_WEAR } from './tyres.js';
@@ -315,8 +316,12 @@ export function simulateQualifying(
   entries: readonly RaceEntry[],
   rng: Rng,
   wet = false,
+  /** le tre decisioni di ciascuno: senza, le sceglie l'IA */
+  plans?: ReadonlyMap<string, QualifyingPlan>,
 ): QualifyingResult[] {
   const laps = entries.map((e) => {
+    const plan = plans?.get(e.driverId) ?? aiQualifyingPlan(e, rng.fork(`plan:${e.driverId}`));
+    const outcome = qualifyingOutcome(plan, e, track, rng.fork(`qual:${e.driverId}`));
     const skill = e.speed * 0.6 + e.composure * 0.2 + (wet ? e.wet * 0.2 : e.consistency * 0.2);
     let t = track.baseLap * 0.965;
     t += (100 - e.carPace) * 0.092;
@@ -325,7 +330,9 @@ export function simulateQualifying(
     t += rng.normal() * (0.30 - e.consistency * 0.0014);
     // Errore o traffico: il giro salta e resti col tempo peggiore.
     if (rng.chance(clamp(0.1 - e.composure * 0.0008, 0.015, 0.1))) t += rng.range(0.4, 1.4);
-    return { driverId: e.driverId, lapTime: t };
+    // Le tre decisioni della qualifica: dove uscire, che gomma, come scaldarla.
+    t += outcome.delta;
+    return { driverId: e.driverId, lapTime: t, note: outcome.note, startWear: outcome.startWear };
   });
 
   laps.sort((a, b) => a.lapTime - b.lapTime);

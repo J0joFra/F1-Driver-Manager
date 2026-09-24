@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { RaceResult, TrainingPlan, World } from '../engine/types.js';
 import { unlockSkill as unlock } from '../engine/skills.js';
+import type { QualifyingPlan } from '../engine/qualifying.js';
 import { advanceDay, endSeason, finishPendingRace, playerDriver, takeOffer, type DayReport, type SeasonSummary, type WeekReport } from '../engine/world.js';
 import { startCareer, type StartCareerOptions } from '../engine/career.js';
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
@@ -99,6 +100,8 @@ interface GameState {
   abandon: () => void;
   goTo: (screen: Screen) => void;
   /** avanza di un giorno: è l'unità di tempo del gioco */
+  /** fissa le tre decisioni della qualifica di sabato */
+  setQualifyingPlan: (plan: QualifyingPlan) => void;
   /** spende un punto abilità sul nodo scelto */
   unlockSkill: (id: string) => void;
   advance: (plan: TrainingPlan, minigameScore?: number) => DayReport | null;
@@ -147,6 +150,13 @@ export const useGame = create<GameState>()(
       },
 
       goTo: (screen) => set({ screen }),
+
+      setQualifyingPlan: (plan) => {
+        const world = get().world;
+        if (!world) return;
+        world.qualifyingPlan = plan;
+        set({ world: { ...world } });
+      },
 
       unlockSkill: (id) => {
         const world = get().world;

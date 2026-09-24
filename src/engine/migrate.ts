@@ -75,6 +75,7 @@ export function migrateWorld(raw: unknown): World | null {
   if (typeof w.week !== 'number') w.week = 0;
   // Il tempo scorreva a settimane: un salvataggio vecchio riparte dal lunedì.
   if (typeof w.dayOfWeek !== 'number') w.dayOfWeek = 0;
+  if (w.qualifyingPlan === undefined) w.qualifyingPlan = null;
   if (typeof w.round !== 'number') w.round = 0;
   if (!w.seat) w.seat = { mode: 'osservatore' };
   if (!w.regulations) {
