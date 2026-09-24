@@ -45,6 +45,9 @@ export function buildEntries(world: World, track: Track): RaceEntry[] {
         wet: clamp(d.attrs.wet + skills.wet, 1, 99),
         composure: clamp(d.attrs.composure + (d.morale - 50) * 0.08, 1, 99),
         technical: d.attrs.technical,
+        // 0–1. Non arrivava mai al modello di gara: otto anni di corse non
+        // davano niente, ed è metà di quello che fa crescere un pilota.
+        experience: clamp(d.experience / 1000, 0, 1),
         pitCrew: team.crew.pitCrew,
         grid: 0,
         overtakeMod: skills.overtake,

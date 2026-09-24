@@ -23,6 +23,7 @@ con la gara simulata e mostrata dall'alto in 2D: non guidi, **decidi**.
 - [L'albero delle abilità](#lalbero-delle-abilità)
 - [Soldi e staff personale](#soldi-e-staff-personale)
 - [Il modello di gara](#il-modello-di-gara)
+- [La carriera, tarata sui mondiali veri](#la-carriera-tarata-sui-mondiali-veri)
 - [La forma del circuito](#la-forma-del-circuito)
 - [Il regolamento](#il-regolamento)
 - [La qualifica, tre decisioni](#la-qualifica-tre-decisioni)
@@ -689,8 +690,8 @@ bilanciamento si fa spostando un numero alla volta:
 
 ```
 crescita = baseGain(attributo)
-         × difficoltàMarginale(gap)     ← gap^1.6: gli ultimi punti sono proibitivi
-         × curvaEtà(età, picco)         ← un picco per attributo, non uno solo
+         × difficoltàMarginale(margine)  ← in PUNTI, non in frazione del tetto
+         × curvaEtà(età, picco)          ← un picco per attributo, non uno solo
          × efficienzaStaff              ← con rendimenti decrescenti
          × carico × penalitàSovrallenamento
          × penalitàStanchezza × morale
@@ -702,9 +703,24 @@ il feedback tecnico cresce fino a trentatré. Un trentaquattrenne non è un
 ventiseienne peggiore: è un pilota diverso, e l'**esperienza** — che sale sempre
 e non cala mai — gli restituisce fino a otto centesimi al giro.
 
-Il tetto non è un `if`: emerge da `difficoltàMarginale`, che a un decimo dal
-potenziale vale già un quarantesimo. Nessuno raggiunge davvero il proprio
+Il tetto non è un `if`: emerge da `difficoltàMarginale`, che a tre punti dal
+potenziale vale meno di un trentesimo. Nessuno raggiunge davvero il proprio
 potenziale — ci si avvicina, e quanto ci si avvicina lo decide lo staff.
+
+#### Il margine si conta in punti, non in frazioni del tetto
+
+È il difetto che teneva ferma ogni carriera a metà. `difficoltàMarginale`
+prendeva `(tetto − attuale) / tetto`, e con quella formula un pilota a undici
+punti dal proprio limite cresceva al 4% del ritmo base, mentre uno a dieci
+punti da un tetto di 40 cresceva all'11%: **più in fretta con meno margine**,
+il che non vuol dire niente. Il risultato lo si misurava: in otto stagioni un
+pilota realizzava due punti dei dodici che aveva disponibili, e l'overall
+restava fermo dalla seconda stagione in poi.
+
+Adesso l'argomento è il margine **in punti**, normalizzato su `HEADROOM_SCALE`
+= 30, che è il margine tipico di un diciottenne. Da lì in giù la crescita
+rallenta, e vicino al tetto resta proibitiva come deve essere — ma non dipende
+più da quanto è alto il tetto.
 
 La scala è tarata sulla curva di carriera, non a occhio: **un diciottenne con
 potenziale 91 arriva a 81 da solo e a 87 con uno staff di livello**, in entrambi
@@ -714,6 +730,127 @@ Anche i piloti gestiti dal computer hanno chi li segue: non uno staff da
 gestire, ma l'`entourage` della loro scuderia, proporzionato al prestigio. Ne
 esce un gradiente che il giocatore sente — un sedile in un top team non porta
 solo una macchina migliore.
+
+## La carriera, tarata sui mondiali veri
+
+C'era un difetto che si sentiva prima di poterlo misurare: **chi iniziava una
+carriera restava in coda per sempre**. Allenarsi non si vedeva, correre non si
+vedeva, e la classifica dell'ottava stagione era quella della prima.
+
+Per correggerlo serviva sapere che forma ha davvero una carriera, e quella non
+si indovina. I numeri vengono dallo storico dei mondiali su Supabase — lo
+stesso database di FantaF1 — tabella `season_driver_standing`, 1681 righe. La
+misura è il **percentile in classifica**: 0 = campione, 1 = ultimo, l'unica
+grandezza confrontabile fra un mondiale a 13 piloti e uno a 26.
+
+### La coorte fissa, e perché serviva
+
+La curva su tutti i piloti va da 0.712 al primo anno a 0.406 all'ottavo, e non
+dice quasi niente: mescola la crescita vera con il fatto che **chi va male
+smette**. Da 388 esordienti si arriva a 30 veterani, e la media migliora da
+sola perché i peggiori escono dal conto.
+
+La curva usata è invece quella dei **73 piloti con almeno otto stagioni**,
+seguiti uno per uno. Quello che resta è crescita, non sopravvivenza:
+
+| stagione | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| percentile medio | 0.634 | 0.431 | 0.404 | 0.349 | 0.344 | **0.311** | 0.365 | 0.415 |
+
+Il gradino grande è il primo; poi si migliora ancora, ma piano; il picco è alla
+sesta stagione e la risalita finale è l'età. σ ≈ 0.24 in ogni stagione: la
+varianza fra piloti è enorme.
+
+### L'abilità è garantita, la posizione no
+
+Il secondo numero conta più del primo. Quante volte un pilota migliora davvero
+da una stagione all'altra?
+
+| passaggio | 1→2 | 2→3 | 3→4 | 4→5 | 5→6 | 6→7 |
+|---|---|---|---|---|---|---|
+| migliora | **63%** | 51% | 52% | 54% | 53% | 35% |
+
+Solo il primo passo è affidabile. Dopo si oscilla attorno al 52%, cioè poco più
+di una monetina, **perché il risultato in pista lo decide soprattutto la
+macchina**. Da qui la regola di progetto:
+
+> L'abilità cresce in modo affidabile e visibile. La posizione no.
+
+Il pilota deve vedersi migliorare — attributi, offerte, prestigio della squadra
+— anche in un anno in cui la classifica gli va peggio. Garantire la classifica
+sarebbe irreale; non garantire niente era il difetto di partenza.
+
+### Un esordiente non è lento, è impreparato
+
+Prima tutti i nuovi partivano fra il 62% e il 78% del proprio tetto, su ogni
+attributo. Un debuttante valeva 57 di overall contro una griglia a 75: una
+stagione senza partita.
+
+Adesso la frazione dipende da **cosa** si sta misurando. Velocità pura e
+partenze sono istinto e arrivano quasi complete (84–92% del tetto); gomme,
+freddezza, costanza, lavoro tecnico e bagnato si imparano, e quelle mancano
+davvero (68–80%). È il rookie veloce e grezzo, che ogni tanto firma un giro da
+prima fila e poi butta via la gara — e il suo distacco viene da quello che non
+sa, non dall'essere lento.
+
+L'esperienza fa il resto, ed è un sistema a parte: riduce il rumore sul giro
+quanto la costanza, ed è il motivo per cui il salto più grande di una carriera
+è fra la prima e la seconda stagione.
+
+### Piloti e scuderie sulla stessa scala
+
+Il valore di mercato di un pilota si ferma attorno a 80 anche per un
+fuoriclasse; il prestigio di una scuderia arriva a 90. Confrontarli
+direttamente — com'era: `valore ≥ prestigio × 0.55 + 42` — significa che la
+soglia di una squadra da titolo **sta sopra il valore massimo che un pilota
+possa mai raggiungere**. Nessuno la superava, e il giocatore non riceveva
+un'offerta di vertice nemmeno da campione del mondo: la carriera si fermava a
+metà griglia per sempre.
+
+Adesso i due numeri vengono portati sulla stessa scala — non «quanto vali» ma
+«a che punto della griglia stai» — e l'interesse nasce dalla differenza fra i
+due posti. Resta valido anche fra quarant'anni, quando i numeri assoluti si
+saranno spostati.
+
+### L'attrito che tiene vivo il campionato
+
+Mettere tutti sulla stessa scala ha avuto un effetto che non avevo previsto e
+che la simulazione a quarant'anni ha trovato subito: le scuderie ordinavano la
+griglia **troppo bene**. I migliori finivano sempre nella macchina migliore, e
+il campionato diventava di una sola squadra — i campioni diversi scendevano da
+15 a 11, le scuderie iridate da 7 a 4.
+
+`SCOUTING_NOISE` è la correzione: 18 punti di errore di valutazione. Una
+squadra sbaglia il giudizio, arriva tardi, punta sul giovane sbagliato. Con
+l'attrito rimesso, 16 campioni diversi su 40 stagioni e 7 scuderie iridate su
+8 — meglio di prima della modifica, e con metà della deriva di livello.
+
+### `npm run check:career`
+
+Sessanta carriere di otto stagioni, confrontate con i limiti di
+`careerCurve.ts`:
+
+```
+st   gioco   reale   prestigio   overall   ultimi due
+ 1   0.878   0.634       38      70.7        43%
+ 2   0.577   0.431       39      73.9         0%
+ 4   0.349   0.349       60      76.4         0%
+ 8   0.279   0.415       58      78.1         0%
+
+overall alla partenza 62.3 → 78.1  (potenziale 79.2)
+```
+
+Due scarti dalla realtà sono voluti, e il file li spiega perché senza
+spiegazione sembrerebbero errori. **La prima stagione è più dura del vero**:
+una carriera comincia sempre sul sedile della scuderia meno prestigiosa, mentre
+la coorte vera contiene esordienti entrati anche in macchine da podio.
+**L'ottava è migliore del vero**: il pilota del gioco a quel punto ha 26 anni
+ed è nel suo momento migliore, la coorte vera contiene anche chi ha debuttato a
+trenta ed è già in calo.
+
+Quello che deve combaciare è la forma. E quel `43%` della prima stagione, che
+diventa `0%` da subito dopo, è la misura del difetto originale: si può finire
+in fondo l'anno del debutto, ma non è più il proprio posto.
 
 ### Gomme: tre fasi e un crollo
 
@@ -1069,12 +1206,16 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 137 test
+npm test               # vitest, 138 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
 npm run sim:long       # con il dettaglio anno per anno
 npm run sim -- --seasons 100 --seed 7 --verbose
+npm run check:career   # 60 carriere contro la curva dei mondiali veri
+npm run check:offers   # il flusso dei contratti di fine stagione
+npm run check:migration
+npm run check:palette
 ```
 
 ### Usare il motore

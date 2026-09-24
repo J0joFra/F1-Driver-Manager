@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ageGrowthCurve, diminishing, logistic, marginalDifficulty } from '../src/engine/curves.js';
+import { ageGrowthCurve, diminishing, logistic, marginalDifficulty, HEADROOM_SCALE } from '../src/engine/curves.js';
 import { freshTyre, temperaturePenalty, tyreLapPenalty, updateTemperature } from '../src/engine/tyres.js';
 import { overtakeChance, ATTACK_RANGE } from '../src/engine/overtaking.js';
 import { driverErrorChance, mechanicalFailureChance, safetyCarChancePerLap } from '../src/engine/incidents.js';
@@ -28,11 +28,21 @@ describe('curve', () => {
     expect(ageGrowthCurve(36, 26)).toBeLessThan(0.2);
   });
 
-  it('la difficoltà marginale rende proibitivi gli ultimi punti', () => {
-    expect(marginalDifficulty(1)).toBeCloseTo(1);
-    expect(marginalDifficulty(0.5)).toBeLessThan(0.4);
-    expect(marginalDifficulty(0.1)).toBeLessThan(0.03);
+  it('la difficoltà marginale si misura in punti, non in frazioni del tetto', () => {
+    // L'argomento è il margine che resta **in punti**: trenta o più valgono
+    // pieno ritmo, e da lì in giù la crescita rallenta fino a fermarsi.
+    expect(marginalDifficulty(HEADROOM_SCALE)).toBeCloseTo(1);
+    expect(marginalDifficulty(HEADROOM_SCALE * 2)).toBeCloseTo(1);
+    expect(marginalDifficulty(15)).toBeLessThan(0.4);
+    expect(marginalDifficulty(3)).toBeLessThan(0.03);
     expect(marginalDifficulty(0)).toBe(0);
+  });
+
+  it('a parità di punti mancanti la crescita non dipende dal tetto', () => {
+    // Il difetto che questa misura sostituisce: normalizzando sul tetto, un
+    // pilota a dieci punti da 90 cresceva meno di uno a dieci punti da 40.
+    expect(marginalDifficulty(10)).toBe(marginalDifficulty(10));
+    expect(marginalDifficulty(12)).toBeGreaterThan(marginalDifficulty(10));
   });
 
   it('la logistica resta fra zero e uno', () => {

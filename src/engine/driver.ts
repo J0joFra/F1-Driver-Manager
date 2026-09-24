@@ -17,6 +17,26 @@ export function overall(attrs: Attributes): number {
   return sum;
 }
 
+/**
+ * Quanto di sé un esordiente ha già, in frazione del proprio tetto.
+ *
+ * Non è la stessa frazione per tutto. La velocità pura e le partenze sono
+ * istinto: un diciottenne che arriva in Formula 1 le ha quasi tutte, ed è il
+ * motivo per cui i rookie firmano ogni tanto un giro da prima fila. Gomme,
+ * freddezza, costanza, lavoro tecnico e bagnato si imparano, e quelle gli
+ * mancano davvero.
+ *
+ * Prima partivano tutti al 62–78% del tetto: un esordiente valeva 57 di
+ * overall contro una griglia a 75, cioè una stagione senza partita. Il
+ * distacco di un debuttante deve venire da quello che non sa ancora — e
+ * dall'esperienza, che il modello di gara conta a parte — non dall'essere
+ * lento in senso assoluto.
+ */
+const ROOKIE_SHARE = {
+  physical: [0.84, 0.92],
+  learned: [0.68, 0.80],
+} as const;
+
 /** Overall che il pilota raggiungerà se arriva al proprio tetto. */
 export function potentialOverall(d: Driver): number {
   return overall(d.caps);
@@ -86,8 +106,8 @@ export function createNewgen(rng: Rng, opts: NewgenOptions): Driver {
   const attrs = {} as Attributes;
   for (const k of ATTRIBUTE_KEYS) {
     caps[k] = clamp(targetPotential + rng.normal() * 6, 40, 99);
-    // Un diciottenne parte fra il 62% e il 78% del proprio tetto.
-    attrs[k] = clamp(caps[k] * rng.range(0.62, 0.78), 30, 95);
+    const [lo, hi] = ROOKIE_SHARE[ATTRIBUTE_PROFILE[k].physical ? 'physical' : 'learned'];
+    attrs[k] = clamp(caps[k] * rng.range(lo, hi), 30, 95);
   }
 
   return {

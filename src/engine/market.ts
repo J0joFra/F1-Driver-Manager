@@ -1,4 +1,4 @@
-import type { ContractOffer, Driver, World } from './types.js';
+import type { ContractOffer, Driver, Team, World } from './types.js';
 import { clamp, type Rng } from './rng.js';
 import { createNewgen, overall, potentialOverall } from './driver.js';
 import { agentBonus, staffAnnualCost } from './staff.js';
@@ -17,12 +17,78 @@ export const POTENTIAL_ANCHOR = 76;
 
 export const SEATS_PER_TEAM = 2;
 
+/**
+ * Quanto sbaglia una scuderia nel giudicare un pilota, in punti di interesse.
+ *
+ * È l'attrito del mercato: senza, la griglia si ordina perfettamente e la
+ * squadra migliore vince sempre.
+ */
+export const SCOUTING_NOISE = 18;
+
 /** Quanto vale un pilota sul mercato: risultati, fama e margine di crescita. */
 export function marketValue(d: Driver): number {
   const now = overall(d.attrs);
   const headroom = Math.max(0, potentialOverall(d) - now);
   const youth = clamp((30 - d.age) / 12, -0.4, 1);
   return now * 0.62 + d.reputation * 0.22 + headroom * youth * 0.9;
+}
+
+/**
+ * La scala su cui si incontrano piloti e scuderie.
+ *
+ * Il valore di mercato e il prestigio sono due numeri che non vivono sulla
+ * stessa retta: il primo si ferma attorno a 80 anche per un fuoriclasse, il
+ * secondo arriva a 90 per una squadra di vertice. Confrontarli direttamente —
+ * `valore >= prestigio * 0.55 + 42`, com'era — significa che la soglia di una
+ * squadra da titolo sta sopra il valore massimo che un pilota possa mai
+ * raggiungere: nessuno la supera, e il giocatore non riceve un'offerta di
+ * vertice nemmeno da campione del mondo. Il risultato era una carriera che si
+ * fermava a metà griglia per sempre.
+ *
+ * Qui i due numeri vengono portati sulla stessa scala: non «quanto vali» ma
+ * «a che punto della griglia stai», e non «quanto prestigio ha» ma «a che
+ * punto della griglia sta». Il confronto fra i due posti è quello che conta,
+ * e resta valido anche fra quarant'anni, quando i numeri assoluti si saranno
+ * spostati.
+ */
+export interface MarketScale {
+  /** valori di mercato dei piloti in attività, ordinati */
+  values: number[];
+  /** prestigi delle scuderie, ordinati */
+  prestiges: number[];
+}
+
+export function marketScale(world: World): MarketScale {
+  const values = Object.values(world.drivers)
+    .filter((d) => !d.retired)
+    .map(marketValue)
+    .sort((a, b) => a - b);
+  const prestiges = Object.values(world.teams).map((t) => t.prestige).sort((a, b) => a - b);
+  return { values, prestiges };
+}
+
+/** Frazione della lista che sta sotto `x`: 0 ultimo, 1 primo. */
+function rankIn(sorted: number[], x: number): number {
+  if (sorted.length === 0) return 0.5;
+  let below = 0;
+  for (const v of sorted) if (v < x) below += 1;
+  return below / sorted.length;
+}
+
+/**
+ * Quanto una scuderia vuole un pilota, 0–100.
+ *
+ * Il perno è la differenza fra il posto del pilota in griglia e il posto
+ * della scuderia: a parità di posto l'interesse è alto, e cala in fretta da
+ * una parte (il pilota è troppo forte per loro: firmerà altrove) e dall'altra
+ * (è troppo debole: prenderanno un altro). Le squadre di coda hanno un bonus
+ * perché un sedile lo devono riempire comunque.
+ */
+export function teamInterest(scale: MarketScale, driver: Driver, team: Team): number {
+  const driverRank = rankIn(scale.values, marketValue(driver));
+  const teamRank = rankIn(scale.prestiges, team.prestige);
+  const fit = driverRank - teamRank;
+  return clamp(70 + fit * 110 + (teamRank < 0.35 ? 14 : 0), 0, 100);
 }
 
 /** Ingaggio proposto, in euro. Un buon procuratore lo alza sensibilmente. */
@@ -126,14 +192,29 @@ export function runTransferMarket(world: World, rng: Rng): void {
     ? new Set(candidateTeams(world, world.drivers[playerId]!).map((c) => c.teamId))
     : new Set<string>();
 
+  const scale = marketScale(world);
+
   for (const team of teams) {
     const cap = SEATS_PER_TEAM - (reserved.has(team.id) ? 1 : 0);
     while (team.driverIds.length < cap) {
-      const idx = available.findIndex((d) => {
-        // Una scuderia di coda non convince un top driver, e viceversa.
-        const v = marketValue(d);
-        return v <= team.prestige * 0.55 + 45 || team.prestige > 70;
-      });
+      // Una scuderia di coda non convince un top driver, e viceversa: la
+      // stessa misura che decide le offerte al giocatore decide la griglia.
+      //
+      // La scelta non è però perfetta. Senza `SCOUTING_NOISE` le squadre
+      // ordinano la griglia esattamente per valore, i migliori finiscono
+      // sempre nella macchina migliore e il campionato diventa di una sola
+      // scuderia: nella simulazione a quarant'anni i campioni diversi
+      // scendevano da 15 a 11 e le scuderie iridate da 7 a 4. Una squadra
+      // sbaglia valutazione, arriva tardi, punta sul giovane sbagliato: è
+      // questo errore a tenere vivo il campionato.
+      let idx = -1;
+      let bestScore = -Infinity;
+      for (let i = 0; i < available.length; i++) {
+        const interest = teamInterest(scale, available[i]!, team);
+        if (interest < 45) continue;
+        const score = interest + rng.normal() * SCOUTING_NOISE;
+        if (score > bestScore) { bestScore = score; idx = i; }
+      }
       const pick = idx >= 0 ? available.splice(idx, 1)[0] : available.shift();
       if (!pick) break;
       pick.teamId = team.id;
@@ -157,13 +238,11 @@ export function runTransferMarket(world: World, rng: Rng): void {
  * una fine di carriera decisa da un tiro di dado, non da una scelta.
  */
 export function candidateTeams(world: World, driver: Driver, rng?: Rng): ContractOffer[] {
-  const value = marketValue(driver);
-  const scored = Object.values(world.teams).map((team) => {
-    // Le squadre forti guardano il valore, quelle di coda guardano il potenziale.
-    const fit = value - (team.prestige * 0.55 + 42);
-    const interest = clamp(62 + fit * 2.4 + (team.prestige < 55 ? 14 : 0), 0, 100);
-    return { team, interest };
-  });
+  const scale = marketScale(world);
+  const scored = Object.values(world.teams).map((team) => ({
+    team,
+    interest: teamInterest(scale, driver, team),
+  }));
 
   const wanted = scored.filter((s) => s.interest >= 45).sort((a, b) => b.interest - a.interest);
   const fallback = scored.sort((a, b) => a.team.prestige - b.team.prestige)[0];

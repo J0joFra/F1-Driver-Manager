@@ -13,6 +13,8 @@ export interface IncidentInputs {
   consistency: number;
   /** 0–100: stanchezza accumulata */
   fatigue: number;
+  /** 0–1: le gare nelle gambe */
+  experience?: number;
   /** usura della gomma, 0–150 */
   tyreWear: number;
   /** 0 asciutto, 1 diluvio */
@@ -31,13 +33,16 @@ export function driverErrorChance(i: IncidentInputs): number {
   // perché a costanza zero la divisione esploderebbe.
   const consistencyFactor = 60 / Math.max(20, i.consistency);
   const fatigueFactor = 1 + clamp(i.fatigue, 0, 100) / 100;
+  // Chi ha centocinquanta gare nelle gambe sbaglia un terzo di meno.
+  const rookieFactor = 1.35 - clamp(i.experience ?? 0, 0, 1) * 0.5;
   const tyreFactor = i.tyreWear > 80 ? 1.5 : 1;
   // Sul bagnato conta chi ci sa stare: un fenomeno sotto la pioggia rischia
   // quasi come all'asciutto, un pilota mediocre il doppio.
   const wetFactor = 1 + i.wetness * (2.4 - clamp(i.wetSkill, 0, 100) / 100 * 1.4);
   const pressureFactor = i.underPressure ? 1.3 : 1;
 
-  return base * consistencyFactor * fatigueFactor * tyreFactor * wetFactor * pressureFactor;
+  return base * consistencyFactor * fatigueFactor * tyreFactor * wetFactor
+    * pressureFactor * rookieFactor;
 }
 
 /** Probabilità per giro di un guasto. Non dipende dal pilota. */

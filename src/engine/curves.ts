@@ -33,8 +33,23 @@ export function lerp(a: number, b: number, t: number): number {
  */
 export const MARGINAL_EXPONENT = 1.6;
 
-export function marginalDifficulty(gap: number): number {
-  return Math.pow(clamp(gap, 0, 1), MARGINAL_EXPONENT);
+/**
+ * Su quanti punti si misura «quanto margine resta».
+ *
+ * Il margine va contato **in punti**, non come frazione del tetto. Prima
+ * `gap` era `(tetto - attuale) / tetto`, e quindi un pilota a 11 punti dal
+ * suo limite cresceva al 4% del ritmo base mentre uno a 10 punti da un tetto
+ * di 40 cresceva al 11% — più in fretta con meno margine, il che non
+ * significa niente. Il risultato era che un pilota a metà carriera smetteva
+ * di migliorare: in otto stagioni realizzava due punti su dodici disponibili.
+ *
+ * Trenta punti è il margine tipico di un diciottenne: da lì in giù la
+ * crescita rallenta, e vicino al tetto resta proibitiva come deve essere.
+ */
+export const HEADROOM_SCALE = 30;
+
+export function marginalDifficulty(headroom: number): number {
+  return Math.pow(clamp(headroom / HEADROOM_SCALE, 0, 1), MARGINAL_EXPONENT);
 }
 
 /**
