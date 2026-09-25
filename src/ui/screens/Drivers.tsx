@@ -9,6 +9,7 @@ import {
 } from '../../engine/training.js';
 import { previewTraining } from '../../engine/progression.js';
 import { overall } from '../../engine/driver.js';
+import { useProfile } from '../../state/useProfile.js';
 import { ATTRIBUTE_COLOURS, Bar, Btn, Note, Panel, Pips } from '../components/kit.js';
 import { ATTR_LABELS, CATEGORY_LABELS, MINIGAME_LABELS } from '../format.js';
 
@@ -40,6 +41,8 @@ export function Drivers({ onAdvance }: { onAdvance: () => void }) {
   const selected = useGame((s) => s.selected);
   const plans = useGame((s) => s.plans);
   const setPlanFor = useGame((s) => s.setPlan);
+  const skillTokens = useProfile((s) => s.profile.wallet.skill);
+  const spendTokens = useGame((s) => s.spendSkillTokens);
 
   const me = roster.find((d) => d.id === selected) ?? roster[0];
 
@@ -115,6 +118,19 @@ export function Drivers({ onAdvance }: { onAdvance: () => void }) {
             )}
           </button>
         ))}
+        {/* Un gettone, un punto. I nodi restano da sbloccare in ordine e il
+            tetto degli attributi non si muove: si compra tempo, non talento. */}
+        <Btn
+          onClick={() => spendTokens(me.id, 1)}
+          disabled={skillTokens < 1}
+          className="shrink-0"
+          testId="spend-skill-token"
+          title={skillTokens < 1
+            ? 'Non hai gettoni abilità'
+            : 'Converte un gettone in un punto abilità per questo pilota'}
+        >
+          <Sparkles className="w-3 h-3" /> +1 punto ({skillTokens})
+        </Btn>
         <Btn onClick={() => { select(me.id); goTo('profilo'); }} className="shrink-0" testId="open-profile">
           <User className="w-3 h-3" /> Scheda
         </Btn>

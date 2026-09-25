@@ -12,6 +12,10 @@ import {
   type StartTeamOptions, type Terms,
 } from '../engine/team.js';
 import { cancelProject, startProject } from '../engine/projects.js';
+import { injectCash, convertSkillTokens, rushProject } from '../engine/boosts.js';
+import { fromSeason, fromWeekend } from '../engine/tracking.js';
+import { useProfile } from './useProfile.js';
+import { firstFreeSlot, saveSlot } from './saves.js';
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
 import { migrateWorld } from '../engine/migrate.js';
 import { beginRace, currentRace, endRace } from './raceSession.js';
@@ -21,6 +25,9 @@ import { beginRace, currentRace, endRace } from './raceSession.js';
  * interfaccia. Nessuna regola di gioco vive qui: questo file sposta dati,
  * non decide nulla.
  */
+
+/** Dove si entra: il menu, o la partita. */
+export type Stage = 'menu' | 'gioco';
 
 export type Screen =
   | 'paddock'
@@ -85,6 +92,17 @@ export function defaultPlan(): TrainingPlan {
 
 interface GameState {
   world: World | null;
+  /**
+   * Menu o partita.
+   *
+   * Prima bastava «c'è un mondo o non c'è»: aprire l'app con una carriera in
+   * corso ti buttava dentro la partita, e non c'era modo di tornare indietro
+   * per caricarne un'altra. Adesso il menu è uno stato, e un mondo caricato
+   * non implica esserci entrato.
+   */
+  stage: Stage;
+  /** lo slot su cui questa partita si salva */
+  slot: number | null;
   screen: Screen;
   /**
    * Il programma settimanale di ciascun pilota, per id.
@@ -118,8 +136,19 @@ interface GameState {
   openGrid: () => void;
   startRace: () => void;
   completeRace: (results: RaceResult[], safetyCars: number) => void;
-  newGame: (opts: StartTeamOptions) => void;
+  newGame: (opts: StartTeamOptions & { slot?: number }) => void;
+  /** entra in una partita già caricata */
+  openSlot: (slot: number, world: World) => void;
+  /** salva e torna al menu */
+  toMenu: () => void;
+  continueGame: () => void;
   abandon: () => void;
+  /** versa crediti del portafoglio nella cassa della scuderia */
+  injectCredits: (credits: number) => boolean;
+  /** converte gettoni abilità in punti per un tuo pilota */
+  spendSkillTokens: (driverId: string, tokens: number) => boolean;
+  /** accorcia un progetto con i gettoni ricerca */
+  rush: (projectId: string, tokens: number) => boolean;
   goTo: (screen: Screen) => void;
   /** fissa le tre decisioni della qualifica di sabato */
   setQualifyingPlan: (plan: QualifyingPlan) => void;
@@ -148,6 +177,8 @@ export const useGame = create<GameState>()(
   persist(
     (set, get) => ({
       world: null,
+      stage: 'menu',
+      slot: null,
       screen: 'paddock',
       plans: {},
       selected: null,
@@ -162,21 +193,88 @@ export const useGame = create<GameState>()(
       setPlan: (driverId, plan) => set({ plans: { ...get().plans, [driverId]: plan } }),
       select: (driverId) => set({ selected: driverId }),
 
-      newGame: (opts) => {
+      newGame: ({ slot, ...opts }) => {
         endRace();
+        const world = startTeam(opts);
+        const chosen = slot ?? firstFreeSlot() ?? 0;
+        saveSlot(chosen, world);
         set({
-          world: startTeam(opts), screen: 'mercato', plans: {}, selected: null,
+          world, stage: 'gioco', slot: chosen, screen: 'mercato', plans: {}, selected: null,
           lastWeek: null, lastSeason: null, pendingRace: null,
           raceRunning: false, gridReady: false, refusal: null,
         });
       },
 
+      openSlot: (slot, world) => {
+        endRace();
+        set({
+          world, stage: 'gioco', slot, screen: 'paddock', plans: {}, selected: null,
+          lastWeek: null, lastSeason: null, pendingRace: null,
+          raceRunning: false, gridReady: false, refusal: null,
+        });
+      },
+
+      continueGame: () => {
+        if (get().world) set({ stage: 'gioco' });
+      },
+
+      /**
+       * Torna al menu, scrivendo prima lo slot.
+       *
+       * Il mondo attivo si salva da solo a ogni cambiamento, ma lo slot no:
+       * scriverlo a ogni giorno avanzato vorrebbe dire duecento chilobyte
+       * ogni volta che si preme «Avanza». Si scrive quando si esce, a fine
+       * gara e a fine stagione — i tre momenti in cui perdere qualcosa
+       * farebbe davvero male.
+       */
+      toMenu: () => {
+        const { world, slot } = get();
+        if (world && slot !== null) saveSlot(slot, world);
+        set({ stage: 'menu' });
+      },
+
+      injectCredits: (credits) => {
+        const world = get().world;
+        const team = world?.seat.mode === 'scuderia' ? world.teams[world.seat.teamId] : null;
+        if (!world || !team) return false;
+        // Il portafoglio è l'unica fonte di verità: si prova a pagare da lì, e
+        // solo se il pagamento riesce la cassa si muove.
+        const wallet = { ...useProfile.getState().profile.wallet };
+        if (!injectCash(wallet, team, credits)) return false;
+        useProfile.getState().pay({ credits });
+        set({ world: { ...world } });
+        return true;
+      },
+
+      spendSkillTokens: (driverId, tokens) => {
+        const world = get().world;
+        const driver = world?.drivers[driverId];
+        if (!world || !driver) return false;
+        const wallet = { ...useProfile.getState().profile.wallet };
+        if (!convertSkillTokens(wallet, driver, tokens)) return false;
+        useProfile.getState().pay({ skill: tokens });
+        set({ world: { ...world } });
+        return true;
+      },
+
+      rush: (projectId, tokens) => {
+        const world = get().world;
+        const team = world?.seat.mode === 'scuderia' ? world.teams[world.seat.teamId] : null;
+        const project = team?.projects.find((p) => p.id === projectId);
+        if (!world || !team || !project) return false;
+        const wallet = { ...useProfile.getState().profile.wallet };
+        if (!rushProject(wallet, team, project, tokens)) return false;
+        useProfile.getState().pay({ research: tokens });
+        set({ world: { ...world } });
+        return true;
+      },
+
       abandon: () => {
         endRace();
         set({
-          world: null, lastWeek: null, lastDay: null, lastSeason: null, plans: {},
-          selected: null, pendingRace: null, raceRunning: false, gridReady: false,
-          screen: 'paddock', refusal: null,
+          world: null, stage: 'menu', slot: null, lastWeek: null, lastDay: null,
+          lastSeason: null, plans: {}, selected: null, pendingRace: null,
+          raceRunning: false, gridReady: false, screen: 'paddock', refusal: null,
         });
       },
 
@@ -278,6 +376,10 @@ export const useGame = create<GameState>()(
           commitWeekend(world, session.prepared, results, safetyCars);
         });
         endRace();
+        // Il weekend appena corso fa avanzare gli obiettivi del profilo.
+        useProfile.getState().track(fromWeekend(world, results));
+        const slot = get().slot;
+        if (slot !== null) saveSlot(slot, world);
         set({
           world: { ...world }, lastWeek: report, pendingRace: null,
           raceRunning: false, gridReady: false,
@@ -287,7 +389,12 @@ export const useGame = create<GameState>()(
       closeSeason: () => {
         const world = get().world;
         if (!world || get().pendingRace) return null;
+        // Prima la contabilità della stagione, poi la chiusura: `endSeason`
+        // azzera le classifiche, e dopo non c'è più niente da contare.
+        useProfile.getState().trackSeason(fromSeason(world));
         const summary = endSeason(world);
+        const slot = get().slot;
+        if (slot !== null) saveSlot(slot, world);
         set({ world: { ...world }, lastSeason: summary, lastWeek: null });
         return summary;
       },
@@ -307,7 +414,8 @@ export const useGame = create<GameState>()(
       // La gara in corso non si salva: contiene un generatore casuale, che è
       // una chiusura. Chi chiude l'app in gara la ritrova da rigiocare.
       partialize: (s) => ({
-        world: s.world, screen: s.screen, pendingRace: s.pendingRace, plans: s.plans,
+        world: s.world, screen: s.screen, pendingRace: s.pendingRace,
+        plans: s.plans, slot: s.slot,
       }) as never,
     },
   ),

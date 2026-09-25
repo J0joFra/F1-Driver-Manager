@@ -8,6 +8,10 @@ import { Qualifying } from './ui/screens/Qualifying.js';
 import { isRaceWeek } from './engine/selectors.js';
 import { QUALIFYING_DAY } from './engine/days.js';
 import { NewGame } from './ui/screens/NewGame.js';
+import { MainMenu } from './ui/screens/MainMenu.js';
+import { DailyRewards } from './ui/screens/DailyRewards.js';
+import { Objectives } from './ui/screens/Objectives.js';
+import { Store } from './ui/screens/Store.js';
 import { Paddock } from './ui/screens/Paddock.js';
 import { Drivers } from './ui/screens/Drivers.js';
 import { DriverScreen } from './ui/screens/DriverScreen.js';
@@ -22,8 +26,14 @@ import { SeasonOverlay, WeekendOverlay } from './ui/screens/Overlays.js';
 import { GridScreen } from './ui/race/GridScreen.js';
 import { RaceView } from './ui/race/RaceView.js';
 
+/** Le schermate che vivono sopra il menu, non dentro la partita. */
+type Overlay = 'nuova' | 'premi' | 'obiettivi' | 'negozio' | null;
+
 export function App() {
   const world = useGame((s) => s.world);
+  const stage = useGame((s) => s.stage);
+  const toMenu = useGame((s) => s.toMenu);
+  const [overlay, setOverlay] = useState<Overlay>(null);
   const screen = useGame((s) => s.screen);
   const advance = useGame((s) => s.advance);
   const skipToWeekend = useGame((s) => s.skipToWeekend);
@@ -66,10 +76,35 @@ export function App() {
     }
   }, [skipToWeekend, busy]);
 
-  if (!world) {
+  /*
+   * Il menu è uno stato, non l'assenza di un mondo.
+   *
+   * Prima bastava «c'è un salvataggio o non c'è»: riaprire l'app con una
+   * carriera in corso ti portava dentro la partita, e non esisteva un modo di
+   * tornare indietro per caricarne un'altra o comprare qualcosa.
+   */
+  if (stage === 'menu' || !world) {
     return (
       <OrientationGate>
-        <NewGame />
+        <div className="h-full bg-ground">
+          {overlay === null && (
+            <MainMenu
+              onNewGame={() => setOverlay('nuova')}
+              onSettings={() => setOverlay(null)}
+              onDaily={() => setOverlay('premi')}
+              onObjectives={() => setOverlay('obiettivi')}
+              onStore={() => setOverlay('negozio')}
+            />
+          )}
+          {overlay !== null && (
+            <div className="h-full p-2">
+              {overlay === 'nuova' && <NewGame onBack={() => setOverlay(null)} />}
+              {overlay === 'premi' && <DailyRewards onClose={() => setOverlay(null)} />}
+              {overlay === 'obiettivi' && <Objectives onClose={() => setOverlay(null)} />}
+              {overlay === 'negozio' && <Store onClose={() => setOverlay(null)} />}
+            </div>
+          )}
+        </div>
       </OrientationGate>
     );
   }
@@ -86,7 +121,7 @@ export function App() {
     return (
       <OrientationGate>
         <div className="h-full flex flex-col bg-ground">
-          <TopBar onAdvance={onAdvance} onSkip={onSkip} busy={busy} />
+          <TopBar onAdvance={onAdvance} onSkip={onSkip} busy={busy} onMenu={toMenu} />
           <main className="flex-1 min-h-0 p-2">
             <Qualifying onDone={onAdvance} />
           </main>
@@ -119,7 +154,7 @@ export function App() {
       <div className="h-full flex">
         <Sidebar />
         <div className="flex-1 min-w-0 flex flex-col relative">
-          <TopBar onAdvance={onAdvance} onSkip={onSkip} busy={busy} />
+          <TopBar onAdvance={onAdvance} onSkip={onSkip} busy={busy} onMenu={toMenu} />
           <main className="flex-1 min-h-0 p-2">
             {screen === 'paddock' && <Paddock onAdvance={onAdvance} />}
             {screen === 'scuderia' && <TeamScreen />}

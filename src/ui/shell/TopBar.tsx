@@ -13,8 +13,8 @@ import { weekActivities, WEEKDAY_SHORT } from '../../engine/days.js';
  * settimana: è il riferimento che il giocatore cerca per primo.
  */
 export function TopBar({
-  onAdvance, onSkip, busy,
-}: { onAdvance: () => void; onSkip: () => void; busy: boolean }) {
+  onAdvance, onSkip, busy, onMenu,
+}: { onAdvance: () => void; onSkip: () => void; busy: boolean; onMenu: () => void }) {
   const world = useGame((s) => s.world)!;
   const plans = useGame((s) => s.plans);
   const race = nextRace(world);
@@ -37,7 +37,15 @@ export function TopBar({
 
   return (
     <header className="h-[34px] shrink-0 border-b border-line bg-panel flex items-center gap-3 px-3 font-mono text-2xs">
-      <span className="font-sans font-bold tracking-[0.12em] text-ink text-[11px]">F1 MANAGER</span>
+      {/* Il titolo è anche la via d'uscita: da qui si torna al menu, e lo
+          slot viene scritto prima di uscire. */}
+      <button
+        type="button" onClick={onMenu} data-testid="to-menu" title="Torna al menu"
+        className="font-sans font-bold tracking-[0.12em] text-ink text-[11px]
+          hover:text-primary transition shrink-0"
+      >
+        F1 MANAGER
+      </button>
       <span className="text-muted tnum">{world.year}</span>
       <span className="text-ink tnum">
         {date ? `${WEEKDAY_SHORT[world.dayOfWeek]} ${formatDay(date)}` : `sett. ${seasonWeeks}`}

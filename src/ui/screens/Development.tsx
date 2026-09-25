@@ -1,11 +1,14 @@
-import { AlertTriangle, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Wrench, X, Zap } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
 import { myTeam } from '../../engine/selectors.js';
 import {
   AREA_LABEL, developmentBurn, PROJECT_SIZE_KEYS, PROJECT_SIZES, startRefusal, weeklyCost,
 } from '../../engine/projects.js';
 import { CAR_KEYS, type CarKey } from '../../engine/types.js';
+import { useProfile } from '../../state/useProfile.js';
+import { researchRoom, rushCost, rushRefusal } from '../../engine/boosts.js';
 import { Bar, Btn, Panel } from '../components/kit.js';
+import { CurrencyChip } from '../components/Currency.js';
 import { money } from '../format.js';
 
 /**
@@ -22,6 +25,8 @@ export function Development() {
   const team = myTeam(world)!;
   const open = useGame((s) => s.openProject);
   const close = useGame((s) => s.closeProject);
+  const rush = useGame((s) => s.rush);
+  const wallet = useProfile((s) => s.profile.wallet);
 
   const others = Object.values(world.teams).filter((t) => t.id !== team.id);
   const fieldMean = (k: CarKey) => others.reduce((s, t) => s + t.car[k], 0) / Math.max(1, others.length);
@@ -44,6 +49,7 @@ export function Development() {
         />
         <Head label="Reparti al lavoro" value={`${team.projects.length} su 4`} />
         <span className="flex-1" />
+        <CurrencyChip currency="research" amount={wallet.research} />
         {burn > 0 && weeksLeft < 6 && (
           <span className="flex items-center gap-1 font-mono text-2xs text-bad">
             <AlertTriangle className="w-3 h-3" />
@@ -101,6 +107,25 @@ export function Development() {
                       <X className="w-2.5 h-2.5" /> annulla
                     </button>
                   </div>
+
+                  {/* Accorciare costa un gettone e il lavoro saltato, pagato
+                      subito: il gettone compra tempo, non lavoro. */}
+                  {researchRoom(project) > 0 && (() => {
+                    const refusal = rushRefusal(wallet, team, project, 1);
+                    return (
+                      <Btn
+                        variant="ghost"
+                        disabled={refusal !== null}
+                        title={refusal ?? `Due settimane in meno, e ${money(rushCost(project, 1))} subito`}
+                        onClick={() => rush(project.id, 1)}
+                        testId={`rush-${area}`}
+                        className="mt-1.5 w-full !py-1 !text-[10px]"
+                      >
+                        <Zap className="w-3 h-3" />
+                        −2 settimane · 1 gettone
+                      </Btn>
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="mt-2 flex-1 grid grid-rows-3 gap-1">

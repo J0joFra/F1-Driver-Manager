@@ -30,6 +30,7 @@ crescere i piloti, e la domenica la gara si corre dal vivo, vista dall'alto in
 - [Il calendario della stagione](#il-calendario-della-stagione)
 - [La settimana di gioco](#la-settimana-di-gioco)
 - [L'albero delle abilità](#lalbero-delle-abilità)
+- [Il menu, il portafoglio e il negozio](#il-menu-il-portafoglio-e-il-negozio)
 - [Il modello di gara](#il-modello-di-gara)
 - [La carriera, tarata sui mondiali veri](#la-carriera-tarata-sui-mondiali-veri)
 - [La forma del circuito](#la-forma-del-circuito)
@@ -64,7 +65,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 145 test
+npm test                      # 163 test
 npm run sim -- --seasons 40 --verbose
 npm run check:team            # 10 scuderie fondate da zero × 16 stagioni
 ```
@@ -376,6 +377,165 @@ Si entra ultimi e si sale, su entrambe le leve: la monoposto arriva alla pari
 attorno alla dodicesima stagione, i piloti crescono di cinque punti. Il
 giocatore di riferimento non arriva al vertice, e deve essere così: se ci
 arrivasse, vorrebbe dire che le decisioni non contano.
+
+---
+
+## Il menu, il portafoglio e il negozio
+
+### La schermata da cui si entra
+
+Prima non c'era: se avevi una carriera aperta, l'app ti buttava dentro e non
+esisteva un modo di tornare indietro. Adesso il menu è uno **stato**, non
+l'assenza di un salvataggio — *Continua*, *Nuova carriera*, *Carica partita*,
+*Negozio*, lingua, impostazioni, obiettivi, e il premio del giorno in alto a
+sinistra.
+
+Lo sfondo è disegnato, non fotografato. Una licenza d'immagine è un problema
+legale e mezzo megabyte da scaricare prima che il gioco si apra; quello che
+serve — profondità, un tracciato, la griglia a scacchi — sono due chilobyte di
+SVG.
+
+**Tre slot di salvataggio.** Il menu ne mostra l'anteprima senza caricarli:
+l'indice è un oggetto piccolo e separato, perché leggere tre mondi interi —
+duecento chilobyte l'uno — solo per scrivere «Corse Aurora, 2034, 4ª»
+renderebbe lenta la schermata da cui si entra. Lo slot si scrive quando esci al
+menu, a fine gara e a fine stagione: i tre momenti in cui perdere qualcosa
+farebbe davvero male.
+
+### Tre valute, e perché stanno fuori dalla partita
+
+| | Come si guadagna | Dove si spende |
+|---|---|---|
+| **Crediti** (€) | accessi, obiettivi | cassa della scuderia |
+| **Gettoni abilità** | obiettivi, titoli | punti sull'albero di un tuo pilota |
+| **Gettoni ricerca** | accessi, obiettivi | settimane in meno su un progetto aperto |
+
+Il portafoglio vive in `f1dm-profile-v1`, **fuori** dal salvataggio della
+carriera. È un vincolo, non comodità: se compri venti gettoni con un euro e poi
+cominci una scuderia nuova, quei gettoni devono esserci ancora. Metterli dentro
+`World` significherebbe cancellare con un pulsante qualcosa che è stato pagato.
+
+Tenerle separate serve: una sola valuta per tutto vuol dire che ogni scelta si
+riduce a «quanto ne ho», e le tre cose che il giocatore decide — soldi, piloti,
+macchina — tornerebbero a essere la stessa cosa.
+
+### I limiti, che non sono pudore ma ingegneria
+
+Questo è un gioco per una persona sola, e una valuta comprabile in un gioco per
+una persona sola è per definizione una scorciatoia. Il bilanciamento è tarato
+su una scuderia che **non spende un gettone** — è quello che misura
+`npm run check:team` — quindi ogni scorciatoia deve far arrivare prima, mai più
+in alto. Da qui tre vincoli precisi:
+
+1. **I crediti entrano in cassa, non nel bilancio.** Comprano settimane di
+   sviluppo. Non alzano il premio di classifica né gli sponsor, quindi non
+   cambiano quanto la scuderia guadagna da sola.
+2. **I gettoni abilità danno punti, non nodi.** Un punto vale cinque gran premi
+   corsi; i nodi restano da sbloccare in ordine e il tetto degli attributi non
+   si muove.
+3. **I gettoni ricerca tolgono settimane, non costi.** Il lavoro saltato si
+   paga subito e per intero, e un progetto resta aperto almeno una settimana
+   qualunque cosa gli si butti addosso. Senza l'addebito, accorciare sarebbe
+   uno sconto travestito da fretta — un progetto maggiore finito in fretta
+   costerebbe la metà di uno portato a termine.
+
+### Ricompense giornaliere e obiettivi
+
+Sette caselle, quella di oggi accesa, la settima grande. La serie si spezza se
+salti un giorno e riparte dalla prima: sembra severo ed è il punto — una serie
+che non si può perdere non è una serie.
+
+Gli obiettivi contano su **tutte** le carriere, perché uno che si azzera quando
+ricominci non è un obiettivo, è un compito. I contatori stanno nel profilo, e
+`tracking.ts` traduce quello che succede nel mondo in incrementi — con un caso
+a parte per la posizione costruttori, che è un minimo e non una somma: due
+terzi posti non fanno un sesto.
+
+## Acquisti in app
+
+### Come è costruito
+
+`src/platform/billing.ts` è una **porta**: un'interfaccia con due
+implementazioni. Il motore non sa che esistono i pagamenti e non deve saperlo —
+è codice puro che gira anche nel simulatore da riga di comando.
+
+- Sul web c'è un negozio finto che **dichiara di esserlo**: la schermata scrive
+  che non viene addebitato niente. Fingere un acquisto senza dirlo è il modo
+  migliore per ritrovarsi un giorno con un accredito che il giocatore giura di
+  aver pagato.
+- Su Android `billing.native.ts` carica il plugin **per nome, a runtime**. Così
+  il progetto compila e il sito si costruisce anche senza il pacchetto
+  installato; con un `import` normale la build fallirebbe finché non c'è, e il
+  gioco resterebbe ingiocabile nel browser per un pezzo che serve solo su
+  telefono.
+
+### Cosa fare per accenderlo
+
+```bash
+npm install @capacitor/core @capacitor/android
+npm install @capacitor-community/in-app-purchases
+npx cap add android
+npx cap sync android
+```
+
+Poi, nella **Play Console**:
+
+1. Crea l'app e carica almeno un AAB firmato su una traccia di test — i
+   prodotti non si possono creare prima.
+2. *Monetizza → Prodotti in-app → Crea prodotto*, uno per ogni `id` di
+   `src/engine/store.ts`: `tokens_20`, `tokens_60`, `skill_10`, `credits_100m`,
+   `bundle_start`, `no_ads`. **Gli id devono combaciare esattamente**: se non lo
+   fanno, l'acquisto parte e il gioco non accredita niente, che è il difetto
+   peggiore possibile perché il giocatore ha pagato. Un test lo verifica
+   (`catalogProblems`), ma solo dal lato del gioco.
+3. Il prezzo si fissa lì, per paese e valuta. Quello scritto nel catalogo è un
+   segnaposto per il tempo in cui Google non ha ancora risposto: mostrare una
+   cifra diversa da quella addebitata, oltre che scorretto, è vietato.
+4. *Test → Tester con licenza*: chi è in quella lista compra senza pagare.
+
+### Le due cose che si sbagliano sempre
+
+**Il consumo.** Un pacchetto di gettoni è *consumabile*: dopo averlo accreditato
+va detto a Google che è stato consegnato, o il giocatore non può ricomprarlo. Si
+manifesta come «ho pagato e non me lo fa ricomprare», ed è l'errore più comune
+di chi integra Play Billing la prima volta. L'ordine conta: **prima si accredita
+il portafoglio e lo si salva, poi si consuma.** Se l'app muore in mezzo, al
+riavvio l'acquisto risulta ancora posseduto e si può accreditare di nuovo — e il
+controllo sui token già visti impedisce il doppio accredito.
+
+**La verifica.** Il portafoglio sta in `localStorage`, sul dispositivo. Vuol
+dire che chi vuole barare bara, con o senza acquisti: basta aprire gli strumenti
+da sviluppatore. Per un gioco per una persona sola non è un disastro — non c'è
+nessun altro a cui rovinare la partita — ma va detto invece che far finta di
+niente. Senza un server, «verificato» vuol dire solo che il negozio ha risposto
+di sì su quel dispositivo. Il giorno in cui ci fossero classifiche online, la
+verifica dovrebbe spostarsi su un server, con l'API *Google Play Developer* o
+con un servizio come RevenueCat che la fa al posto tuo.
+
+## Obiettivi e punti Google Play
+
+**I punti Google Play non li può assegnare uno sviluppatore.** Sono un programma
+di fedeltà di Google: li guadagna chi acquista — anche sui tuoi acquisti in app
+— e chi fa le attività che decide Google. Non esiste un'API per dire «questo
+giocatore ha fatto una cosa, dagli cinquanta punti», e non c'è modo di
+aggirarla.
+
+Quello che si può fare, e che è quasi sempre ciò che si intendeva, sono gli
+**obiettivi di Play Games Services**: li definisci tu, hanno icona e
+descrizione, compaiono nel profilo Play del giocatore e sono condivisibili. Non
+danno punti, danno riconoscimento — e il gioco li paga in valuta sua.
+
+1. Play Console → *Play Games Services* → configura il gioco e collegalo alle
+   credenziali OAuth del progetto.
+2. Crea un obiettivo per ciascuno di quelli in `OBJECTIVES`, e riporta l'id che
+   Google assegna nel campo `playGamesId`.
+3. `npm install @openforge/capacitor-google-play-games && npx cap sync android`.
+
+Finché il punto 2 non è fatto, `playGamesId` è vuoto e il modulo non fa niente:
+il gioco funziona lo stesso, con i suoi obiettivi interni. `syncAchievements` si
+può chiamare quante volte si vuole — sbloccare un obiettivo già sbloccato è
+innocuo, e conviene farlo all'avvio invece di tenere il conto di cosa si è già
+mandato.
 
 ---
 
@@ -1240,10 +1400,15 @@ Le regole 2–6 sono state aggiunte **dopo** la prima simulazione a 40 stagioni,
 src/
   App.tsx           instrada le schermate, gestisce l'avanzamento della settimana
   state/useGame.ts  store zustand + persist: sposta dati, non decide nulla
+  state/useProfile.ts  il portafoglio, in una chiave sua: scrittura sincrona
+  state/saves.ts    i tre slot e l'indice delle anteprime
+  platform/         la porta verso Google Play: billing e obiettivi, con le
+                    implementazioni finte per il web
   ui/
     shell/          rail di navigazione, barra di stato, blocco orientamento
     components/     primitive (Panel, Stat, Bar, Btn, Note)
-    screens/        Paddock, Scuderia, Sviluppo, Piloti, Mercato, Calendario,
+    screens/        menu iniziale, premi giornalieri, obiettivi, negozio,
+                    Paddock, Scuderia, Sviluppo, Piloti, Mercato, Calendario,
                     Bilancio, Classifiche, Storia, scheda pilota, albero delle
                     abilità, overlay di fine weekend e di fine anno
     race/           griglia di partenza, tracciato, torre dei tempi, striscia
@@ -1255,6 +1420,11 @@ engine/
   types.ts          modello dati completo del mondo
   driver.ts         creazione, newgen, overall, curve di età, ritiro
   team.ts           fondare la scuderia, ingaggi, rinnovi, conti di stagione
+  wallet.ts         le tre valute e le operazioni su di esse
+  profile.ts        premi giornalieri, obiettivi, migrazione del profilo
+  boosts.ts         dove si spendono le valute, e i limiti di quanto spostano
+  store.ts          il catalogo dei prodotti acquistabili
+  tracking.ts       da quello che succede nel mondo ai contatori del profilo
   projects.ts       progetti di reparto: costi, settimane, resa, rischio
   staff.ts          chi segue i piloti: efficienza dell'entourage
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
@@ -1344,7 +1514,7 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 145 test
+npm test               # vitest, 163 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
@@ -1394,6 +1564,9 @@ ingaggia, si sviluppa, si corre, si chiude l'anno e si ricomincia.
 - [x] Qualifica giocabile: le tre decisioni del sabato
 - [x] Forma dei circuiti misurata sulla geometria reale
 - [x] Salvataggio automatico, con recupero dei salvataggi della vecchia Modalità Pilota
+- [x] Menu iniziale, tre slot di salvataggio, premi giornalieri, obiettivi
+- [x] Portafoglio a tre valute che sopravvive alle carriere
+- [x] Negozio e porta verso Google Play Billing, con negozio finto per il web
 
 **Prossimo passo**:
 
@@ -1401,7 +1574,7 @@ ingaggia, si sviluppa, si corre, si chiude l'anno e si ricomincia.
 - [ ] Libere: la direzione di assetto
 - [ ] Assumere e licenziare il personale tecnico (adesso segue il prestigio da solo)
 - [ ] Strategia separata per le due monoposto già prima del via
-- [ ] Slot di salvataggio multipli
+- [ ] Traduzione vera delle stringhe (il selettore c'è, i testi no)
 
 **Poi**:
 
