@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { ChevronRight, Handshake, TrendingUp } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
 import { myTeam } from '../../engine/selectors.js';
 import { constructorStandings } from '../../engine/season.js';
@@ -5,6 +7,8 @@ import {
   operatingCost, PRIZE_BASE, prizeMoney, salaryBill, sponsorIncome,
 } from '../../engine/team.js';
 import { AREA_LABEL, developmentBurn, PROJECT_SIZES } from '../../engine/projects.js';
+import { goalText } from '../../engine/sponsors.js';
+import { Deals } from './Deals.js';
 import { useProfile } from '../../state/useProfile.js';
 import { MIN_INJECTION } from '../../engine/boosts.js';
 import { Bar, Btn, Note, Panel } from '../components/kit.js';
@@ -25,6 +29,7 @@ export function Finance() {
   const team = myTeam(world)!;
   const credits = useProfile((s) => s.profile.wallet.credits);
   const inject = useGame((s) => s.injectCredits);
+  const [deals, setDeals] = useState<'sponsor' | 'investitore' | null>(null);
 
   const table = constructorStandings(world);
   const rank = table.findIndex((c) => c.teamId === team.id);
@@ -35,6 +40,7 @@ export function Finance() {
   const income = prize + sponsors;
   const salaries = salaryBill(world, team);
   const operating = operatingCost(team);
+  const investorUpfront = team.investor?.status === 'aperto' ? team.investor.upfront : 0;
   const net = income - salaries - operating;
 
   const burn = developmentBurn(team);
@@ -42,7 +48,12 @@ export function Finance() {
   const committed = team.projects.reduce((s, p) => s + (p.cost - p.spent), 0);
 
   return (
-    <div className="h-full grid grid-cols-[1fr_1fr_196px] gap-2 min-h-0">
+    /* `minmax(0,1fr)` e non `1fr`: una traccia `1fr` non scende sotto la
+       larghezza del suo contenuto, e la riga dello sponsor — icona, testo,
+       freccia — non si stringe. Bastavano cinque pixel per far uscire la
+       colonna di destra dallo schermo. */
+    <div className="h-full relative grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_196px] gap-2 min-h-0">
+      {deals && <Deals kind={deals} onClose={() => setDeals(null)} />}
       <Panel title="Entrate di stagione" bodyClass="px-3 py-1 scroll-y">
         <Line
           label="Premio di classifica"
@@ -50,16 +61,54 @@ export function Finance() {
           value={money(prize)}
           tone="green"
         />
-        <Line
-          label="Sponsor"
-          sub={`prestigio ${Math.round(team.prestige)} su 100`}
-          value={money(sponsors)}
-          tone="green"
-        />
+        {/* Lo sponsor non è più un numero che arriva: è un contratto, e da
+            qui si va a firmarlo. */}
+        <button
+          type="button"
+          onClick={() => setDeals('sponsor')}
+          data-testid="open-sponsors"
+          className="w-full text-left hover:bg-white/5 rounded transition"
+        >
+          <Line
+            label={<span className="inline-flex items-center gap-1.5">
+              <Handshake className="w-3 h-3 text-primary" />Sponsor
+              <ChevronRight className="w-3 h-3 text-dim" />
+            </span>}
+            sub={team.sponsor
+              ? `${team.sponsor.name} · ancora ${team.sponsor.seasonsLeft} stagion${team.sponsor.seasonsLeft === 1 ? 'e' : 'i'}`
+              : 'nessun contratto: incassi solo gli sponsor minori'}
+            value={money(sponsors)}
+            tone="green"
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDeals('investitore')}
+          data-testid="open-investors"
+          className="w-full text-left hover:bg-white/5 rounded transition"
+        >
+          <Line
+            label={<span className="inline-flex items-center gap-1.5">
+              <TrendingUp className="w-3 h-3 text-vantar" />Investitore
+              <ChevronRight className="w-3 h-3 text-dim" />
+            </span>}
+            sub={team.investor
+              ? goalText(team.investor.goal)
+              : 'nessuno: versa subito, e paga un bonus se centri l\u2019obiettivo'}
+            value={investorUpfront > 0 ? money(investorUpfront) : '—'}
+            tone={investorUpfront > 0 ? 'green' : undefined}
+          />
+        </button>
         <div className="flex items-baseline justify-between gap-3 pt-2.5 mt-1 border-t border-line">
           <span className="font-sans text-sm font-semibold">Totale</span>
           <b className="font-mono text-sm text-primary tnum">{money(income)}</b>
         </div>
+        {team.investor?.status === 'aperto' && (
+          <p className="font-mono text-[8.5px] text-accent leading-relaxed mt-1.5">
+            In più {money(team.investor.bonus)} a fine stagione, se l'obiettivo è centrato.
+          </p>
+        )}
 
         <div className="mt-3 pt-2 border-t border-line">
           <div className="field-label mb-1">Quanto pesa arrivare davanti</div>
@@ -199,7 +248,7 @@ export function Finance() {
 }
 
 function Line({ label, sub, value, tone }: {
-  label: string; sub?: string; value: string; tone?: 'green' | 'bad';
+  label: React.ReactNode; sub?: string; value: string; tone?: 'green' | 'bad';
 }) {
   const colour = tone === 'green' ? 'text-primary' : tone === 'bad' ? 'text-bad' : 'text-ink';
   return (

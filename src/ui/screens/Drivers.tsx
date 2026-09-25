@@ -66,7 +66,7 @@ export function Drivers({ onAdvance }: { onAdvance: () => void }) {
 
   const week = currentWeek(world);
   const kind = week?.kind ?? 'free';
-  const raceWeek = kind === 'race';
+
   const limits = trainingLimits(me, week?.training ?? 0);
   const resting = limits.total === 0;
   const free = limits.total - planTotal(plan);
@@ -200,9 +200,11 @@ export function Drivers({ onAdvance }: { onAdvance: () => void }) {
           <Btn onClick={() => setPlan(emptyPlan())} className="px-2.5">
             <RotateCcw className="w-3 h-3" />Azzera
           </Btn>
+          {/* Il tempo scorre solo dal paddock, quindi questo pulsante dice
+              dove porta: il piano è già salvato, qui si va solo a casa. */}
           <Btn variant="green" onClick={onAdvance} className="flex-1" testId="train-advance">
             <Dumbbell className="w-3.5 h-3.5" />
-            {resting ? 'Riposa e avanza' : raceWeek ? 'Allena e vai alla gara' : 'Allena e avanza'}
+            {resting ? 'Piano salvato · al paddock' : 'Conferma e vai al paddock'}
           </Btn>
         </div>
       </Panel>

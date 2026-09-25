@@ -103,6 +103,10 @@ export function migrateWorld(raw: unknown): World | null {
     // per sempre: si parte da quanto il suo prestigio giustifica.
     if (typeof team.cash !== 'number') team.cash = initialCash(team.prestige ?? 40);
     if (!Array.isArray(team.projects)) team.projects = [];
+    // Sponsor e investitori sono arrivati dopo. Senza questi due campi la
+    // schermata del bilancio legge `undefined` e non si apre più.
+    if (team.sponsor === undefined) team.sponsor = null;
+    if (team.investor === undefined) team.investor = null;
     delete (team as unknown as Record<string, unknown>).futureFocus;
 
     // `short` è arrivato dopo: senza, le colonne strette mostrano "undefined".

@@ -159,6 +159,24 @@ for (const [screen, file] of [
   await noVerticalScroll(screen);
 }
 
+// Sponsor e investitori vivono nel bilancio, fra entrate e uscite.
+await page.click('[data-testid=nav-finanze]');
+await page.waitForTimeout(150);
+await page.click('[data-testid=open-sponsors]');
+await page.waitForTimeout(200);
+await shot('08b-sponsor');
+await noVerticalScroll('sponsor');
+await page.click('[data-testid=sign-sponsor-3]');
+await page.waitForTimeout(200);
+await page.click('[data-testid=open-investors]');
+await page.waitForTimeout(200);
+await shot('08c-investitori');
+await noVerticalScroll('investitori');
+await page.click('[data-testid=sign-investor-posizione]');
+await page.waitForTimeout(200);
+await shot('08d-bilancio-firmato');
+await noVerticalScroll('bilancio firmato');
+
 // La scheda del pilota e l'albero si aprono dai piloti, non dal menu.
 await page.click('[data-testid=nav-piloti]');
 await page.waitForTimeout(120);

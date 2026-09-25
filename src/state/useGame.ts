@@ -16,6 +16,10 @@ import { injectCash, convertSkillTokens, rushProject } from '../engine/boosts.js
 import { fromSeason, fromWeekend } from '../engine/tracking.js';
 import { useProfile } from './useProfile.js';
 import { firstFreeSlot, saveSlot } from './saves.js';
+import { daysToWeekend, nextStop } from '../engine/agenda.js';
+import {
+  investorOffers, signInvestor, signSponsor, sponsorOffers,
+} from '../engine/sponsors.js';
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
 import { migrateWorld } from '../engine/migrate.js';
 import { beginRace, currentRace, endRace } from './raceSession.js';
@@ -157,11 +161,22 @@ interface GameState {
   sign: (driverId: string, terms: Terms) => void;
   renew: (driverId: string, terms: Terms) => void;
   release: (driverId: string) => void;
+  /** firma uno sponsor fra quelli offerti */
+  signSponsorDeal: (dealId: string) => void;
+  /** firma un investitore: il versamento entra subito in cassa */
+  signInvestorDeal: (dealId: string) => void;
   openProject: (area: CarKey, size: ProjectSize) => void;
   closeProject: (projectId: string) => void;
   /** avanza di un giorno: è l'unità di tempo del gioco */
+  /**
+   * Avanza fino al prossimo giorno che chiede qualcosa.
+   *
+   * Restituisce `null` anche quando non ha avanzato perché il giocatore non
+   * era al paddock: in quel caso lo ci porta, e sarà il secondo tocco a far
+   * scorrere il tempo.
+   */
   advance: (minigameScore?: number) => DayReport | null;
-  /** avanza fino al venerdì del prossimo weekend di gara, o alla fine della stagione */
+  /** avanza fino al sabato del prossimo weekend di gara, saltando anche gli allenamenti */
   skipToWeekend: () => DayReport | null;
   closeSeason: () => SeasonSummary | null;
   dismissSummary: () => void;
@@ -315,6 +330,26 @@ export const useGame = create<GameState>()(
         set({ world: { ...world }, refusal, selected: null });
       },
 
+      signSponsorDeal: (dealId) => {
+        const world = get().world;
+        const team = world?.seat.mode === 'scuderia' ? world.teams[world.seat.teamId] : null;
+        if (!world || !team) return;
+        const deal = sponsorOffers(world, team).find((d) => d.id === dealId);
+        if (!deal || team.sponsor) return;
+        signSponsor(team, deal);
+        set({ world: { ...world } });
+      },
+
+      signInvestorDeal: (dealId) => {
+        const world = get().world;
+        const team = world?.seat.mode === 'scuderia' ? world.teams[world.seat.teamId] : null;
+        if (!world || !team) return;
+        const deal = investorOffers(world, team).find((d) => d.id === dealId);
+        if (!deal || team.investor) return;
+        signInvestor(team, deal);
+        set({ world: { ...world } });
+      },
+
       openProject: (area, size) => {
         const world = get().world;
         const team = world?.seat.mode === 'scuderia' ? world.teams[world.seat.teamId] : null;
@@ -331,29 +366,53 @@ export const useGame = create<GameState>()(
         set({ world: { ...world } });
       },
 
+      /**
+       * Avanza di un blocco di giorni, non di uno.
+       *
+       * Una stagione dura 308 giorni e quelli in cui c'è davvero qualcosa da
+       * decidere sono meno di cento: premere Avanza duecento volte per far
+       * scorrere il calendario era un lavoro, non un gioco. Adesso si arriva
+       * al prossimo giorno che chiede qualcosa — il lavoro della settimana, la
+       * qualifica, la gara — e ci si ferma lì.
+       *
+       * Il motore resta identico: continua ad avanzare un giorno alla volta, e
+       * qui si decide solo quante volte chiamarlo. Fermarsi a ogni evento che
+       * il motore segnala (`pendingRace`, `raceRun`, `seasonOver`) resta
+       * indispensabile — un conto di giorni non può sapere che la gara è
+       * arrivata.
+       */
       advance: (minigameScore) => {
         const world = get().world;
         if (!canAdvance(world, get().pendingRace)) return null;
-        const report = stepDay(world, get().plans, minigameScore);
-        commitStep(set, world, report);
+        // Il paddock è casa: da un'altra schermata il primo tocco ci riporta.
+        if (get().screen !== 'paddock') { set({ screen: 'paddock' }); return null; }
+
+        const target = Math.max(1, nextStop(world).days);
+        let report: DayReport | null = null;
+        for (let i = 0; i < target; i++) {
+          report = stepDay(world, get().plans, i === 0 ? minigameScore : undefined);
+          if (report.pendingRace || report.raceRun || report.seasonOver) break;
+        }
+        if (report) commitStep(set, world, report);
         return report;
       },
 
       /**
-       * Trecento giorni all'anno e ventiquattro gare: avanzare a mano fino al
-       * prossimo weekend sarebbe un lavoro, non una scelta. Questo salta ai
-       * giorni che contano e si ferma appena succede qualcosa.
+       * Dritti al weekend, saltando anche il lavoro della settimana.
+       *
+       * Serve a chi il piano di allenamento l'ha già deciso e non vuole
+       * riconfermarlo dodici volte prima di arrivare a correre.
        */
       skipToWeekend: () => {
         const world = get().world;
         if (!canAdvance(world, get().pendingRace)) return null;
+        if (get().screen !== 'paddock') { set({ screen: 'paddock' }); return null; }
+
+        const target = Math.max(1, daysToWeekend(world));
         let report: DayReport | null = null;
-        for (let guard = 0; guard < SEASON_WEEKS * 7; guard++) {
+        for (let i = 0; i < target; i++) {
           report = stepDay(world, get().plans);
           if (report.pendingRace || report.raceRun || report.seasonOver) break;
-          // Ci si ferma al venerdì di un weekend di gara: da lì in avanti ogni
-          // giorno ha qualcosa da decidere.
-          if (world.schedule[world.week]?.trackId && world.dayOfWeek >= 4) break;
         }
         if (report) commitStep(set, world, report);
         return report;

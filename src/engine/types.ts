@@ -185,6 +185,8 @@ export interface Project {
   spent: number;
 }
 
+import type { InvestorDeal, SponsorDeal } from './sponsors.js';
+
 export interface Team {
   id: string;
   name: string;
@@ -210,6 +212,10 @@ export interface Team {
   driverIds: string[];
   /** progetti di sviluppo aperti, al massimo uno per reparto */
   projects: Project[];
+  /** lo sponsor firmato, se c'è; senza si incassa solo la base */
+  sponsor: SponsorDeal | null;
+  /** l'investitore della stagione, con il suo obiettivo */
+  investor: InvestorDeal | null;
   /** vero solo per la scuderia fondata dal giocatore */
   founded?: boolean;
 }

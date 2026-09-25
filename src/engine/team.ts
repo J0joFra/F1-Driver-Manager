@@ -5,6 +5,8 @@ import { createWorld } from './world.js';
 import { marketScale, marketValue, rankIn, SEATS_PER_TEAM } from './market.js';
 import { BUDGET_CAP } from './regulations.js';
 import { constructorStandings } from './season.js';
+import { sponsorIncome } from './sponsors.js';
+export { sponsorIncome } from './sponsors.js';
 import { entourageEfficiency } from './staff.js';
 
 /**
@@ -87,6 +89,8 @@ export function startTeam(opts: StartTeamOptions): World {
     crew: { ...ROOKIE_CREW },
     driverIds: [],
     projects: [],
+    sponsor: null,
+    investor: null,
     founded: true,
   };
 
@@ -314,11 +318,6 @@ export function prizeMoney(rank: number, teamCount: number): number {
   if (rank < 0) return PRIZE_BASE;
   const share = 1 - rank / Math.max(1, teamCount - 1);
   return Math.round(PRIZE_BASE + share * PRIZE_TOP);
-}
-
-/** Gli sponsor seguono il prestigio, non i punti: si firmano a gennaio. */
-export function sponsorIncome(team: Team): number {
-  return Math.round((team.prestige / 100) * 30_000_000);
 }
 
 /**

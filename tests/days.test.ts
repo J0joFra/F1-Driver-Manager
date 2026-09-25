@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { daysToWeekend, nextStop } from '../src/engine/agenda.js';
+import { startTeam, playerTeam } from '../src/engine/team.js';
 import { createWorld, advanceDay, advanceWeek } from '../src/engine/world.js';
 import {
   SEASON_WEEKS, WEEK_TRAINING_CAPACITY, type SeasonWeek, type WeekKind,
@@ -125,5 +127,55 @@ describe('la settimana giorno per giorno', () => {
         });
       }
     }
+  });
+});
+
+describe('quali giorni chiedono qualcosa', () => {
+  it('avanzare porta al lavoro della settimana, non al giorno dopo', () => {
+    const w = startTeam({
+      seed: 8, name: 'Prova', short: 'PRV', colour: '#D21E1E', budget: 'indipendente',
+    });
+    // Senza piloti non c'è lavoro da mettere a bilancio: la prima fermata è
+    // il weekend, non il giovedì.
+    const senzaPiloti = nextStop(w);
+    expect(senzaPiloti.reason).not.toBe('allenamento');
+
+    const free = Object.values(w.drivers).find((d) => !d.teamId && !d.retired)!;
+    const team = playerTeam(w)!;
+    free.teamId = team.id;
+    team.driverIds.push(free.id);
+
+    const stop = nextStop(w);
+    expect(stop.reason).toBe('allenamento');
+    expect(stop.days).toBeGreaterThan(0);
+  });
+
+  it('non restituisce mai zero giorni: il tempo deve muoversi', () => {
+    const w = createWorld({ seed: 9 });
+    for (let i = 0; i < 60; i++) {
+      expect(nextStop(w).days, `giorno ${i}`).toBeGreaterThan(0);
+      advanceDay(w);
+    }
+  });
+
+  it('le fermate coprono qualifica e gara di ogni weekend', () => {
+    const w = createWorld({ seed: 10 });
+    const reasons = new Set<string>();
+    for (let guard = 0; guard < 400 && w.week < SEASON_WEEKS; guard++) {
+      const stop = nextStop(w);
+      reasons.add(stop.reason);
+      for (let i = 0; i < stop.days && w.week < SEASON_WEEKS; i++) advanceDay(w);
+    }
+    expect(reasons.has('qualifica')).toBe(true);
+    expect(reasons.has('gara')).toBe(true);
+  });
+
+  it('saltare al weekend arriva al sabato, non oltre la gara', () => {
+    const w = createWorld({ seed: 11 });
+    const days = daysToWeekend(w);
+    expect(days).toBeGreaterThan(0);
+    for (let i = 0; i < days; i++) advanceDay(w);
+    expect(w.schedule[w.week]?.trackId).toBeTruthy();
+    expect(w.dayOfWeek).toBeLessThanOrEqual(RACE_DAY);
   });
 });
