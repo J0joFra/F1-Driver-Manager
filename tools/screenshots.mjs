@@ -37,7 +37,20 @@ async function noVerticalScroll(where) {
     if (overflow > 1) found.push(`la pagina scorre di ${overflow}px in verticale`);
     // Un pannello che sborda dal viewport non fa scorrere la pagina (il body
     // è in overflow hidden): si vede solo tagliato, quindi va cercato a parte.
+    //
+    // A meno che non stia dentro una lista che scorre. Un elenco di obiettivi
+    // più lungo dello schermo è corretto — si raggiunge scorrendo — e
+    // segnalarlo era un falso positivo che chiedeva di rompere una schermata
+    // funzionante per far tacere il controllo.
+    const scrollable = (el) => {
+      for (let p = el.parentElement; p && p !== root; p = p.parentElement) {
+        const o = getComputedStyle(p).overflowY;
+        if (o === 'auto' || o === 'scroll') return true;
+      }
+      return false;
+    };
     for (const el of root.querySelectorAll('.panel')) {
+      if (scrollable(el)) continue;
       const r = el.getBoundingClientRect();
       if (r.bottom > window.innerHeight + 1) {
         found.push(`un pannello sfora di ${Math.round(r.bottom - window.innerHeight)}px in basso`);
@@ -67,6 +80,35 @@ async function noVerticalScroll(where) {
 }
 
 await page.goto('http://localhost:4173/', { waitUntil: 'networkidle' });
+// Il menu è la prima cosa che si vede.
+await shot('00-menu');
+await noVerticalScroll('menu');
+
+await page.click('[data-testid=menu-daily]');
+await page.waitForTimeout(200);
+await shot('00b-premi-giornalieri');
+await noVerticalScroll('premi giornalieri');
+await page.click('[data-testid=daily-claim]');
+await page.waitForTimeout(200);
+await page.click('[data-testid=daily-close]');
+await page.waitForTimeout(150);
+
+await page.click('[data-testid=menu-objectives]');
+await page.waitForTimeout(200);
+await shot('00c-obiettivi');
+await noVerticalScroll('obiettivi');
+await page.click('[data-testid=objectives-close]');
+await page.waitForTimeout(150);
+
+await page.click('[data-testid=menu-store]');
+await page.waitForTimeout(400);
+await shot('00d-negozio');
+await noVerticalScroll('negozio');
+await page.click('[data-testid=store-close]');
+await page.waitForTimeout(150);
+
+await page.click('[data-testid=menu-new]');
+await page.waitForTimeout(200);
 await shot('01-nuova-scuderia');
 
 await page.fill('#team-name', 'Corse Aurora');

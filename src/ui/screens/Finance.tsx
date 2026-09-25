@@ -5,7 +5,10 @@ import {
   operatingCost, PRIZE_BASE, prizeMoney, salaryBill, sponsorIncome,
 } from '../../engine/team.js';
 import { AREA_LABEL, developmentBurn, PROJECT_SIZES } from '../../engine/projects.js';
-import { Bar, Note, Panel } from '../components/kit.js';
+import { useProfile } from '../../state/useProfile.js';
+import { MIN_INJECTION } from '../../engine/boosts.js';
+import { Bar, Btn, Note, Panel } from '../components/kit.js';
+import { CurrencyChip } from '../components/Currency.js';
 import { money } from '../format.js';
 
 /**
@@ -20,6 +23,8 @@ import { money } from '../format.js';
 export function Finance() {
   const world = useGame((s) => s.world)!;
   const team = myTeam(world)!;
+  const credits = useProfile((s) => s.profile.wallet.credits);
+  const inject = useGame((s) => s.injectCredits);
 
   const table = constructorStandings(world);
   const rank = table.findIndex((c) => c.teamId === team.id);
@@ -124,7 +129,28 @@ export function Finance() {
             </b>
             <div className="font-mono text-2xs text-dim mt-1">milioni €</div>
           </div>
-          <div className="mt-2.5 pt-2 border-t border-line">
+          {/* I crediti del portafoglio entrano qui, e solo qui: comprano
+              settimane di sviluppo, non un premio di classifica più alto. */}
+          <div className="mt-2 pt-2 border-t border-line">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-2xs text-muted">Nel portafoglio</span>
+              <CurrencyChip currency="credits" amount={credits} size="sm" />
+            </div>
+            <Btn
+              variant="ghost"
+              disabled={credits < MIN_INJECTION}
+              onClick={() => inject(Math.min(credits, 20_000_000))}
+              testId="inject-credits"
+              title={credits < MIN_INJECTION
+                ? 'Servono almeno un milione di crediti'
+                : 'Versa fino a venti milioni nella cassa della scuderia'}
+              className="w-full mt-1.5 !py-1 !text-[10px]"
+            >
+              Versa in cassa
+            </Btn>
+          </div>
+
+          <div className="mt-2 pt-2 border-t border-line">
             <Small label="Impegnato" value={money(committed)} />
             <Small label="Spesa a settimana" value={burn > 0 ? money(Math.round(burn)) : '—'} />
             <Small

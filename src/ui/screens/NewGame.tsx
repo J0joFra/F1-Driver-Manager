@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { useGame } from '../../state/useGame.js';
 import { START_CASH, type StartBudget } from '../../engine/team.js';
 import { Btn, TeamBadge } from '../components/kit.js';
@@ -37,7 +38,7 @@ const BUDGETS: { id: StartBudget; label: string; hint: string }[] = [
   { id: 'costruttore', label: 'Costruttore', hint: 'Si comincia a sviluppare sul serio da subito.' },
 ];
 
-export function NewGame() {
+export function NewGame({ onBack }: { onBack: () => void }) {
   const newGame = useGame((s) => s.newGame);
   const [name, setName] = useState('');
   const [short, setShort] = useState('');
@@ -59,12 +60,22 @@ export function NewGame() {
   return (
     <div className="h-full grid place-items-center px-6 scroll-y">
       <div className="w-full max-w-2xl flex flex-col gap-3 py-4">
-        <div>
+        <div className="flex items-start gap-3">
+          <button
+            type="button" onClick={onBack} data-testid="newgame-back"
+            className="mt-1 w-7 h-7 shrink-0 rounded-full border border-line grid place-items-center
+              text-muted hover:text-ink hover:border-dim transition"
+            aria-label="Torna al menu"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+          </button>
+          <div>
           <h1 className="font-display text-2xl font-bold tracking-wide">F1 MANAGER</h1>
           <p className="text-xs text-muted mt-1 leading-relaxed">
             Nona scuderia in griglia, la macchina più lenta del lotto e nessun pilota sotto
             contratto. Quello che diventa lo decidi tu.
           </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-[1fr_auto] gap-3 items-start">
