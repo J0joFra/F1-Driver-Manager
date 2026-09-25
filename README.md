@@ -65,7 +65,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 163 test
+npm test                      # 175 test
 npm run sim -- --seasons 40 --verbose
 npm run check:team            # 10 scuderie fondate da zero × 16 stagioni
 ```
@@ -277,11 +277,48 @@ diventato, ed è il conto che si presenta a chi ha lavorato bene.
 | Entrate | | Uscite | |
 |---|---|---|---|
 | Premio di classifica | 62–114 M | Ingaggi piloti | 0,3–24 M |
-| Sponsor (dal prestigio) | 0–30 M | Gestione (dal personale) | 24–51 M |
+| Sponsor (contratto firmato) | 0–24 M | Gestione (dal personale) | 24–51 M |
+| Investitore (versamento + bonus) | 0–15 M | | |
 
 Lo sviluppo non compare: i progetti si pagano **a settimana**, ed è proprio
 quello che rende la cassa una cosa da guardare durante la stagione invece che a
 dicembre.
+
+### Sponsor e investitori: le due entrate che si scelgono
+
+Gli sponsor erano una funzione del prestigio — un numero che arrivava e basta.
+Funzionava, ma non era una decisione: non si poteva né sbagliarla né
+azzeccarla. Adesso sono contratti, con durata e scaglionamento, e ogni tanto
+scadono.
+
+Il compromesso è costruito apposta: **un anno solo paga il 20% in più, tre anni
+il 15% in meno.** Un contratto lungo al valore di oggi è un affare se stai per
+salire e una zavorra se stai per crollare, e sei tu a doverlo indovinare. Le
+offerte sono deterministiche — dipendono da scuderia e anno, non da quando apri
+la schermata — perché altrimenti basterebbe chiudere e riaprire finché non esce
+quella buona, e la scelta non esisterebbe più.
+
+L'**investitore** ha una forma diversa: versa subito e paga un bonus **se**
+centri un obiettivo entro fine stagione. È l'unica entrata del gioco che si può
+fallire, ed è quello che la rende una scommessa invece di un incasso. Gli
+obiettivi sono tarati su dove la scuderia sta adesso — chiedere il podio a chi è
+nono non è una scommessa, è un no — e fallire non costa niente oltre al bonus
+mancato: una penale renderebbe l'investitore una cosa da evitare, e una cosa da
+evitare non è una decisione.
+
+Chi non firma niente incassa comunque il **45%** del valore degli sponsor: sono
+quelli minori, che non si negoziano. È una rete, e serve a una cosa precisa — un
+giocatore che non apre mai il bilancio non deve finire in bancarotta per una
+schermata che non ha visto.
+
+> Aggiungere due entrate ha rotto il bilanciamento in un modo che non avevo
+> previsto, e la sonda l'ha mostrato subito: non «troppi soldi» ma **soldi che
+> avanzano**. Alla dodicesima stagione la cassa arrivava a 194 milioni senza che
+> ci fosse più niente da comprarci, perché quattro reparti al lavoro non
+> riescono a spendere più di una certa cifra. Quando la cassa smette di essere
+> il vincolo, lo sviluppo smette di essere una decisione — ed è il cuore del
+> gioco. Il valore degli sponsor è sceso da 30 a 24 milioni e quello degli
+> investitori a un terzo, finché la cassa non è tornata a essere il freno.
 
 I primi numeri che avevo messo rendevano il gioco impossibile, e la sonda lo ha
 mostrato subito: una scuderia nuova incassava 32 milioni e ne spendeva 40 solo
@@ -744,6 +781,36 @@ mondo di ventiquattro ore.
 | Ven | **Libere**: scegli una direzione di assetto | 20 s |
 | Sab | **Qualifica**: tre decisioni, poi il giro | 60 s |
 | Dom | **Gara** | 3–5 min |
+
+### Avanzare salta i giorni vuoti
+
+Una stagione dura 44 settimane e 308 giorni. Di quei giorni, quelli in cui c'è
+davvero una decisione da prendere sono meno di cento: il giorno in cui il lavoro
+della settimana va a bilancio, il sabato della qualifica, la domenica della
+gara. Tutti gli altri erano un pulsante da premere per far scorrere il
+calendario — un lavoro, non un gioco.
+
+`agenda.ts` calcola quanti giorni saltare per arrivare al prossimo che conta, e
+il pulsante lo dice: *Avanza · Qualifica*, con quanti giorni mancano. Il motore
+resta identico — continua ad avanzare un giorno alla volta — e cambia solo
+quante volte l'interfaccia lo chiama prima di fermarsi.
+
+La consegna dei progetti non è una fermata a sé: i reparti consegnano nello
+stesso giorno in cui il lavoro della settimana va a bilancio, quindi quella
+fermata c'è già. Aggiungerne una seconda sullo stesso giorno vorrebbe dire
+fermarsi due volte nello stesso punto.
+
+### Il paddock è casa
+
+Il tempo si muove **solo dal paddock**. Da un'altra schermata il pulsante
+diventa *Al paddock* e il primo tocco ci riporta; il secondo fa avanzare.
+
+Il pulsante dice dove porta, e non è un dettaglio: se da un'altra schermata
+dicesse «Avanza» e invece navigasse, sarebbe un pulsante che mente — e la
+seconda volta il giocatore non si fiderebbe più di nessun pulsante. Per lo
+stesso motivo, nella schermata dei piloti «Allena e avanza» adesso dice
+«Conferma e vai al paddock»: il piano è già salvato mentre lo si compone, e da
+lì non si avanza più.
 
 ### Il tempo scorre a giorni, i conti restano a settimane
 
@@ -1425,6 +1492,8 @@ engine/
   boosts.ts         dove si spendono le valute, e i limiti di quanto spostano
   store.ts          il catalogo dei prodotti acquistabili
   tracking.ts       da quello che succede nel mondo ai contatori del profilo
+  sponsors.ts       sponsor e investitori: offerte, obiettivi, conti di fine anno
+  agenda.ts         quali giorni chiedono qualcosa, e quanti saltarne
   projects.ts       progetti di reparto: costi, settimane, resa, rischio
   staff.ts          chi segue i piloti: efficienza dell'entourage
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
@@ -1514,7 +1583,7 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 163 test
+npm test               # vitest, 175 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
@@ -1567,6 +1636,8 @@ ingaggia, si sviluppa, si corre, si chiude l'anno e si ricomincia.
 - [x] Menu iniziale, tre slot di salvataggio, premi giornalieri, obiettivi
 - [x] Portafoglio a tre valute che sopravvive alle carriere
 - [x] Negozio e porta verso Google Play Billing, con negozio finto per il web
+- [x] Sponsor e investitori come contratti da firmare, dentro il bilancio
+- [x] Avanzare salta i giorni vuoti e si ferma dove serve una decisione
 
 **Prossimo passo**:
 
@@ -1580,7 +1651,6 @@ ingaggia, si sviluppa, si corre, si chiude l'anno e si ricomincia.
 
 - [ ] Livree come dati: pattern procedurali, editor, codice condivisibile
 - [ ] Momenti pre-renderizzati: garage, podio, firma del contratto
-- [ ] Sponsor come contratti da negoziare, non solo un numero dal prestigio
 - [ ] Meteo dinamico in gara e gomme da bagnato
 - [ ] Limiti sui componenti della power unit, con penalità in griglia
 - [ ] Build Android con Capacitor

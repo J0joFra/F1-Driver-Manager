@@ -7,6 +7,9 @@ import { applyAging, createVeteran, overall, retirementChance } from './driver.j
 import { intakeNewgens, POTENTIAL_ANCHOR, runTransferMarket, settleFinances } from './market.js';
 import { initialCash, maybeReset, updatePrestige, updateTeamResources } from './regulations.js';
 import { advanceProjects, aiProjectPlan } from './projects.js';
+import {
+  ageDeals, aiSignDeals, settleInvestor, type InvestorOutcome,
+} from './sponsors.js';
 import { constructorStandings, driverStandings, rngFor, runWeekend, SEASON_WEEKS, seasonTotalsFor } from './season.js';
 import {
   aiTrainingPlan, applyTraining, clampPlan, MINIGAME_AUTO, minigameMultiplier,
@@ -70,6 +73,8 @@ export function createWorld(opts: CreateWorldOptions): World {
       crew: { ...seed.crew },
       driverIds: [],
       projects: [],
+      sponsor: null,
+      investor: null,
     };
     world.constructorStandings[seed.id] = 0;
   }
@@ -89,6 +94,11 @@ export function createWorld(opts: CreateWorldOptions): World {
       team.driverIds.push(d.id);
     }
   }
+
+  // Le scuderie del computer arrivano al primo anno con i contratti già
+  // firmati: un mondo che si apre con nove squadre senza sponsor non è un
+  // mondo, è una schermata non ancora compilata.
+  for (const team of Object.values(world.teams)) aiSignDeals(world, team, rng);
 
   intakeNewgens(world, rng, 6);
 
@@ -351,6 +361,8 @@ export interface SeasonSummary {
   retired: string[];
   newgens: number;
   regulationReset: boolean;
+  /** come è finita con gli investitori, per scuderia */
+  investors: Record<string, InvestorOutcome>;
 }
 
 /**
@@ -403,8 +415,22 @@ export function endSeason(world: World): SeasonSummary {
 
   const newgens = Math.max(3, retired.length + rng.int(0, 2));
   intakeNewgens(world, rng, newgens);
+  // I conti con gli investitori si chiudono **prima** del mercato e del
+  // bilancio: l'obiettivo si valuta sulla stagione appena finita, e fra due
+  // righe le classifiche non ci saranno più.
+  const investors: Record<string, InvestorOutcome> = {};
+  for (const team of Object.values(world.teams)) {
+    const outcome = settleInvestor(world, team);
+    if (outcome) investors[team.id] = outcome;
+  }
+
   runTransferMarket(world, rng);
   for (const team of Object.values(world.teams)) settleTeamSeason(world, team, standingOrder);
+
+  // Poi i contratti invecchiano e le scuderie del computer ne firmano di
+  // nuovi. L'ordine conta: invecchiare prima di pagare vorrebbe dire saltare
+  // l'ultima stagione di ogni sponsor.
+  for (const team of Object.values(world.teams)) ageDeals(team);
 
   world.year += 1;
   const regulationReset = maybeReset(world, rng);
@@ -419,8 +445,16 @@ export function endSeason(world: World): SeasonSummary {
   for (const d of Object.values(world.drivers)) if (!d.retired) world.standings[d.id] = 0;
   world.schedule = buildCalendar(world.year, raceCountOf(world.schedule), rng);
 
+  // Le scuderie del computer firmano per l'anno nuovo, con il prestigio e la
+  // posizione aggiornati. Il giocatore firma a mano, dal bilancio.
+  for (const team of Object.values(world.teams)) {
+    if (isPlayerTeam(world, team.id)) continue;
+    aiSignDeals(world, team, rng);
+  }
+
   return {
     year: world.year - 1,
+    investors,
     championId: championDriver?.id ?? '',
     championTeamId,
     retired,

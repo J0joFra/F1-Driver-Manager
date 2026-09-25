@@ -1,8 +1,9 @@
-import { ChevronsRight, FastForward } from 'lucide-react';
+import { ChevronsRight, FastForward, Home } from 'lucide-react';
 import { useGame, seasonWeeks } from '../../state/useGame.js';
 import { currentWeek, isRaceDay, isRaceWeek, nextRace, today, weekLabel } from '../../engine/selectors.js';
 import { formatDay } from '../../engine/calendar.js';
 import { weekActivities, WEEKDAY_SHORT } from '../../engine/days.js';
+import { nextStop, STOP_LABEL } from '../../engine/agenda.js';
 
 /**
  * Riga di stato: dove si trova il mondo, e i comandi che fanno passare il
@@ -27,6 +28,17 @@ export function TopBar({
   // esista, e va detta dove il giocatore guarda per avanzare.
   const seatsEmpty = world.seat.mode === 'scuderia'
     && (world.teams[world.seat.teamId]?.driverIds.length ?? 0) === 0;
+
+  /*
+   * Il paddock è casa, e da lì si avanza.
+   *
+   * Il pulsante deve dire dove porta. Se da un'altra schermata dicesse
+   * «Avanza» e invece navigasse, sarebbe un pulsante che mente — e la seconda
+   * volta il giocatore non si fiderebbe più di nessun pulsante.
+   */
+  const screen = useGame((s) => s.screen);
+  const atHome = screen === 'paddock';
+  const stop = world.week < seasonWeeks ? nextStop(world) : null;
 
   // Che cosa c'è in programma oggi: è la riga che sostituisce il "che
   // settimana è" di prima, e dice al giocatore se vale la pena fermarsi.
@@ -68,7 +80,7 @@ export function TopBar({
 
       <span className="flex-1" />
 
-      {!seatsEmpty && !seasonOver && !raceDay && (
+      {atHome && !seatsEmpty && !seasonOver && !raceDay && (
         <button
           type="button"
           data-testid="skip"
@@ -88,14 +100,19 @@ export function TopBar({
         type="button"
         data-testid="advance"
         onClick={onAdvance}
-        disabled={busy || seatsEmpty}
+        disabled={busy || (atHome && seatsEmpty)}
+        title={atHome && stop && !seasonOver && !raceDay
+          ? `Salta ${stop.days} giorn${stop.days === 1 ? 'o' : 'i'} fino a: ${STOP_LABEL[stop.reason].toLowerCase()}`
+          : undefined}
         className="shrink-0 inline-flex items-center gap-1.5 rounded bg-primary px-3 py-1 text-[11px]
           font-sans font-semibold text-[#04231A] disabled:opacity-40 hover:brightness-110 transition"
       >
-        <ChevronsRight className="w-3.5 h-3.5" />
-        {seatsEmpty ? 'Ingaggia un pilota'
+        {atHome ? <ChevronsRight className="w-3.5 h-3.5" /> : <Home className="w-3.5 h-3.5" />}
+        {!atHome ? 'Al paddock'
+          : seatsEmpty ? 'Ingaggia un pilota'
           : seasonOver ? 'Chiudi anno'
           : raceDay ? 'Vai alla gara'
+          : stop ? `Avanza · ${STOP_LABEL[stop.reason]}`
           : 'Avanza'}
       </button>
     </header>

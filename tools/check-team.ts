@@ -14,6 +14,9 @@ import {
   signDriver, signingRefusal, startTeam,
 } from '../src/engine/team.js';
 import { developmentBurn, PROJECT_SIZES, startProject } from '../src/engine/projects.js';
+import {
+  investorOffers, signInvestor, signSponsor, sponsorOffers,
+} from '../src/engine/sponsors.js';
 import { CAR_KEYS, type CarKey, type Team, type TrainingPlan, type World } from '../src/engine/types.js';
 import { SEASON_WEEKS } from '../src/engine/calendar.js';
 import { constructorStandings } from '../src/engine/season.js';
@@ -61,6 +64,26 @@ function developLikeAPlayer(world: World, team: Team): void {
   }
 }
 
+/**
+ * Sponsor e investitore, come li sceglierebbe una persona ragionevole.
+ *
+ * Non è un dettaglio della sonda: senza firmare, una scuderia incassa il 45%
+ * degli sponsor, e la misura descriverebbe un giocatore che non ha mai aperto
+ * il bilancio. Lo sponsor che rende di più sulla durata intera, e
+ * l'investitore con l'obiettivo più vicino — la scelta prudente.
+ */
+function manageDeals(world: World, team: Team): void {
+  if (!team.sponsor) {
+    const best = sponsorOffers(world, team)
+      .sort((a, b) => b.perSeason * b.seasons - a.perSeason * a.seasons)[0];
+    if (best) signSponsor(team, best);
+  }
+  if (!team.investor) {
+    const offer = investorOffers(world, team)[0];
+    if (offer) signInvestor(team, offer);
+  }
+}
+
 function manageContracts(world: World, team: Team): void {
   for (const id of [...team.driverIds]) {
     const d = world.drivers[id];
@@ -105,6 +128,7 @@ for (let i = 0; i < TEAMS; i++) {
   const team = playerTeam(world)!;
 
   for (let s = 0; s < SEASONS; s++) {
+    manageDeals(world, team);
     manageContracts(world, team);
 
     while (world.week < SEASON_WEEKS) {

@@ -7,6 +7,7 @@ import { AREA_LABEL, developmentBurn, PROJECT_SIZES } from '../../engine/project
 import { carPace } from '../../engine/regulations.js';
 import { overall } from '../../engine/driver.js';
 import { getTrack } from '../../engine/data/tracks.js';
+import { nextStop, STOP_LABEL } from '../../engine/agenda.js';
 import { Bar, Btn, Note, Panel, Stat, TeamDot } from '../components/kit.js';
 import { money } from '../format.js';
 
@@ -34,6 +35,7 @@ export function Paddock({ onAdvance }: { onAdvance: () => void }) {
   const burn = developmentBurn(team);
   const weeksLeft = burn > 0 ? Math.floor(team.cash / burn) : Infinity;
 
+  const stop = nextStop(world);
   const noDrivers = team.driverIds.length === 0;
   const idleFactory = team.projects.length === 0;
 
@@ -141,8 +143,11 @@ export function Paddock({ onAdvance }: { onAdvance: () => void }) {
                   font-sans font-semibold text-white hover:brightness-110 transition"
               >
                 <Flag className="w-3.5 h-3.5" />
-                {isRaceWeek(world) ? 'Vai alla gara' : 'Avanza'}
+                {isRaceWeek(world) ? 'Vai alla gara' : `Avanza · ${STOP_LABEL[stop.reason]}`}
               </button>
+              <div className="font-mono text-[9px] text-dim mt-1">
+                {stop.days === 1 ? 'un giorno' : `${stop.days} giorni`} da qui
+              </div>
             </div>
           ) : (
             <p className="text-center text-xs text-muted py-3">
