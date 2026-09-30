@@ -222,6 +222,17 @@ await page.click('button:has-text("2×")');
 await page.waitForTimeout(2500);
 await shot('13-gara-veloce');
 
+// Spinta al massimo: serve a vedere la batteria scendere davvero, non solo a
+// fare una schermata più bella. Se l'ERS restasse a 100 non ce ne
+// accorgeremmo da nessun'altra parte.
+await page.click('[data-testid=pace-push]');
+await page.waitForTimeout(3500);
+await shot('13b-gara-spinta');
+await noVerticalScroll('gara in spinta');
+const ers = await page.evaluate(() =>
+  [...document.querySelectorAll('main, body')].length && document.body.innerText.match(/(\d+)%/g));
+console.log('carica letta a schermo:', ers?.slice(0, 2));
+
 await page.click('[data-testid=skip-race]');
 await page.waitForTimeout(900);
 await shot('14-risultato');
