@@ -22,7 +22,8 @@
     "check:palette": "node tools/check-palette.mjs",
     "check:career": "tsx tools/check-career.ts",
     "check:team": "tsx tools/check-team.ts",
-    "check:race": "tsx tools/check-race.ts"
+    "check:race": "tsx tools/check-race.ts",
+    "check:strategy": "tsx tools/check-strategy.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

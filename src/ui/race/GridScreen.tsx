@@ -1,28 +1,38 @@
 import { PALETTE } from '../palette.js';
 import { useState } from 'react';
 import type { Compound } from '../../engine/types.js';
-import { carOf, fastForward, liveResults } from '../../engine/liveRace.js';
+import { applyStrategy, carOf, fastForward, liveResults } from '../../engine/liveRace.js';
+import {
+  DEFAULT_STRATEGY, STRATEGY_IDS, strategyFor, type StrategyId,
+} from '../../engine/strategy.js';
 import { currentRace } from '../../state/raceSession.js';
 import { useGame } from '../../state/useGame.js';
 import { Btn } from '../components/kit.js';
 import { lapTime } from '../format.js';
 
-const COMPOUNDS: { k: Compound; label: string; colour: string; note: string }[] = [
-  { k: 'S', label: 'Soft', colour: '#E8283C', note: '−0,78s al giro, dura poco' },
-  { k: 'M', label: 'Medium', colour: '#F5C518', note: 'il compromesso' },
-  { k: 'H', label: 'Hard', colour: '#E8EBF0', note: '+0,68s al giro, arriva in fondo' },
-];
+const COMPOUND_COLOUR: Record<Compound, string> = { S: '#E8283C', M: '#F5C518', H: '#E8EBF0' };
+
+const STRATEGIES: Record<StrategyId, { short: string; note: string }> = {
+  conservativa: { short: 'Cons', note: 'una sosta, dura al via: niente crolli, ma paghi passo' },
+  equilibrata: { short: 'Equil', note: 'una sosta, media poi dura: il compromesso' },
+  aggressiva: { short: 'Aggr', note: 'due soste, morbida al via e in volata: veloce e fragile' },
+};
 
 /**
  * La griglia di partenza: l'unico momento in cui la qualifica si vede.
- * Qui si sceglie la gomma con cui partire, e si decide se correre o simulare.
+ *
+ * Qui si scelgono le due strategie — una per pilota, non una per la scuderia —
+ * e si decide se correre o simulare. La scelta serve perché le soste avvengano
+ * da sole: una gara guardata senza premere niente deve restare una gara corsa.
+ * Chi non tocca nulla parte con la strategia predefinita, già montata da
+ * `createLiveRace`.
  */
 export function GridScreen() {
   const world = useGame((s) => s.world)!;
   const startRace = useGame((s) => s.startRace);
   const completeRace = useGame((s) => s.completeRace);
   const session = currentRace();
-  const [compound, setCompound] = useState<Compound>('M');
+  const [picks, setPicks] = useState<Record<string, StrategyId>>({});
   if (!session) return null;
 
   const { prepared, race } = session;
@@ -34,14 +44,18 @@ export function GridScreen() {
     : [];
   const focus = useGame((s) => s.selected);
   const playerId = myIds.includes(focus ?? '') ? focus : myIds[0] ?? null;
-  const me = playerId ? carOf(race, playerId) : undefined;
   const myGrid = prepared.qualifying.find((q) => q.driverId === playerId)?.position ?? 0;
   const pole = prepared.qualifying[0];
   const myNote = prepared.qualifying.find((q) => q.driverId === playerId)?.note ?? null;
 
-  const choose = (c: Compound) => {
-    setCompound(c);
-    if (me) me.tyre.compound = c;
+  // La strategia si applica alla vettura giusta, non a quella inquadrata: la
+  // seconda monoposto è tua quanto la prima, e prima restava con la gomma
+  // che le aveva dato il motore.
+  const choose = (driverId: string, id: StrategyId) => {
+    const car = carOf(race, driverId);
+    if (!car) return;
+    applyStrategy(car, strategyFor(prepared.track, id, car.entry.tyres));
+    setPicks((p) => ({ ...p, [driverId]: id }));
   };
 
   const simulate = () => {
@@ -107,28 +121,59 @@ export function GridScreen() {
           )}
         </div>
 
-        <div className="panel p-3 flex-1 min-h-0">
-          <h3 className="panel-title mb-2">Gomma di partenza</h3>
-          <div className="grid grid-cols-3 gap-1.5">
-            {COMPOUNDS.map((c) => (
-              <button
-                key={c.k}
-                type="button"
-                onClick={() => choose(c.k)}
-                aria-pressed={compound === c.k}
-                className="font-display text-xs font-bold uppercase tracking-wider py-2 rounded-sm border"
-                style={
-                  compound === c.k
-                    ? { background: c.colour, borderColor: c.colour, color: '#FFFFFF' }
-                    : { background: '#1C232B', borderColor: '#293240', color: '#8B95A2' }
-                }
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-          <p className="font-mono text-2xs text-dim mt-2 leading-relaxed">
-            {COMPOUNDS.find((c) => c.k === compound)?.note}
+        <div className="panel p-3 flex-1 min-h-0 scroll-y">
+          <h3 className="panel-title mb-2">Strategia</h3>
+          {myIds.map((id) => {
+            const d = world.drivers[id];
+            const car = carOf(race, id);
+            const pick = picks[id] ?? DEFAULT_STRATEGY;
+            const plan = strategyFor(prepared.track, pick, car?.entry.tyres ?? 70);
+            const stints: Compound[] = [plan.start, ...plan.fit];
+            return (
+              <div key={id} className="mb-2 last:mb-0">
+                <div className="font-display text-2xs tracking-wide truncate mb-1">
+                  {d?.name ?? id}
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {STRATEGY_IDS.map((sid) => (
+                    <button
+                      key={sid}
+                      type="button"
+                      onClick={() => choose(id, sid)}
+                      aria-pressed={pick === sid}
+                      data-testid={`strategy-${id}-${sid}`}
+                      className={`font-display text-2xs font-bold uppercase tracking-wider py-1.5 rounded-sm border ${
+                        pick === sid
+                          ? 'bg-aurora border-aurora text-ink'
+                          : 'bg-panel2 border-line text-dim'
+                      }`}
+                    >
+                      {STRATEGIES[sid].short}
+                    </button>
+                  ))}
+                </div>
+                {/* Il piano in chiaro: mescole e giri di sosta. Una strategia
+                    che non dici quando ti ferma non è una scelta. */}
+                <div className="flex items-center gap-1 mt-1 font-mono text-[9px] text-dim">
+                  {stints.map((c, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      {i > 0 && <span className="text-line">›</span>}
+                      <i
+                        className="inline-block w-2 h-2 rounded-full"
+                        style={{ background: COMPOUND_COLOUR[c] }}
+                      />
+                      {c}
+                    </span>
+                  ))}
+                  <span className="ml-1 tnum">
+                    {plan.stops.length > 0 ? `box g. ${plan.stops.join(', ')}` : 'nessuna sosta'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          <p className="font-mono text-2xs text-dim mt-1 leading-relaxed">
+            {STRATEGIES[picks[playerId ?? ''] ?? DEFAULT_STRATEGY].note}
           </p>
         </div>
 

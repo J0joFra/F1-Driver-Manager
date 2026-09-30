@@ -4,9 +4,11 @@ import { getTrack } from '../src/engine/data/tracks.js';
 import type { RaceEntry } from '../src/engine/race.js';
 import { POINTS, simulateRace } from '../src/engine/race.js';
 import {
-  armPit, ATTACK_COST, canAttack, carOf, createLiveRace, effectiveMode, fastForward,
-  gapBetween, liveResults, order, setMode, startAttack, stepRace, tyreLapsLeft,
+  applyStrategy, armPit, ATTACK_COST, canAttack, carOf, createLiveRace, effectiveMode,
+  fastForward, gapBetween, liveResults, order, setMode, startAttack, stepRace, tyreLapsLeft,
 } from '../src/engine/liveRace.js';
+import { strategiesFor, strategyFor } from '../src/engine/strategy.js';
+import { breaksCompoundRule } from '../src/engine/rules.js';
 
 function field(): RaceEntry[] {
   return Array.from({ length: 16 }, (_, i) => ({
@@ -162,7 +164,11 @@ describe('gara live', () => {
   it("l'attacco aumenta le probabilità di sorpasso", () => {
     const passes = (attack: boolean) => {
       let total = 0;
-      for (let seed = 0; seed < 25; seed++) {
+      // Sessanta semi e non venticinque: in un minuto di gara i sorpassi sono
+      // pochi, e con un campione piccolo l'attacco e il non-attacco possono
+      // finire pari — cosa che dice che il campione è corto, non che la leva
+      // non funziona.
+      for (let seed = 0; seed < 60; seed++) {
         const race = createLiveRace(track, field(), createRng(seed * 13 + 1));
         const car = carOf(race, 'd7')!;
         for (let i = 0; i < 120; i++) {
@@ -174,6 +180,46 @@ describe('gara live', () => {
       return total;
     };
     expect(passes(true)).toBeGreaterThan(passes(false));
+  });
+
+  it('le vetture del giocatore si fermano da sole se nessuno le chiama', () => {
+    // Prima erano le uniche ventidue a non fermarsi mai: senza un dito sul
+    // pulsante finivano la gara su un treno oltre il crollo, quattordici
+    // secondi al giro più lente. Una gara guardata senza toccare niente deve
+    // restare una gara corsa.
+    const race = createLiveRace(track, field(), createRng(31), { playerIds: ['d3', 'd4'] });
+    fastForward(race);
+    for (const id of ['d3', 'd4']) {
+      const car = carOf(race, id)!;
+      if (car.dnf) continue;
+      expect(car.stops).toBeGreaterThan(0);
+      expect(breaksCompoundRule([...car.compounds, car.tyre.compound], race.wet)).toBe(false);
+    }
+  });
+
+  it('la strategia si applica al pilota scelto e non a quello inquadrato', () => {
+    const race = createLiveRace(track, field(), createRng(32), { playerIds: ['d3', 'd4'] });
+    const aggressiva = strategyFor(track, 'aggressiva');
+    applyStrategy(carOf(race, 'd4')!, aggressiva);
+    expect(carOf(race, 'd4')!.tyre.compound).toBe(aggressiva.start);
+    expect(carOf(race, 'd4')!.plan).toEqual(aggressiva.stops);
+    // La prima vettura resta sulla sua: due piloti, due strategie.
+    expect(carOf(race, 'd3')!.plan).not.toEqual(aggressiva.stops);
+  });
+
+  it('ogni strategia si ferma quante volte dice e rispetta le due mescole', () => {
+    for (const s of strategiesFor(track)) {
+      const race = createLiveRace(track, field(), createRng(33), {
+        playerIds: ['d3'],
+        playerStrategies: { d3: s },
+      });
+      const car = carOf(race, 'd3')!;
+      expect(car.tyre.compound).toBe(s.start);
+      fastForward(race);
+      if (car.dnf) continue;
+      expect(car.stops).toBeGreaterThanOrEqual(s.stops.length);
+      expect(breaksCompoundRule([...car.compounds, car.tyre.compound], race.wet)).toBe(false);
+    }
   });
 
   it('il contatore dei giri non torna mai indietro', () => {

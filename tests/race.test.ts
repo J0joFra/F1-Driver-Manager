@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../src/engine/rng.js';
-import { simulateRace, simulateQualifying, type RaceEntry } from '../src/engine/race.js';
-import { getTrack } from '../src/engine/data/tracks.js';
+import { launchDelta, simulateRace, simulateQualifying, type RaceEntry } from '../src/engine/race.js';
+import { strategiesFor } from '../src/engine/strategy.js';
+import { getTrack, TRACKS } from '../src/engine/data/tracks.js';
+import { breaksCompoundRule } from '../src/engine/rules.js';
 
 function entry(id: string, carPace: number, skill: number, grid: number): RaceEntry {
   return {
@@ -18,6 +20,53 @@ function field(): RaceEntry[] {
 
 describe('simulazione di gara', () => {
   const track = getTrack('lario');
+
+  it('al via la bravura pesa più del caso', () => {
+    // Il difetto che questa prova chiude: lo spunto valeva ±0,22s di abilità
+    // contro un rumore di deviazione 0,55s, cioè il caso pesava due volte e
+    // mezzo il pilota. Con la griglia a 0,28s per posizione erano due file
+    // regalate ai dadi, e la qualifica non contava niente.
+    const sample = (starts: number) => {
+      const rng = createRng(5);
+      const xs = Array.from({ length: 4000 }, () => launchDelta(starts, false, rng));
+      const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+      const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length);
+      return { mean, sd };
+    };
+    const best = sample(95);
+    const worst = sample(55);
+    // Il migliore guadagna, il peggiore perde.
+    expect(best.mean).toBeLessThan(0);
+    expect(worst.mean).toBeGreaterThan(0);
+    // E il divario fra i due vale più di due deviazioni del rumore: il
+    // sorteggio può togliere una posizione, non tre.
+    expect(worst.mean - best.mean).toBeGreaterThan(2 * best.sd);
+  });
+
+  it('le strategie sono ordinate, dentro la gara e con stint sensati', () => {
+    // Su tutti i tracciati, non su uno: le lunghezze degli stint si ricavano
+    // dai giri e dal degrado, e sono le piste lunghe e abrasive quelle dove il
+    // conto si rompe.
+    for (const t of Object.values(TRACKS)) {
+      for (const s of strategiesFor(t)) {
+        expect(s.fit).toHaveLength(s.stops.length);
+        expect(s.stops.length).toBeGreaterThanOrEqual(1);
+        let prev = 0;
+        for (const lap of s.stops) {
+          expect(lap).toBeGreaterThan(prev);
+          expect(lap).toBeLessThan(t.laps);
+          expect(lap - prev).toBeGreaterThanOrEqual(3);
+          prev = lap;
+        }
+        // Anche l'ultimo stint dura qualcosa: una sosta all'ultimo giro non è
+        // una strategia, è un errore di calcolo.
+        expect(t.laps - prev).toBeGreaterThanOrEqual(3);
+        // E nessuna può portare alla penalità delle due mescole: scoprire
+        // venticinque secondi al traguardo non è una regola, è un agguato.
+        expect(breaksCompoundRule([s.start, ...s.fit], false)).toBe(false);
+      }
+    }
+  });
 
   it('restituisce un risultato per ogni iscritto, con posizioni uniche', () => {
     const { results } = simulateRace(track, field(), createRng(1));

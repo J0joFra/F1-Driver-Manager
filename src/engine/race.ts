@@ -225,6 +225,28 @@ export function compoundFor(
 }
 
 /** Strategia di sosta dell'IA: una o due soste a seconda del degrado del tracciato. */
+/**
+ * Il via, in secondi persi o guadagnati sul resto del gruppo.
+ *
+ * La griglia schiera le vetture a 0,28s l'una dall'altra: perché la partenza
+ * sposti qualcosa deve valere qualche decimo, e deve valerlo per bravura e non
+ * per sorte. Col vecchio rapporto — abilità entro ±0,22s contro un rumore di
+ * deviazione 0,55s — il caso pesava due volte e mezzo lo spunto del pilota: le
+ * prime curve erano una lotteria che cancellava il risultato della qualifica.
+ *
+ * Adesso l'attributo `starts` (55-95 nel gruppo) apre circa 0,85s fra il
+ * migliore e il peggiore, mentre il rumore scende a 0,22s. Due o tre posizioni
+ * le decide il pilota, mezza i dadi.
+ *
+ * Il valore restituito è tempo PERSO: negativo per chi parte bene. Le due
+ * cadenze — `simulateRace` e `stepRace` — devono chiamare questa e nient'altro,
+ * così un buon partente resta un buon partente in entrambe.
+ */
+export function launchDelta(starts: number, wet: boolean, rng: Rng): number {
+  const launch = ((starts - 70) / 100) * rng.range(1.7, 3.1);
+  return -launch * 0.9 + rng.normal() * 0.22 + (wet ? rng.normal() * 0.3 : 0);
+}
+
 export function pitStrategy(track: Track, rng: Rng): number[] {
   const stops = track.tyreWear > 1.2 || rng.chance(0.3) ? 2 : 1;
   const laps = track.laps;
@@ -287,8 +309,7 @@ export function simulateRace(
 
   // --- il via: qui contano le partenze, non la macchina ---
   for (const c of cars) {
-    const launch = ((c.e.starts - 70) / 100) * rng.range(0.6, 1.8);
-    c.time += -launch * 0.9 + rng.normal() * 0.55 + (wet ? rng.normal() * 0.4 : 0);
+    c.time += launchDelta(c.e.starts, wet, rng);
   }
 
   let safetyCars = opts.safetyCars ?? 0;

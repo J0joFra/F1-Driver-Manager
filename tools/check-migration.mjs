@@ -13,15 +13,20 @@ import { execSync } from 'node:child_process';
 import { writeFileSync, unlinkSync } from 'node:fs';
 
 const gen = `
-import { startCareer } from './src/engine/career.js';
+import { startTeam } from './src/engine/team.js';
 import { advanceWeek } from './src/engine/world.js';
-const w = startCareer({ seed: 5, name: 'L. Marchetti', nationality: 'ITA' });
+const w = startTeam({ seed: 5, name: 'Marchetti Racing', short: 'MRC', colour: '#D21E1E', budget: 'indipendente' });
 for (let i = 0; i < 3; i++) advanceWeek(w);
 const old = JSON.parse(JSON.stringify(w));
-// Com'era il salvataggio prima dei contratti e dei nomi brevi.
+// Com'era il salvataggio prima dei contratti, dei nomi brevi, del portafoglio e
+// dei progetti di reparto.
 delete old.offers;
 delete old.talentAnchor;
-for (const t of Object.values(old.teams)) delete t.short;
+delete old.wallet;
+for (const t of Object.values(old.teams)) {
+  delete t.short;
+  delete t.projects;
+}
 process.stdout.write(JSON.stringify(old));
 `;
 writeFileSync('gen-old-save.tmp.ts', gen);
@@ -45,6 +50,11 @@ await page.addInitScript((world) => {
 
 await page.goto('http://localhost:4173/', { waitUntil: 'networkidle' });
 await page.waitForTimeout(600);
+// Da quando esiste la schermata iniziale, un salvataggio non riapre la partita
+// da sé: si riprende da «Continua». È il percorso vero del giocatore, quindi è
+// quello che va provato.
+await page.locator('[data-testid=menu-continue]').click();
+await page.waitForTimeout(600);
 
 const recovered = await page.locator('[data-testid=advance]').count();
 const crashed = await page.getByText('Qualcosa si è rotto').count();
@@ -60,7 +70,7 @@ console.log('schermata:', body);
 // la rete di sicurezza non sia codice morto.
 const page2 = await browser.newPage({ viewport: { width: 844, height: 390 } });
 const broken = structuredClone(oldWorld);
-broken.seat = { mode: 'pilota', driverId: 'pilota-inesistente' };
+broken.seat = { mode: 'scuderia', teamId: 'scuderia-inesistente' };
 await page2.addInitScript((world) => {
   localStorage.setItem('f1dm-save-v1', JSON.stringify({
     state: { world, screen: 'paddock' },
@@ -68,6 +78,8 @@ await page2.addInitScript((world) => {
   }));
 }, broken);
 await page2.goto('http://localhost:4173/', { waitUntil: 'networkidle' });
+await page2.waitForTimeout(600);
+await page2.locator('[data-testid=menu-continue]').click();
 await page2.waitForTimeout(600);
 const caught = await page2.getByText('Qualcosa si è rotto').count();
 const canRestart = await page2.getByRole('button', { name: /ricomincia/i }).count();
