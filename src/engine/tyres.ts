@@ -19,8 +19,23 @@ export interface TyreState {
   age: number;
 }
 
-/** Passo della mescola rispetto alla media, in secondi sul giro. */
-export const COMPOUND_PACE: Record<Compound, number> = { S: -0.78, M: 0, H: 0.68 };
+/**
+ * Passo della mescola rispetto alla media, in secondi sul giro.
+ *
+ * Il divario fra morbida e dura è la misura che decide quante soste conviene
+ * fare, e va letta insieme ai ventuno secondi e mezzo che costa una sosta
+ * (`BASE_PIT_LOSS`). Era 1,46s: su cinquantatré giri una tre-soste passava
+ * trentaquattro giri su morbida contro i ventotto su dura di una due-soste,
+ * quarantacinque secondi di vantaggio contro ventuno di sosta in più. Misurata,
+ * l'aggressiva arrivava P12,0 contro P13,5 dell'equilibrata **e** perdeva meno
+ * posizioni al via: vinceva su ogni asse, quindi non era una scelta, era la
+ * risposta giusta, e le altre due erano decorazione.
+ *
+ * A 0,78s di divario l'ultima sosta si paga da sé: la strategia si scommette
+ * sul degrado — quanto regge la gomma su questa pista, con questo pilota — che
+ * è la domanda che deve decidere la gara, non l'aritmetica del passo.
+ */
+export const COMPOUND_PACE: Record<Compound, number> = { S: -0.42, M: 0, H: 0.36 };
 /** Velocità di degrado relativa. */
 export const COMPOUND_WEAR: Record<Compound, number> = { S: 1.6, M: 1.0, H: 0.62 };
 /** Temperatura a cui la mescola lavora meglio. */

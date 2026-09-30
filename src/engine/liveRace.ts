@@ -1,9 +1,10 @@
 import type { Compound, EngineMode, RaceResult, Track } from './types.js';
 import { clamp, type Rng } from './rng.js';
 import {
-  MIN_GAP, POINTS, lapTimeFor, overtakeChance, pitLossFor, pitStrategy,
-  retirementChancePerLap, wearPerLap, type RaceEntry,
+  MIN_GAP, POINTS, compoundFor, launchDelta, lapTimeFor, overtakeChance, pitLossFor,
+  pitStrategy, PIT_WEAR, retirementChancePerLap, wearPerLap, type RaceEntry,
 } from './race.js';
+import { DEFAULT_STRATEGY, strategyFor, type RaceStrategy } from './strategy.js';
 import { DRS_RANGE } from './overtaking.js';
 import { breaksCompoundRule, COMPOUND_RULE_PENALTY } from './rules.js';
 import { safetyCarChancePerLap } from './incidents.js';
@@ -51,8 +52,16 @@ export interface LiveCar {
   ers: number;
   dirtyAir: boolean;
   dnf: boolean;
-  /** giri in cui l'IA ha programmato la sosta */
+  /** giri in cui è programmata la sosta */
   plan: number[];
+  /**
+   * La mescola da montare a ciascuna sosta, nell'ordine.
+   *
+   * Piena per le vetture del giocatore, che hanno una strategia scelta prima
+   * del via; vuota per le altre, che scelgono al momento con `compoundFor`
+   * guardando quanti giri restano.
+   */
+  fit: Compound[];
   finishedAt: number | null;
 }
 
@@ -99,8 +108,13 @@ export interface LiveRace {
 export interface LiveRaceOptions {
   wet?: boolean;
   playerIds?: readonly string[];
-  /** mescola di partenza delle vetture del giocatore */
-  playerCompound?: Compound;
+  /**
+   * La strategia con cui parte ciascuna vettura del giocatore, per id pilota.
+   *
+   * Quelle che mancano prendono la strategia predefinita: una gara lasciata
+   * andare da sola deve essere una gara corsa, non una gara buttata.
+   */
+  playerStrategies?: Readonly<Record<string, RaceStrategy>>;
 }
 
 const ATTACK_DURATION = 12;
@@ -158,9 +172,15 @@ export function createLiveRace(
 
   const cars: LiveCar[] = entries.map((entry) => {
     const isPlayer = opts.playerIds?.includes(entry.driverId) ?? false;
-    const startCompound: Compound = isPlayer && opts.playerCompound
-      ? opts.playerCompound
-      : track.tyreWear > 1.2 ? 'M' : rng.chance(0.4) ? 'S' : 'M';
+    // Il caso va consumato sempre, anche per le vetture del giocatore: se lo
+    // saltassimo, la stessa gara con lo stesso seme darebbe un gruppo diverso
+    // a seconda di chi la sta guardando.
+    const aiCompound: Compound = track.tyreWear > 1.2 ? 'M' : rng.chance(0.4) ? 'S' : 'M';
+    const aiPlan = pitStrategy(track, rng);
+    const strategy = isPlayer
+      ? opts.playerStrategies?.[entry.driverId] ?? strategyFor(track, DEFAULT_STRATEGY, entry.tyres)
+      : null;
+    const startCompound: Compound = strategy ? strategy.start : aiCompound;
     return {
       entry,
       // La griglia è distanziata come nella realtà: la prima fila parte davanti.
@@ -176,7 +196,8 @@ export function createLiveRace(
       attackUntil: 0,
       dirtyAir: false,
       dnf: false,
-      plan: pitStrategy(track, rng),
+      plan: strategy ? [...strategy.stops] : aiPlan,
+      fit: strategy ? [...strategy.fit] : [],
       compounds: [],
       ers: ERS_MAX,
       finishedAt: null,
@@ -189,10 +210,10 @@ export function createLiveRace(
     events: [], playerIds: opts.playerIds ?? [], rng,
   };
 
-  // Il via: qui contano le partenze, non la macchina.
+  // Il via: qui contano le partenze, non la macchina. Stessa funzione del
+  // modello veloce, così lo spunto non cambia fra gara guardata e gara simulata.
   for (const c of cars) {
-    const launch = ((c.entry.starts - 70) / 100) * rng.range(0.6, 1.8);
-    c.progress += (launch * 0.9 - rng.normal() * 0.55 - (wet ? rng.normal() * 0.4 : 0)) / track.baseLap;
+    c.progress -= launchDelta(c.entry.starts, wet, rng) / track.baseLap;
   }
   log(race, { kind: 'start', drivers: [], key: true });
   return race;
@@ -263,6 +284,21 @@ export function setMode(car: LiveCar, mode: EngineMode): void {
 
 export function armPit(car: LiveCar, compound: Compound | null): void {
   car.pitArmed = compound;
+}
+
+/**
+ * Monta la strategia scelta prima del via.
+ *
+ * Si applica alla gara già creata, non fra le opzioni di `createLiveRace`: la
+ * griglia esiste già quando il giocatore sceglie, e rigenerare la gara vorrebbe
+ * dire rigenerare la qualifica. Cambia solo il treno di gomme al via — la
+ * vettura non ha ancora percorso un metro — più il piano delle soste.
+ */
+export function applyStrategy(car: LiveCar, strategy: RaceStrategy): void {
+  if (car.stops > 0 || car.dnf) return;
+  car.tyre = freshTyre(strategy.start);
+  car.plan = [...strategy.stops];
+  car.fit = [...strategy.fit];
 }
 
 /** Si può attaccare solo con la carica per farlo. */
@@ -408,12 +444,16 @@ export function stepRace(race: LiveRace, dt: number): void {
        * cadenze dello stesso modello devono decidere allo stesso modo.
        */
       aiEnergy(race, c);
+      const lapsLeft = track.laps - c.lap;
       const planned = c.plan[c.stops] ?? Infinity;
-      const worthIt = track.laps - c.lap >= 3;
-      if (!race.playerIds.includes(c.entry.driverId) && c.pitArmed === null && !sc && worthIt) {
-        if (c.lap >= planned || c.tyre.wear > 82) {
-          c.pitArmed = c.tyre.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S';
-        }
+      const worthIt = lapsLeft >= 3;
+      if (c.pitArmed === null && !sc && worthIt && (c.lap >= planned || c.tyre.wear > PIT_WEAR)) {
+        // La gomma la dice il piano, se c'è: è la strategia scelta prima del
+        // via. Per le altre decide `compoundFor` guardando quanti giri restano
+        // e quali mescole sono già state usate — la stessa funzione del modello
+        // veloce, perché le due cadenze devono fermarsi con la stessa gomma.
+        c.pitArmed = c.fit[c.stops]
+          ?? compoundFor(track, lapsLeft, c.entry.tyres, [...c.compounds, c.tyre.compound]);
       }
       if (c.pitArmed) {
         c.compounds.push(c.tyre.compound);

@@ -1,4 +1,4 @@
-import type { Compound, World } from '../engine/types.js';
+import type { World } from '../engine/types.js';
 import { prepareWeekend, type PreparedWeekend } from '../engine/season.js';
 import { createLiveRace, type LiveRace } from '../engine/liveRace.js';
 
@@ -13,14 +13,17 @@ import { createLiveRace, type LiveRace } from '../engine/liveRace.js';
 
 let current: { prepared: PreparedWeekend; race: LiveRace } | null = null;
 
-export function beginRace(world: World, trackId: string, playerCompound: Compound = 'M') {
+export function beginRace(world: World, trackId: string) {
   const prepared = prepareWeekend(world, trackId);
   const playerIds = world.seat.mode === 'scuderia'
     ? world.teams[world.seat.teamId]?.driverIds ?? []
     : [];
+  // Le strategie non si passano qui: la griglia le fa scegliere dopo, quando la
+  // gara esiste già, con `applyStrategy`. Chi non sceglie corre quella
+  // predefinita, che `createLiveRace` monta da sé.
   const race = createLiveRace(prepared.track, prepared.entries, prepared.raceRng, {
     wet: prepared.wet,
-    ...(playerIds.length > 0 ? { playerIds, playerCompound } : {}),
+    ...(playerIds.length > 0 ? { playerIds } : {}),
   });
   current = { prepared, race };
   return current;

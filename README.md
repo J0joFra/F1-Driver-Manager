@@ -65,9 +65,10 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 182 test
+npm test                      # 187 test
 npm run sim -- --seasons 40 --verbose
 npm run check:team            # 10 scuderie fondate da zero × 16 stagioni
+npm run check:strategy        # le tre strategie di gara sono tre scelte, non una risposta
 ```
 
 **Il gioco si tiene in orizzontale.** Se apri l'app su un telefono in verticale
@@ -985,7 +986,8 @@ quindi non deve sapere che l'albero esiste.
 ## La gara che si gioca
 
 Il weekend si ferma sulla **griglia di partenza**: lì si vede la qualifica, si
-sceglie la gomma di partenza e si decide se correre o simulare. Poi la pista.
+sceglie **una strategia per pilota** e si decide se correre o simulare. Poi la
+pista.
 
 | Elemento | Cosa fa |
 |---|---|
@@ -996,6 +998,79 @@ sceglie la gomma di partenza e si decide se correre o simulare. Poi la pista.
 | **Striscia dei distacchi** | i secondi dal leader su una scala. È la vista funzionale: il trenino, chi si stacca, l'undercut |
 | **Velocità** | pausa, ½×, 1×, 2×, più «simula il resto». Si misura in **giri al secondo**, non in «×»: «un giro al secondo» si capisce, «otto volte più veloce» dipende da quanto è lungo il giro |
 | **Rallenta da sola** | ai box (4 secondi di gara al secondo reale: venti secondi di sosta diventano cinque veri), e nei momenti che chiedono una decisione |
+
+### La strategia si sceglie prima del via
+
+Le tue due monoposto erano le uniche ventidue del gruppo a non fermarsi mai da
+sole: il motore chiamava ai box tutte le altre, le tue aspettavano che qualcuno
+premesse un pulsante. Chi guardava la gara senza toccare niente la finiva su un
+treno oltre il crollo — **quattordici secondi al giro** — e non capiva perché.
+Una gara guardata senza premere niente deve restare una gara corsa.
+
+Perciò sulla griglia si sceglie una strategia **per pilota**, non per la
+scuderia: sono due vetture, e la seconda è tua quanto la prima. Da lì in poi le
+soste avvengono da sole; il pulsante *Box* in gara scavalca il piano, che è il
+motivo per cui vale la pena guardarla invece di simularla.
+
+Una strategia è **quando ti fermi**, non con che gomma: le mescole le sceglie
+`compoundFor` sulla lunghezza dello stint — la più morbida che ci arriva senza
+sfondare il crollo. Il primo tentativo le scriveva a mano (`M>H` per
+l'equilibrata) e il risultato era che a basso degrado le tue partivano su media
+mentre quattro decimi del gruppo partivano su morbida: nella misura perdevano
+1,25 posizioni al via invece di guadagnarne 0,89. Ricavandole dalla lunghezza
+dello stint, la conservativa finisce da sola sulle dure e l'aggressiva sulle
+morbide — senza che «dura» o «morbida» siano scritte da nessuna parte, e
+adattandosi a Monaco come a Spa.
+
+Sulle piste lunghe e abrasive nessuna mescola regge uno stint intero: la scelta
+tornava `H` ovunque e la strategia usciva `H>H`, cioè venticinque secondi di
+penalità al traguardo che il giocatore non aveva modo di vedere arrivare. Lì si
+aggiunge una sosta corta in coda — quello che fa un muretto vero quando la
+regola delle due mescole non è ancora soddisfatta e la gara sta per finire.
+
+#### Una scelta, non una risposta
+
+Con la morbida a 1,46 secondi dalla dura, l'aggressiva vinceva su ogni asse:
+
+| strategia | arrivo medio | primi 3 giri |
+|---|---|---|
+| conservativa | P13,18 | +2,45 |
+| equilibrata | P13,48 | +1,48 |
+| aggressiva | **P12,00** | **−2,40** |
+
+Su cinquantatré giri una tre-soste passava trentaquattro giri su morbida contro
+i ventotto su dura di una due-soste: quarantacinque secondi di vantaggio contro
+ventuno di sosta in più. Non era una scelta, era la risposta giusta, e le altre
+due erano decorazione. Il divario fra le mescole è sceso a **0,78 secondi**
+(`S −0,42 · M 0 · H +0,36`), che è la misura per cui l'ultima sosta si paga da
+sé:
+
+| strategia | arrivo medio | primi 3 giri | soste |
+|---|---|---|---|
+| conservativa | P13,08 | +2,42 | 1,00 |
+| equilibrata | P13,10 | +1,58 | 1,11 |
+| aggressiva | P13,36 | −0,60 | 2,00 |
+
+Tre decimi di posizione fra la migliore e la peggiore, e comportamenti al via
+ancora nettamente diversi: chi non vuole essere passato nelle prime curve
+paga in fondo, e viceversa. Adesso la strategia si scommette sul **degrado** —
+quanto regge la gomma su questa pista, con questo pilota — invece di risolversi
+con l'aritmetica del passo. `npm run check:strategy` sorveglia entrambi i lati.
+
+### Il via contava meno dei dadi
+
+«La qualifica sembra buona, ma poi in gara subito vengono sorpassati.» La misura
+dava ragione al sospetto: le tue perdevano tre o più posizioni nei primi tre
+giri in un quarto delle gare. Lo spunto valeva **±0,22 secondi** di abilità
+contro un rumore di deviazione **0,55**: il caso pesava due volte e mezzo la
+bravura, e con la griglia schierata a 0,28 secondi per posizione erano due file
+regalate al lancio dei dadi.
+
+Adesso l'attributo `starts` apre circa 0,85 secondi fra il migliore e il peggiore
+del gruppo e il rumore scende a 0,22: due o tre posizioni le decide il pilota,
+mezza i dadi. La funzione è una sola, `launchDelta`, chiamata da entrambe le
+cadenze — un buon partente deve restare un buon partente sia nella gara che
+guardi sia in quella che simuli.
 
 ### Le gomme si contano in giri, non in percentuale
 
