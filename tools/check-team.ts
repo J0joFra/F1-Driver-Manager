@@ -21,6 +21,7 @@ import { CAR_KEYS, type CarKey, type Team, type TrainingPlan, type World } from 
 import { SEASON_WEEKS } from '../src/engine/calendar.js';
 import { constructorStandings } from '../src/engine/season.js';
 import { carPace } from '../src/engine/regulations.js';
+import { CAR_PACE_PER_POINT } from '../src/engine/race.js';
 import { overall, potentialOverall } from '../src/engine/driver.js';
 import { spendPointsAsAi } from '../src/engine/skills.js';
 
@@ -186,12 +187,21 @@ check(at(position, 8) <= 7.4,
 check(at(position, 16) < at(position, 8),
   `fra l'ottava e la sedicesima stagione non si sale più`);
 
-// La monoposto è la leva lenta: deve arrivare quasi alla pari.
-check(at(gap, 1) > 9, `si parte con solo ${at(gap, 1).toFixed(1)} punti di svantaggio: troppo pochi`);
-check(at(gap, 8) < 7,
-  `dopo otto stagioni la macchina è ancora ${at(gap, 8).toFixed(1)} punti sotto la media`);
-check(at(gap, 16) < 3.5,
-  `la macchina non arriva mai alla pari: ${at(gap, 16).toFixed(1)} punti sotto alla sedicesima`);
+/*
+ * La monoposto è la leva lenta: deve arrivare quasi alla pari.
+ *
+ * Il distacco di partenza si misura in **secondi al giro**, non in punti di
+ * rating. I punti sono un'unità interna che si può riscalare — ed è stata
+ * riscalata, quando la griglia troppo larga faceva doppiare tutti — mentre
+ * mezzo secondo al giro vuol dire la stessa cosa oggi e fra due anni.
+ */
+const gapSeconds = (points: number) => points * CAR_PACE_PER_POINT;
+check(gapSeconds(at(gap, 1)) > 0.18,
+  `si parte con solo ${gapSeconds(at(gap, 1)).toFixed(2)}s al giro di svantaggio: troppo pochi`);
+check(gapSeconds(at(gap, 8)) < 0.42,
+  `dopo otto stagioni la macchina è ancora ${gapSeconds(at(gap, 8)).toFixed(2)}s al giro sotto la media`);
+check(gapSeconds(at(gap, 16)) < 0.21,
+  `la macchina non arriva mai alla pari: ${gapSeconds(at(gap, 16)).toFixed(2)}s al giro alla sedicesima`);
 
 // I piloti sono la leva veloce: l'allenamento deve vedersi.
 check(at(drivers, 8) - at(drivers, 1) >= 3.5,

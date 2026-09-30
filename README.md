@@ -65,7 +65,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 180 test
+npm test                      # 182 test
 npm run sim -- --seasons 40 --verbose
 npm run check:team            # 10 scuderie fondate da zero × 16 stagioni
 ```
@@ -1243,6 +1243,79 @@ Quello che deve combaciare è la forma. E quel `43%` della prima stagione, che
 diventa `0%` da subito dopo, è la misura del difetto originale: si può finire
 in fondo l'anno del debutto, ma non è più il proprio posto.
 
+### Quanto si arriva distanti, e perché era rotto
+
+Nessuno sorvegliava i **distacchi all'arrivo**, e infatti erano rotti. In una
+gara su Port Haven il primo e l'ultimo erano separati da **sette giri e mezzo**:
+il campo non correva, si disperdeva. Una scuderia appena fondata veniva doppiata
+da tutti in ogni gara, e la classifica finale misurava chi aveva azzeccato la
+finestra di sosta invece di chi era più veloce.
+
+Le altre sonde non potevano vederlo: `check:team` guarda la posizione in
+campionato, `sim` guarda campioni e ricambio. Il distacco non lo guardava
+nessuno — ed è la prima cosa che il giocatore vede.
+
+**Tre difetti, in ordine di gravità.**
+
+1. **La curva di degrado era discontinua, e nel verso sbagliato.** A un'usura
+   di 69,99 la penalità valeva 3,6 secondi al giro; a 70,00 tornava a 2,0. La
+   gomma *migliorava* attraversando il crollo, di un secondo e mezzo. Era il
+   residuo di due formule tarate separatamente e incollate a una soglia. E
+   oltre il crollo esplodeva: `2 + (usura − 70)^1.8 × 0.08` vale **38 secondi
+   al giro** a usura 100 e 215 a 150. Adesso la curva è continua nel punto di
+   crollo e una gomma finita costa sette secondi — un disastro sportivo senza
+   essere una farsa.
+
+2. **Il modello veloce non si fermava mai per usura.** Seguiva il piano alla
+   cieca, mentre quello live si fermava a usura 82. Le due cadenze dello stesso
+   modello devono decidere allo stesso modo — è la regola su cui è costruito
+   tutto il progetto — e chi si trovava con la gomma sbagliata restava in pista
+   venti giri oltre il crollo.
+
+3. **La mescola si sceglieva senza guardare quanti giri mancavano.** La regola
+   era «se sei su morbida monta dura, altrimenti monta morbida»: su uno stint da
+   trenta giri la morbida arrivava al crollo a due terzi e ci restava. Non era
+   una strategia sbagliata, era una strategia che nessuno aveva preso. Adesso si
+   monta la più morbida che **arriva** in fondo.
+
+### La griglia partiva troppo larga
+
+Sistemati i tre difetti sopra, il campo passava da 7,5 giri di dispersione a
+2,4. Restava che l'ultima scuderia — anche quella del computer — prendeva due
+giri. La scomposizione del deficit sul giro lo diceva senza ambiguità:
+
+```
+voce           leader    tua     differenza
+  macchina       0.448   3.300  +2.852     ← l'80% del distacco
+  pilota         0.257   0.856  +0.599
+  gomme          0.681   0.755  +0.074
+```
+
+Con i valori di partenza da 70 a 95 e novantadue millesimi di secondo a punto,
+la sola monoposto valeva 2,85 secondi al giro. Non c'è pilota che li recuperi, e
+infatti alzare il peso del pilota **peggiorava** il giocatore: i suoi piloti
+sono deboli quanto la macchina, perché è tutto quello che un neoarrivato può
+permettersi.
+
+La leva vera era una sola: **il prodotto fra la larghezza della griglia e quanto
+vale un punto**. Valori da 80 a 91, e 0,058 secondi a punto.
+
+| | prima | adesso |
+|---|---|---|
+| ultimo classificato | 2,43 giri | 1,37 giri |
+| metà gruppo | 1,16 giri | 0,73 giri |
+| scuderia nuova | 2,30 giri | 1,13 giri |
+| doppiata | 100% | 58% |
+
+La gerarchia non sparisce: si ricostruisce in poche stagioni, perché lo sviluppo
+segue il bilancio e il bilancio segue i risultati. A quarant'anni `lapTimeSpread`
+resta a 2,08 — non si è mossa. Quello che cambia è il **punto di partenza**,
+cioè gli unici anni in cui una scuderia appena fondata sta correndo.
+
+Il margine è stretto: comprimendo ancora, il ricambio dei campioni scende sotto
+il minimo su almeno un seed. `npm run check:race` adesso sorveglia entrambi i
+lati — che il gruppo resti un gruppo, e che resti una gara e non una processione.
+
 ### Gomme: tre fasi e un crollo
 
 Il degrado non è una parabola. È piatto fino al 40% di usura, quadratico fino
@@ -1625,13 +1698,14 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 180 test
+npm test               # vitest, 182 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
 npm run sim:long       # con il dettaglio anno per anno
 npm run sim -- --seasons 100 --seed 7 --verbose
 npm run check:team     # 10 scuderie fondate da zero × 16 stagioni
+npm run check:race     # quanto si arriva distanti: il gruppo resta un gruppo?
 npm run check:career   # la forma di una carriera contro i mondiali veri
 npm run check:migration
 npm run check:palette

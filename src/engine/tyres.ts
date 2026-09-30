@@ -33,10 +33,34 @@ export function freshTyre(compound: Compound): TyreState {
 }
 
 /**
+ * Il punto in cui la gomma cede. Oltre questa usura non si corre, si arranca.
+ */
+export const CLIFF = 70;
+
+/**
  * Penalità sul giro dovuta allo stato della gomma, in secondi.
  *
- * Tre fasi: lineare fino al 40% di usura, quadratica fino al 70%, poi il
- * cliff. Un pilota dolce sulle gomme ritarda tutte e tre.
+ * Tre fasi: lineare fino al 40% di usura, quadratica fino al crollo, poi la
+ * gomma è andata. Un pilota dolce sulle gomme ritarda tutte e tre.
+ *
+ * ## Due difetti che questa curva aveva, e che si vedevano in classifica
+ *
+ * **Era discontinua, e nel verso sbagliato.** A un'usura di 69,99 la penalità
+ * valeva 3,6 secondi; a 70,00 tornava a 2,0. La gomma *migliorava*
+ * attraversando il crollo, di un secondo e mezzo. Nessuno l'aveva scritto:
+ * era il residuo di due formule tarate separatamente e incollate a una soglia.
+ *
+ * **E oltre il crollo esplodeva.** `2 + (usura − 70)^1.8 × 0.08` vale 38
+ * secondi al giro a usura 100 e 215 a 150. Una monoposto che sbagliava la
+ * finestra di sosta non perdeva una posizione: perdeva **minuti**, e la
+ * classifica finale diceva chi aveva azzeccato la strategia, non chi era più
+ * veloce. In una gara su Port Haven il distacco fra il primo e l'ultimo era di
+ * sette giri e mezzo.
+ *
+ * Adesso la curva è continua nel punto di crollo e cresce piano: una gomma
+ * finita costa circa sette secondi al giro, che è un disastro sportivo senza
+ * essere una farsa. Il crollo resta quello che deve essere — la ragione per
+ * cui fermarsi è una decisione — ma smette di decidere il campionato.
  */
 export function tyreLapPenalty(tyre: TyreState, tyreManagement: number, track: Track): number {
   const w = tyre.wear;
@@ -44,12 +68,14 @@ export function tyreLapPenalty(tyre: TyreState, tyreManagement: number, track: T
 
   if (w < 40) {
     penalty = w * 0.015;
-  } else if (w < 70) {
+  } else if (w < CLIFF) {
     const excess = w - 40;
     penalty = 0.6 + excess * 0.04 + excess * excess * 0.002;
   } else {
-    const excess = w - 70;
-    penalty = 2.0 + Math.pow(excess, 1.8) * 0.08;
+    // Il valore di partenza è quello con cui la fase precedente arriva a 70:
+    // così la curva non ha gradini, in nessuno dei due versi.
+    const excess = w - CLIFF;
+    penalty = 3.6 + excess * 0.10 + excess * excess * 0.00045;
   }
 
   // La gestione gomme attenua il degrado, non lo annulla.

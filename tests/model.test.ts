@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ageGrowthCurve, diminishing, logistic, marginalDifficulty, HEADROOM_SCALE } from '../src/engine/curves.js';
-import { freshTyre, temperaturePenalty, tyreLapPenalty, updateTemperature } from '../src/engine/tyres.js';
+import { CLIFF, freshTyre, temperaturePenalty, tyreLapPenalty, updateTemperature } from '../src/engine/tyres.js';
 import { overtakeChance, ATTACK_RANGE } from '../src/engine/overtaking.js';
 import { driverErrorChance, mechanicalFailureChance, safetyCarChancePerLap } from '../src/engine/incidents.js';
 import { overtrainingPenalty, fatiguePenalty, moraleFactor } from '../src/engine/progression.js';
@@ -66,14 +66,33 @@ describe('curve', () => {
 });
 
 describe('gomme', () => {
-  it('il degrado ha tre fasi, con un crollo alla fine', () => {
+  it('il degrado ha tre fasi, ognuna più ripida della precedente', () => {
     const at = (wear: number) => tyreLapPenalty({ ...freshTyre('M'), wear }, 70, track);
     const early = at(30) - at(10);
     const middle = at(60) - at(40);
     const cliff = at(90) - at(70);
     expect(early).toBeLessThan(middle);
     expect(middle).toBeLessThan(cliff);
-    expect(cliff).toBeGreaterThan(2);
+  });
+
+  it('la curva non ha gradini nel punto di crollo', () => {
+    // Era il difetto peggiore del modello di gara: a 69,99 la penalità valeva
+    // 3,6 secondi, a 70,00 tornava a 2,0. La gomma **migliorava**
+    // attraversando il crollo, di un secondo e mezzo.
+    const at = (wear: number) => tyreLapPenalty({ ...freshTyre('M'), wear }, 70, track);
+    expect(at(CLIFF)).toBeGreaterThanOrEqual(at(CLIFF - 0.01));
+    expect(at(CLIFF)).toBeCloseTo(at(CLIFF - 0.01), 1);
+  });
+
+  it('una gomma finita è un disastro, non una farsa', () => {
+    // `2 + (usura − 70)^1.8 × 0.08` valeva 38 secondi al giro a usura 100:
+    // chi sbagliava la finestra di sosta non perdeva una posizione, perdeva
+    // minuti, e la classifica diceva chi aveva azzeccato la strategia invece
+    // di chi era più veloce.
+    const at = (wear: number) => tyreLapPenalty({ ...freshTyre('M'), wear }, 70, track);
+    expect(at(100)).toBeGreaterThan(3);
+    expect(at(100)).toBeLessThan(10);
+    expect(at(150)).toBeLessThan(20);
   });
 
   it('un pilota dolce sulle gomme paga meno', () => {
