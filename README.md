@@ -65,7 +65,7 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 175 test
+npm test                      # 180 test
 npm run sim -- --seasons 40 --verbose
 npm run check:team            # 10 scuderie fondate da zero × 16 stagioni
 ```
@@ -990,13 +990,55 @@ sceglie la gomma di partenza e si decide se correre o simulare. Poi la pista.
 | Elemento | Cosa fa |
 |---|---|
 | **Tracciato** | vista dall'alto, una vettura per puntino. È atmosfera: dà contesto, non numeri |
-| **Velocità** | si misura in **giri al secondo**, non in «×». «Un giro al secondo» si capisce; «otto volte più veloce» dipende da quanto è lungo il giro |
-| **Rallenta da sola** | ai box (4 secondi di gara al secondo reale: venti secondi di sosta diventano cinque veri), e nei momenti che chiedono una decisione |
+| **Colonna del passo** | tre livelli impilati sul bordo destro, più l'attacco. Sempre visibili, sempre nello stesso posto |
+| **Schede delle monoposto** | una per vettura, in basso: posizione, gomme in **giri**, carica ERS, box |
 | **Torre dei tempi** | chi è davanti a chi, distacco dal leader. Segue il giocatore invece di lasciarlo fuori schermo |
 | **Striscia dei distacchi** | i secondi dal leader su una scala. È la vista funzionale: il trenino, chi si stacca, l'undercut |
-| **Comandi** | mescola e box, modalità motore, attacco quando sei entro un secondo |
-| **Velocità** | pausa, ½×, 1×, 2×, più «simula il resto» |
-| **Le tue due monoposto** | si passa dall'una all'altra senza uscire dalla gara: la strategia si decide per ciascuna |
+| **Velocità** | pausa, ½×, 1×, 2×, più «simula il resto». Si misura in **giri al secondo**, non in «×»: «un giro al secondo» si capisce, «otto volte più veloce» dipende da quanto è lungo il giro |
+| **Rallenta da sola** | ai box (4 secondi di gara al secondo reale: venti secondi di sosta diventano cinque veri), e nei momenti che chiedono una decisione |
+
+### Le gomme si contano in giri, non in percentuale
+
+«80% di usura» costringe a un conto a mente — quanto consumo a giro, quanti ne
+mancano, ci arrivo? — e quel conto nessuno lo fa mentre guarda una gara.
+**«4,3 giri»** risponde alla domanda vera, che è una sola: *mi fermo adesso o al
+prossimo?*
+
+Il riferimento è il crollo a 70 di usura, non la fine a 150: oltre quella soglia
+la gomma perde due secondi al giro e crescendo, quindi da lì non si corre, si
+arranca. Contare fino a 150 direbbe che restano dieci giri, e sarebbe vero e
+inutile.
+
+### La batteria, e perché non è più un timer
+
+L'attacco si sbloccava dopo ventisei secondi di ricarica. Funzionava, ma la
+decisione era una sola e sempre la stessa: *appena posso, attacco*. Non c'era
+niente da amministrare, solo qualcosa da aspettare.
+
+Adesso c'è una carica da 0 a 100 che si scarica spingendo e si ricarica
+gestendo, e le domande diventano due, valide per tutta la gara: **quanta** ne
+spendo adesso, e **quanta** me ne serve per il giro in cui conta. *Gestisci*
+smette di essere il tasto che non si preme mai: è il modo in cui si ricarica.
+
+A batteria scarica la spinta non spinge. Il livello scelto dal giocatore resta —
+così il pulsante non si spegne da solo sotto il dito — ma il modello lo legge
+come standard, e la barra a zero dice perché non si sta guadagnando.
+
+Anche le vetture del computer la amministrano, una decisione a giro sul
+traguardo: spingi se hai qualcuno a tiro e la carica per farlo, gestisci se sei
+solo o a secco. Senza, il giocatore avrebbe una leva che il resto della griglia
+non ha, e il campionato misurerebbe l'accesso a un pulsante invece che una
+scuderia.
+
+### Due monoposto, due schede
+
+Prima se ne vedeva una e si passava all'altra da un pulsante nella riga di
+stato. Ma una scuderia ne schiera due, e le decisioni che contano sono quasi
+sempre **relative**: chiamo questa ai box adesso o aspetto che passi l'altra?
+Con una vettura sola sullo schermo quella domanda non si può nemmeno formulare.
+
+Ogni scheda dice tre cose e nient'altro — dove sei, quanto ti restano le gomme,
+quanta carica hai — perché sono le tre da cui discende tutto il resto.
 
 **Il gioco rallenta da solo.** Quando entri in zona DRS, quando sei sotto
 attacco, quando le gomme sono finite o esce la safety car, la simulazione torna
@@ -1583,7 +1625,7 @@ limite del possibile — il margine più stretto è ΔE 9.9 contro un minimo di 
 ## Comandi
 
 ```bash
-npm test               # vitest, 175 test
+npm test               # vitest, 180 test
 npm run test:watch
 npm run typecheck      # tsc --noEmit, strict
 npm run sim            # 40 stagioni, riepilogo
@@ -1630,6 +1672,7 @@ ingaggia, si sviluppa, si corre, si chiude l'anno e si ricomincia.
 - [x] Il tempo scorre a giorni: *Avanza* di ventiquattro ore, *Al weekend* per saltare ai giorni che contano
 - [x] Calendario ricalcato su quello vero: date reali, giro del mondo per regioni, triple header, pausa d'agosto, orari locali e italiani
 - [x] Vista gara a diciotto monoposto, con le tue due comandabili entrambe
+- [x] HUD di gara sul modello di F1 Clash: passo a livelli, gomme in giri, batteria ERS
 - [x] Qualifica giocabile: le tre decisioni del sabato
 - [x] Forma dei circuiti misurata sulla geometria reale
 - [x] Salvataggio automatico, con recupero dei salvataggi della vecchia Modalità Pilota

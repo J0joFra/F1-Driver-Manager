@@ -41,6 +41,14 @@ export interface LiveCar {
   pitUntil: number;
   /** secondi di simulazione fino a cui la vettura sta attaccando */
   attackUntil: number;
+  /**
+   * La carica dell'ERS, da 0 a 100.
+   *
+   * È il budget con cui si compra velocità. Si scarica spingendo e
+   * attaccando, si ricarica gestendo — e quando è a zero la modalità *push*
+   * non spinge più, perché non c'è niente da spendere.
+   */
+  ers: number;
   dirtyAir: boolean;
   dnf: boolean;
   /** giri in cui l'IA ha programmato la sosta */
@@ -96,8 +104,49 @@ export interface LiveRaceOptions {
 }
 
 const ATTACK_DURATION = 12;
-export const ATTACK_COOLDOWN = 26;
 const PIT_STATIONARY = 2.4;
+
+/**
+ * La batteria: perché un budget e non un timer.
+ *
+ * Prima l'attacco si sbloccava dopo ventisei secondi di ricarica. Funzionava,
+ * ma la decisione era una sola e sempre la stessa: *appena posso, attacco*.
+ * Non c'era niente da amministrare, solo qualcosa da aspettare.
+ *
+ * Con una carica da spendere le domande diventano due, e valgono per tutta la
+ * gara: **quanta** ne spendo adesso, e **quanta** me ne serve per il giro in
+ * cui conta. Gestire non è più il tasto che non si preme mai: è il modo in cui
+ * si ricarica.
+ *
+ * I numeri sono in unità al secondo di simulazione, e un giro dura attorno ai
+ * novanta secondi: una carica piena vale un giro e mezzo di spinta piena, o
+ * quattro attacchi.
+ */
+export const ERS_MAX = 100;
+
+/** Quanto costa lanciare un attacco, oltre a quello che consuma mentre dura. */
+export const ATTACK_COST = 25;
+
+const ERS_RATE: Record<EngineMode, number> = {
+  conserve: 0.90,
+  normal: 0.22,
+  push: -0.75,
+};
+
+/** Consumo aggiuntivo mentre l'attacco è in corso. */
+const ERS_ATTACK_DRAIN = 1.1;
+
+/**
+ * La modalità che la vettura riesce davvero a tenere.
+ *
+ * A batteria scarica *push* non spinge: resta l'intenzione del giocatore —
+ * così il pulsante non si spegne da solo sotto il dito — ma il modello la
+ * legge come *standard*. È anche il motivo per cui la carica va mostrata: chi
+ * la vede a zero capisce perché non sta guadagnando.
+ */
+export function effectiveMode(car: LiveCar): EngineMode {
+  return car.mode === 'push' && car.ers <= 0 ? 'normal' : car.mode;
+}
 
 export function createLiveRace(
   track: Track,
@@ -129,6 +178,7 @@ export function createLiveRace(
       dnf: false,
       plan: pitStrategy(track, rng),
       compounds: [],
+      ers: ERS_MAX,
       finishedAt: null,
     };
   });
@@ -185,6 +235,27 @@ export function carOf(race: LiveRace, driverId: string): LiveCar | undefined {
   return race.cars.find((c) => c.entry.driverId === driverId);
 }
 
+/**
+ * Quanti giri restano alla gomma prima del crollo.
+ *
+ * È la stessa informazione dell'usura, detta nel modo in cui serve. «80%» fa
+ * fare un conto a mente — quanto consumo a giro, quanti ne mancano, ci arrivo?
+ * — e quel conto nessuno lo fa mentre guarda una gara. «4.3 giri» risponde
+ * alla domanda vera, che è una sola: **mi fermo adesso o al prossimo?**
+ *
+ * Il riferimento è il crollo a 70, non la fine a 150: oltre quella soglia la
+ * gomma perde due secondi al giro e crescendo, quindi da lì in poi non si
+ * corre, si arranca. Contare i giri fino a 150 direbbe che ce ne sono ancora
+ * dieci, e sarebbe vero e inutile.
+ */
+export const TYRE_CLIFF = 70;
+
+export function tyreLapsLeft(race: LiveRace, car: LiveCar): number {
+  const perLap = wearPerLap(car.entry, car.tyre, race.track, effectiveMode(car), isAttacking(race, car));
+  if (perLap <= 0) return 99;
+  return Math.max(0, (TYRE_CLIFF - car.tyre.wear) / perLap);
+}
+
 /** Comandi del giocatore. */
 export function setMode(car: LiveCar, mode: EngineMode): void {
   if (!car.dnf) car.mode = mode;
@@ -194,12 +265,50 @@ export function armPit(car: LiveCar, compound: Compound | null): void {
   car.pitArmed = compound;
 }
 
-export function startAttack(race: LiveRace, car: LiveCar): void {
+/** Si può attaccare solo con la carica per farlo. */
+export function canAttack(race: LiveRace, car: LiveCar): boolean {
+  return !car.dnf && car.ers >= ATTACK_COST && !isAttacking(race, car);
+}
+
+export function startAttack(race: LiveRace, car: LiveCar): boolean {
+  if (!canAttack(race, car)) return false;
+  car.ers -= ATTACK_COST;
   car.attackUntil = race.t + ATTACK_DURATION;
+  return true;
 }
 
 export function isAttacking(race: LiveRace, car: LiveCar): boolean {
   return race.t < car.attackUntil;
+}
+
+/**
+ * Come le vetture del computer amministrano la carica.
+ *
+ * Si decide una volta a giro, sul traguardo, e non a ogni passo: una vettura
+ * che cambiasse modalità dieci volte al giro non sarebbe più brava, sarebbe
+ * solo più nervosa. La regola è quella che userebbe un muretto qualunque —
+ * spingi quando hai qualcuno a tiro e la carica per farlo, gestisci quando sei
+ * solo o a secco, e attacca se te lo puoi permettere.
+ *
+ * Senza questo il giocatore avrebbe una leva che il resto della griglia non
+ * ha, e il campionato misurerebbe l'accesso a un pulsante invece che una
+ * scuderia.
+ */
+function aiEnergy(race: LiveRace, car: LiveCar): void {
+  if (race.playerIds.includes(car.entry.driverId) || car.dnf) return;
+
+  const ahead = order(race).find((o) => o !== car && o.progress > car.progress);
+  const gap = ahead ? gapBetween(race, ahead, car) : null;
+  const close = gap !== null && gap < 1.6;
+
+  if (close && car.ers > 35) {
+    car.mode = 'push';
+    if (gap !== null && gap < 1 && canAttack(race, car)) startAttack(race, car);
+  } else if (car.ers < 25) {
+    car.mode = 'conserve';
+  } else {
+    car.mode = 'normal';
+  }
 }
 
 /**
@@ -219,13 +328,22 @@ export function stepRace(race: LiveRace, dt: number): void {
     if (race.t < c.pitUntil) continue;
 
     const attacking = isAttacking(race, c);
+    const mode = effectiveMode(c);
+
+    // La carica si muove prima del resto: quello che la vettura riesce a fare
+    // in questo passo dipende da quanta ne aveva all'inizio.
+    const drain = (ERS_RATE[c.mode] - (attacking ? ERS_ATTACK_DRAIN : 0))
+      // Dietro la safety car si recupera comunque: si va piano e si ricarica.
+      * (sc ? 0.4 : 1) + (sc ? 0.5 : 0);
+    c.ers = clamp(c.ers + drain * dt, 0, ERS_MAX);
+
     const lapTime = lapTimeFor(c.entry, {
       track,
       lap: c.lap,
       tyre: c.tyre,
       wet: race.wet,
       dirtyAir: c.dirtyAir,
-      mode: c.mode,
+      mode,
       underSafetyCar: sc,
     }, rng);
     c.lastLap = lapTime;
@@ -234,10 +352,10 @@ export function stepRace(race: LiveRace, dt: number): void {
     const before = Math.floor(p0);
     const fraction = dt / lapTime;
     c.progress += fraction;
-    const push = sc ? 0.5 : attacking ? 1.35 : c.mode === 'push' ? 1.2 : c.mode === 'conserve' ? 0.85 : 1;
+    const push = sc ? 0.5 : attacking ? 1.35 : mode === 'push' ? 1.2 : mode === 'conserve' ? 0.85 : 1;
     c.tyre.wear = Math.min(
       150,
-      c.tyre.wear + wearPerLap(c.entry, c.tyre, track, c.mode, attacking) * fraction * (sc ? 0.16 : 1),
+      c.tyre.wear + wearPerLap(c.entry, c.tyre, track, mode, attacking) * fraction * (sc ? 0.16 : 1),
     );
     c.tyre.age += fraction;
     c.tyre.temperature = updateTemperature(c.tyre, push, track.trackTemp, fraction);
@@ -289,6 +407,7 @@ export function stepRace(race: LiveRace, dt: number): void {
        * più. Il percorso veloce esegue tutte le soste del piano: le due
        * cadenze dello stesso modello devono decidere allo stesso modo.
        */
+      aiEnergy(race, c);
       const planned = c.plan[c.stops] ?? Infinity;
       const worthIt = track.laps - c.lap >= 3;
       if (!race.playerIds.includes(c.entry.driverId) && c.pitArmed === null && !sc && worthIt) {

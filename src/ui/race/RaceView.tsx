@@ -2,15 +2,17 @@ import { PALETTE } from '../palette.js';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { Compound, EngineMode } from '../../engine/types.js';
 import {
-  ATTACK_COOLDOWN, carOf, fastForward, gapBetween, isAttacking, liveResults,
+  carOf, fastForward, gapBetween, liveResults,
   order, setMode, startAttack, stepRace, underSafetyCar,
+  type LiveCar,
 } from '../../engine/liveRace.js';
 import { currentRace } from '../../state/raceSession.js';
 import { useGame } from '../../state/useGame.js';
 import { TrackMap } from './TrackMap.js';
 import { TimingTower } from './TimingTower.js';
 import { GapStrip } from './GapStrip.js';
-import { RaceControls } from './RaceControls.js';
+import { PaceStack } from './PaceStack.js';
+import { CarCards } from './CarCards.js';
 
 /** Il ritmo a cui scorre la gara. 0 = in pausa. */
 /**
@@ -39,7 +41,6 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
   const [, redraw] = useReducer((x: number) => x + 1, 0);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(1);
   const [nextCompound, setNextCompound] = useState<Compound>('M');
-  const [attackReadyAt, setAttackReadyAt] = useState(0);
   const lastFrame = useRef(0);
   const finished = useRef(false);
 
@@ -54,6 +55,9 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
   const select = useGame((s) => s.select);
   const playerId = myIds.includes(focus ?? '') ? focus : myIds[0] ?? null;
   const me = race && playerId ? carOf(race, playerId) ?? null : null;
+  const myCars = race
+    ? myIds.map((id) => carOf(race, id)).filter((c): c is LiveCar => !!c)
+    : [];
 
   const rows = race ? order(race) : [];
   const myIndex = me ? rows.indexOf(me) : -1;
@@ -150,11 +154,9 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
         >
           {underSafetyCar(race) ? 'Safety car' : 'Verde'}
         </span>
-        {me && (
-          <span className="font-mono text-2xs text-muted tnum">
-            P{myIndex + 1} · {me.tyre.compound} {Math.round(me.tyre.wear)}%
-          </span>
-        )}
+        {/* Posizione e gomme stavano anche qui, con un arrotondamento diverso
+            da quello della scheda: lo stesso dato scritto due volte in due
+            modi non è ridondanza, è un dubbio. Lo dice la scheda. */}
         <span className="flex-1" />
         <div className="flex gap-1">
           {SPEEDS.map((s) => (
@@ -171,30 +173,6 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
             </button>
           ))}
         </div>
-        {/* Le due monoposto: la strategia si decide per ciascuna, quindi da
-            qui si passa dall'una all'altra senza uscire dalla gara. */}
-        {myIds.length > 1 && (
-          <div className="flex gap-0.5">
-            {myIds.map((id, i) => {
-              const d = world.drivers[id];
-              const car = race ? carOf(race, id) : undefined;
-              const pos = car ? order(race!).indexOf(car) + 1 : 0;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  data-testid={`focus-car-${i}`}
-                  onClick={() => select(id)}
-                  className={`font-mono text-2xs px-2 py-1 rounded-sm border ${
-                    id === playerId ? 'bg-ink border-ink text-ground' : 'bg-panel2 border-line text-muted'
-                  }`}
-                >
-                  {(d?.name ?? '').split(' ').at(-1)}{pos > 0 ? ` P${pos}` : ''}
-                </button>
-              );
-            })}
-          </div>
-        )}
         <button
           type="button"
           data-testid="skip-race"
@@ -205,38 +183,40 @@ export function RaceView({ onFinish }: { onFinish: (results: ReturnType<typeof l
         </button>
       </header>
 
-      <div className="flex-1 min-h-0 grid grid-cols-[1fr_168px] gap-1.5">
+      {/* Il passo sta sul **bordo destro**: è dove arriva il pollice mentre
+          l'altra mano tiene il telefono, ed è la sola cosa che si tocca
+          mentre la gara corre. */}
+      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_168px_46px] gap-1.5">
         <div className="flex flex-col gap-1.5 min-h-0">
           <TrackMap race={race} teamColour={teamColour} driverName={driverName} playerId={playerId} keyMoment={keyMoment} />
           <GapStrip race={race} teamColour={teamColour} playerId={playerId} />
         </div>
         <TimingTower race={race} teamColour={teamColour} driverName={driverName} playerId={playerId} />
+        {me ? (
+          <PaceStack
+            race={race} car={me}
+            onMode={(m: EngineMode) => { setMode(me, m); redraw(); }}
+            onAttack={() => { if (startAttack(race, me)) redraw(); }}
+          />
+        ) : <div />}
       </div>
 
-      {me ? (
-        <RaceControls
+      {myCars.length > 0 ? (
+        <CarCards
           race={race}
-          car={me}
+          cars={myCars}
+          focusId={playerId}
+          driverName={driverName}
           nextCompound={nextCompound}
-          gapAhead={gapAhead}
-          attackReadyAt={attackReadyAt}
+          onFocus={select}
           onCompound={setNextCompound}
-          onBox={() => {
-            me.pitArmed = me.pitArmed ? null : nextCompound;
+          onBox={(car: LiveCar) => {
+            car.pitArmed = car.pitArmed ? null : nextCompound;
             redraw();
-          }}
-          onMode={(m: EngineMode) => {
-            setMode(me, m);
-            redraw();
-          }}
-          onAttack={() => {
-            if (isAttacking(race, me)) return;
-            startAttack(race, me);
-            setAttackReadyAt(race.t + ATTACK_COOLDOWN);
           }}
         />
       ) : (
-        <div className="panel shrink-0 grid place-items-center text-xs text-dim" style={{ height: 74 }}>
+        <div className="panel shrink-0 grid place-items-center text-xs text-dim" style={{ height: 70 }}>
           Non sei in gara: stai guardando il mondo correre.
         </div>
       )}

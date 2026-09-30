@@ -4,8 +4,8 @@ import { getTrack } from '../src/engine/data/tracks.js';
 import type { RaceEntry } from '../src/engine/race.js';
 import { POINTS, simulateRace } from '../src/engine/race.js';
 import {
-  armPit, carOf, createLiveRace, fastForward, gapBetween, liveResults,
-  order, setMode, startAttack, stepRace,
+  armPit, ATTACK_COST, canAttack, carOf, createLiveRace, effectiveMode, fastForward,
+  gapBetween, liveResults, order, setMode, startAttack, stepRace, tyreLapsLeft,
 } from '../src/engine/liveRace.js';
 
 function field(): RaceEntry[] {
@@ -88,7 +88,9 @@ describe('gara live', () => {
 
   it('la modalità motore cambia il passo e il degrado', () => {
     const build = (mode: 'conserve' | 'push') => {
-      const race = createLiveRace(track, field(), createRng(9));
+      // La vettura va dichiarata del giocatore: le altre si amministrano la
+      // carica da sole, e sovrascriverebbero la modalità a ogni giro.
+      const race = createLiveRace(track, field(), createRng(9), { playerIds: ['d5'] });
       const car = carOf(race, 'd5')!;
       setMode(car, mode);
       for (let i = 0; i < 300; i++) stepRace(race, 1);
@@ -98,6 +100,63 @@ describe('gara live', () => {
     const conserve = build('conserve');
     expect(push.progress).toBeGreaterThan(conserve.progress);
     expect(push.tyre.wear).toBeGreaterThan(conserve.tyre.wear);
+  });
+
+  it('la batteria si scarica spingendo e si ricarica gestendo', () => {
+    const run = (mode: 'conserve' | 'push') => {
+      const race = createLiveRace(track, field(), createRng(9), { playerIds: ['d5'] });
+      const car = carOf(race, 'd5')!;
+      car.ers = 50;
+      setMode(car, mode);
+      for (let i = 0; i < 40; i++) stepRace(race, 1);
+      return car.ers;
+    };
+    expect(run('push')).toBeLessThan(50);
+    expect(run('conserve')).toBeGreaterThan(50);
+  });
+
+  it('a batteria scarica la spinta non spinge più', () => {
+    const race = createLiveRace(track, field(), createRng(9), { playerIds: ['d5'] });
+    const car = carOf(race, 'd5')!;
+    car.ers = 0;
+    setMode(car, 'push');
+    // La scelta del giocatore resta: è il modello a leggerla come standard,
+    // così il pulsante non si spegne da solo sotto il dito.
+    expect(car.mode).toBe('push');
+    expect(effectiveMode(car)).toBe('normal');
+  });
+
+  it('attaccare costa carica, e senza non parte', () => {
+    const race = createLiveRace(track, field(), createRng(9), { playerIds: ['d5'] });
+    const car = carOf(race, 'd5')!;
+    const before = car.ers;
+    expect(startAttack(race, car)).toBe(true);
+    expect(car.ers).toBe(before - ATTACK_COST);
+
+    car.ers = ATTACK_COST - 1;
+    car.attackUntil = 0;
+    expect(canAttack(race, car)).toBe(false);
+    expect(startAttack(race, car)).toBe(false);
+  });
+
+  it('le vetture del computer amministrano la carica da sole', () => {
+    const race = createLiveRace(track, field(), createRng(4), { playerIds: ['d5'] });
+    for (let i = 0; i < 600; i++) stepRace(race, 1);
+    // Nessuna deve restare piantata a zero per tutta la gara: chi va a secco
+    // gestisce e recupera, altrimenti il giocatore avrebbe una leva che il
+    // resto della griglia non ha.
+    const others = race.cars.filter((c) => c.entry.driverId !== 'd5' && !c.dnf);
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.every((c) => c.ers > 0)).toBe(true);
+  });
+
+  it('i giri rimasti sulla gomma calano mentre si corre', () => {
+    const race = createLiveRace(track, field(), createRng(9), { playerIds: ['d5'] });
+    const car = carOf(race, 'd5')!;
+    const start = tyreLapsLeft(race, car);
+    for (let i = 0; i < 200; i++) stepRace(race, 1);
+    expect(tyreLapsLeft(race, car)).toBeLessThan(start);
+    expect(tyreLapsLeft(race, car)).toBeGreaterThanOrEqual(0);
   });
 
   it("l'attacco aumenta le probabilità di sorpasso", () => {
