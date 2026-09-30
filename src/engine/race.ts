@@ -2,7 +2,7 @@ import type { Compound, EngineMode, QualifyingResult, RaceResult, Track } from '
 import { type Rng } from './rng.js';
 import { clamp } from './curves.js';
 import {
-  COMPOUND_PACE, freshTyre, tyreLapPenalty, updateTemperature,
+  CLIFF, COMPOUND_PACE, freshTyre, tyreLapPenalty, updateTemperature,
   wearPerLap as tyreWearPerLap, type TyreState,
 } from './tyres.js';
 import { DRS_RANGE, overtakeChance as overtakeProbability } from './overtaking.js';
@@ -84,6 +84,25 @@ export interface LapContext {
 }
 
 /** Il tempo sul giro. Unica definizione: la usano sia la gara veloce sia quella live. */
+/**
+ * Quanto vale un punto di monoposto, in secondi sul giro.
+ *
+ * Era 0.092, ed è il numero che ha reso le gare illeggibili. Con la griglia di
+ * partenza che va da 70 a 95, novantadue millesimi a punto fanno 2,3 secondi
+ * al giro fra la prima e l'ultima — che su cinquantotto giri sono due giri di
+ * distacco. Il campo arrivava spalmato su sette giri e mezzo, e una scuderia
+ * nuova non correva contro nessuno: veniva doppiata da tutti, sempre.
+ *
+ * Il valore va letto insieme a `TEAM_SEEDS`, che è stata stretta: sono la
+ * stessa decisione presa in due punti. Quello che conta è il prodotto —
+ * quanti secondi separano la prima dall'ultima — e adesso vale attorno al
+ * secondo, che è una griglia in cui si può correre.
+ *
+ * Il rapporto con il pilota resta quello dichiarato: la monoposto pesa circa
+ * il doppio, non cinque volte.
+ */
+export const CAR_PACE_PER_POINT = 0.058;
+
 export function lapTimeFor(e: RaceEntry, ctx: LapContext, rng: Rng): number {
   const { track } = ctx;
   // Il rumore si estrae sempre, anche dietro la safety car: la sequenza
@@ -103,8 +122,8 @@ export function lapTimeFor(e: RaceEntry, ctx: LapContext, rng: Rng): number {
 
   let t = track.baseLap;
   // La monoposto pesa circa il doppio del pilota: è la Formula 1, non i kart.
-  t += (100 - e.carPace) * 0.092;
-  t += (100 - driverSkillOf(e, ctx.wet, track)) * 0.03 * driverInfluence(track.layout);
+  t += (100 - e.carPace) * CAR_PACE_PER_POINT;
+  t += (100 - driverSkillOf(e, ctx.wet, track)) * 0.040 * driverInfluence(track.layout);
   t += COMPOUND_PACE[ctx.tyre.compound];
   t += tyreLapPenalty(ctx.tyre, e.tyres, track);
   t += (track.laps - ctx.lap) * 0.046;
@@ -151,6 +170,60 @@ export function pitLossFor(e: RaceEntry, underSafetyCar: boolean): number {
   return (underSafetyCar ? 12 : BASE_PIT_LOSS) + (100 - e.pitCrew) * 0.022;
 }
 
+/**
+ * Oltre questa usura si entra ai box comunque, piano o non piano.
+ *
+ * È lo stesso numero che usa la cadenza live: le due devono decidere allo
+ * stesso modo, o la gara che il giocatore guarda non è quella che il
+ * campionato simula.
+ */
+export const PIT_WEAR = 82;
+
+/**
+ * Quanti giri regge una mescola su questo tracciato, per un pilota medio.
+ *
+ * Serve a scegliere la gomma guardando quanto manca, che è l'unica cosa che
+ * conta e che prima nessuno guardava: la regola era «se sei su gomma morbida
+ * monta dura, altrimenti monta morbida», e su uno stint da trenta giri quella
+ * morbida arrivava al crollo a due terzi e ci restava. Non era una strategia
+ * sbagliata: era una strategia che nessuno aveva preso.
+ */
+export function compoundLife(track: Track, compound: Compound, tyreSkill = 70): number {
+  const rate = tyreWearPerLap(freshTyre(compound), tyreSkill, track, 1);
+  return rate > 0 ? CLIFF / rate : 99;
+}
+
+/**
+ * La mescola giusta per i giri che restano.
+ *
+ * La più morbida che ci arriva senza sfondare il crollo — perché a parità di
+ * durata la morbida è più veloce. Se non ci arriva nessuna si monta la dura e
+ * si stringono i denti: vuol dire che la sosta andava fatta prima.
+ *
+ * `needsDifferent` forza la regola delle due mescole quando è l'ultimo treno
+ * utile: scoprire la penalità di venticinque secondi a fine gara non è una
+ * regola, è un agguato.
+ */
+export function compoundFor(
+  track: Track, lapsLeft: number, tyreSkill: number, used: readonly Compound[],
+): Compound {
+  const order: Compound[] = ['S', 'M', 'H'];
+  const fits = order.filter((c) => compoundLife(track, c, tyreSkill) >= lapsLeft);
+  const wanted = fits[0] ?? 'H';
+
+  // Se finora si è usata una sola mescola e questo è l'ultimo treno, va
+  // cambiata comunque.
+  const distinct = new Set(used);
+  if (distinct.size === 1 && lapsLeft <= compoundLife(track, wanted, tyreSkill)) {
+    const only = [...distinct][0]!;
+    if (wanted === only) {
+      const alternative = order.filter((c) => c !== only);
+      return alternative.find((c) => compoundLife(track, c, tyreSkill) >= lapsLeft) ?? 'H';
+    }
+  }
+  return wanted;
+}
+
 /** Strategia di sosta dell'IA: una o due soste a seconda del degrado del tracciato. */
 export function pitStrategy(track: Track, rng: Rng): number[] {
   const stops = track.tyreWear > 1.2 || rng.chance(0.3) ? 2 : 1;
@@ -193,19 +266,24 @@ export function simulateRace(
   opts: RaceOptions = {},
 ): RaceOutcome {
   const wet = opts.wet ?? rng.chance(track.rain);
-  const cars: Car[] = entries.map((e) => ({
-    e,
-    // Le vetture partono distanziate come sulla griglia reale.
-    time: e.grid * 0.28,
-    lastLap: track.baseLap,
-    tyre: freshTyre(track.tyreWear > 1.2 ? 'M' : rng.chance(0.4) ? 'S' : 'M'),
-    compounds: [] as Compound[],
-    stops: 0,
-    plan: pitStrategy(track, rng),
-    dnf: false,
-    best: Infinity,
-    dirty: false,
-  }));
+  const cars: Car[] = entries.map((e) => {
+    const plan = pitStrategy(track, rng);
+    return {
+      e,
+      // Le vetture partono distanziate come sulla griglia reale.
+      time: e.grid * 0.28,
+      lastLap: track.baseLap,
+      // La gomma di partenza guarda già alla prima finestra di sosta, non al
+      // solo degrado del tracciato.
+      tyre: freshTyre(compoundFor(track, plan[0] ?? track.laps, e.tyres, [])),
+      compounds: [] as Compound[],
+      stops: 0,
+      plan,
+      dnf: false,
+      best: Infinity,
+      dirty: false,
+    };
+  });
 
   // --- il via: qui contano le partenze, non la macchina ---
   for (const c of cars) {
@@ -240,13 +318,28 @@ export function simulateRace(
       c.tyre.age += 1;
       c.tyre.temperature = updateTemperature(c.tyre, underSC ? 0.5 : 1, track.trackTemp, 1);
 
-      // Sosta ai box
-      if (c.plan.includes(lap)) {
+      /*
+       * Sosta ai box.
+       *
+       * Il piano non basta: una gomma finita va cambiata anche se il piano
+       * diceva di resistere. Questo percorso seguiva il piano alla cieca
+       * mentre quello live si fermava a usura 82, e le due cadenze dello
+       * stesso modello devono decidere allo stesso modo — è la regola su cui
+       * è costruito tutto il progetto.
+       *
+       * Era anche la ragione vera dei distacchi assurdi: chi si trovava con
+       * una mescola sbagliata restava in pista venti giri oltre il crollo,
+       * e la classifica finale misurava la sfortuna al sorteggio delle
+       * strategie invece della velocità.
+       */
+      const lapsLeft = track.laps - lap;
+      const worthIt = lapsLeft >= 3;
+      if (worthIt && (c.plan.includes(lap) || c.tyre.wear > PIT_WEAR)) {
         const loss = pitLossFor(e, underSC);
         c.time += loss;
         c.stops += 1;
         c.compounds.push(c.tyre.compound);
-        c.tyre = freshTyre(c.tyre.compound === 'S' ? 'H' : track.tyreWear > 1.2 ? 'M' : 'S');
+        c.tyre = freshTyre(compoundFor(track, lapsLeft, e.tyres, c.compounds));
       }
 
       if (rng.chance(retirementChancePerLap(e, c.tyre, wet))) c.dnf = true;
@@ -354,7 +447,7 @@ export function simulateQualifying(
     const outcome = qualifyingOutcome(plan, e, track, rng.fork(`qual:${e.driverId}`));
     const skill = e.speed * 0.6 + e.composure * 0.2 + (wet ? e.wet * 0.2 : e.consistency * 0.2);
     let t = track.baseLap * 0.965;
-    t += (100 - e.carPace) * 0.092;
+    t += (100 - e.carPace) * CAR_PACE_PER_POINT;
     t += (100 - skill) * 0.032;
     if (wet) t += 6.8 + (100 - e.wet) * 0.06;
     t += rng.normal() * (0.30 - e.consistency * 0.0014);

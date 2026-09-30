@@ -21,18 +21,18 @@ import { entourageEfficiency } from './staff.js';
 /**
  * La monoposto con cui si comincia.
  *
- * Sei punti sotto l'ultima della griglia. Non è cattiveria: è il punto di
- * partenza che rende leggibile tutto il resto, perché la prima cosa che il
- * giocatore vede succedere è la macchina che sale. L'affidabilità parte meno
- * indietro — un telaio nuovo è lento, non fragile, e ritirarsi ogni domenica
- * non insegnerebbe niente.
+ * Un punto sotto l'ultima della griglia, che dopo la stretta dei valori di
+ * partenza sta a 81. Non è generosità: è la distanza che rende leggibile
+ * tutto il resto, perché la prima cosa che il giocatore deve vedere succedere
+ * è la macchina che sale. L'affidabilità parte meno indietro — un telaio nuovo
+ * è lento, non fragile, e ritirarsi ogni domenica non insegnerebbe niente.
  *
- * Dodici punti sotto, che era il primo valore, non funzionava: il bilancio di
- * una scuderia ultima classificata compra due aggiornamenti all'anno, e con
- * quelli non si recuperano dodici punti su una griglia che si muove. La sonda
- * mostrava otto stagioni tutte al nono posto.
+ * I valori assoluti sono saliti da 64 a 80 quando la griglia è stata
+ * ristretta: quello che conta è la **distanza**, e quella è rimasta. Con i
+ * vecchi numeri una scuderia nuova era a trentuno punti dal leader, cioè quasi
+ * tre secondi al giro, cioè doppiata in ogni gara che correva.
  */
-export const ROOKIE_CAR = { aero: 64, engine: 65, chassis: 63, reliability: 70 } as const;
+export const ROOKIE_CAR = { aero: 80, engine: 81, chassis: 79, reliability: 83 } as const;
 
 /** Il reparto tecnico di una squadra che si è appena formata. */
 export const ROOKIE_CREW = { technical: 44, trackEngineer: 42, pitCrew: 40 } as const;
