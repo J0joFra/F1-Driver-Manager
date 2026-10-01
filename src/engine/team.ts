@@ -4,6 +4,7 @@ import { clamp, createRng, hashSeed, type Rng } from './rng.js';
 import { createWorld } from './world.js';
 import { marketScale, marketValue, rankIn, SEATS_PER_TEAM } from './market.js';
 import { BUDGET_CAP } from './regulations.js';
+import { tierCar } from './tiers.js';
 import { constructorStandings } from './season.js';
 import { sponsorIncome } from './sponsors.js';
 export { sponsorIncome } from './sponsors.js';
@@ -32,7 +33,16 @@ import { entourageEfficiency } from './staff.js';
  * vecchi numeri una scuderia nuova era a trentuno punti dal leader, cioè quasi
  * tre secondi al giro, cioè doppiata in ogni gara che correva.
  */
-export const ROOKIE_CAR = { aero: 80, engine: 81, chassis: 79, reliability: 83 } as const;
+/**
+ * La monoposto con cui si comincia: quella di fascia D, come chiunque altro.
+ *
+ * Era un blocco di valori suo, scelto a mano appena sotto l'ultima scuderia
+ * del gruppo. Adesso non serve più: una scuderia che si iscrive al campionato
+ * ha la macchina della sua fascia, e la sua fascia è l'ultima. È anche la
+ * ragione per cui le due di fascia D in griglia non sono un bersaglio
+ * irraggiungibile ma la misura esatta di quanto serve crescere.
+ */
+export const ROOKIE_TIER = 'D' as const;
 
 /** Il reparto tecnico di una squadra che si è appena formata. */
 export const ROOKIE_CREW = { technical: 44, trackEngineer: 42, pitCrew: 40 } as const;
@@ -82,7 +92,10 @@ export function startTeam(opts: StartTeamOptions): World {
     name,
     short: (opts.short.trim() || name).slice(0, 10),
     colour: opts.colour,
-    car: { ...ROOKIE_CAR },
+    tier: ROOKIE_TIER,
+    car: tierCar(ROOKIE_TIER),
+    phasePoints: 0,
+    devCredit: 0,
     budget: Math.round(BUDGET_CAP * 0.84),
     cash: START_CASH[opts.budget],
     prestige: ROOKIE_PRESTIGE,

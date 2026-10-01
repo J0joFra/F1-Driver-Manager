@@ -21,7 +21,23 @@ export interface BalanceTargets {
 }
 
 export const TARGETS: Record<string, BalanceTargets> = {
-  overtakesPerRace: { min: 8, max: 45 },
+  /**
+   * Posizioni guadagnate rispetto alla griglia, **per vettura** e per gara.
+   *
+   * Era contata per gara e basta, con una banda 8–45 tarata su diciotto
+   * monoposto. Ma la somma delle posizioni guadagnate cresce col **quadrato**
+   * del gruppo — con ventidue vetture lo stesso identico modello di sorpasso
+   * ne dà la metà in più senza che nessuno abbia toccato una formula — quindi
+   * quel numero non si poteva confrontare fra una griglia e l'altra. Diviso
+   * per le vetture, la misura torna a dire quello che interessa: quanto si
+   * muove una gara rispetto a come era schierata.
+   *
+   * La banda è la stessa di prima riportata a vettura (8/18 e 45/18). Il
+   * valore è salito da 1,35 a 2,1: dentro una fascia le monoposto sono
+   * identiche, quindi l'ordine di qualifica non è più l'ordine del passo e la
+   * gara lo rimescola. È il punto delle fasce, non un effetto collaterale.
+   */
+  overtakesPerCar: { min: 0.45, max: 2.5 },
   dnfRate: { min: 0.04, max: 0.18 },
   safetyCarRate: { min: 0.15, max: 0.55 },
   poleToWin: { min: 0.25, max: 0.7 },
@@ -38,7 +54,10 @@ export const TARGETS: Record<string, BalanceTargets> = {
 
 export interface SeasonMetrics {
   races: number;
+  /** posizioni guadagnate sulla griglia, per gara: il numero grezzo */
   overtakesPerRace: number;
+  /** lo stesso, diviso per le vetture al via: confrontabile fra griglie diverse */
+  overtakesPerCar: number;
   dnfRate: number;
   safetyCarRate: number;
   /** quante pole si sono trasformate in vittoria */
@@ -55,7 +74,7 @@ export function seasonMetrics(world: World): SeasonMetrics {
   const races = world.results.length;
   if (races === 0) {
     return {
-      races: 0, overtakesPerRace: 0, dnfRate: 0, safetyCarRate: 0,
+      races: 0, overtakesPerRace: 0, overtakesPerCar: 0, dnfRate: 0, safetyCarRate: 0,
       poleToWin: 0, topTeamWinRate: 0, lapTimeSpread: 0, midfieldSpread: 0,
     };
   }
@@ -103,6 +122,7 @@ export function seasonMetrics(world: World): SeasonMetrics {
   return {
     races,
     overtakesPerRace: positionsGained / races,
+    overtakesPerCar: positionsGained / races / Math.max(1, starts / races),
     dnfRate: starts > 0 ? dnf / starts : 0,
     safetyCarRate: safetyCars / races,
     poleToWin: poleWins / races,
@@ -122,7 +142,7 @@ export interface MetricCheck {
 /** Confronta le metriche con le bande obiettivo. */
 export function checkBalance(m: SeasonMetrics): MetricCheck[] {
   const rows: [string, number][] = [
-    ['overtakesPerRace', m.overtakesPerRace],
+    ['overtakesPerCar', m.overtakesPerCar],
     ['dnfRate', m.dnfRate],
     ['safetyCarRate', m.safetyCarRate],
     ['poleToWin', m.poleToWin],
@@ -155,6 +175,7 @@ export function averageMetrics(all: SeasonMetrics[]): SeasonMetrics {
   return {
     races: sum((m) => m.races),
     overtakesPerRace: sum((m) => m.overtakesPerRace),
+    overtakesPerCar: sum((m) => m.overtakesPerCar),
     dnfRate: sum((m) => m.dnfRate),
     safetyCarRate: sum((m) => m.safetyCarRate),
     poleToWin: sum((m) => m.poleToWin),

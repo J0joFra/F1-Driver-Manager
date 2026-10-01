@@ -4,6 +4,7 @@ import { getTrack } from './data/tracks.js';
 import { carPaceOn } from './layout.js';
 import { simulateRace, type RaceEntry } from './race.js';
 import { simulateQualifying } from './qualifying.js';
+import { aiSpendCredit, closePhase, phaseJustClosed } from './phases.js';
 import { RACE_FATIGUE } from './progression.js';
 import { pointsForRace, skillEffects, spendPointsAsAi } from './skills.js';
 import { overall } from './driver.js';
@@ -141,6 +142,10 @@ export function commitWeekend(
     world.standings[d.id] = (world.standings[d.id] ?? 0) + r.points;
     if (d.teamId) {
       world.constructorStandings[d.teamId] = (world.constructorStandings[d.teamId] ?? 0) + r.points;
+      // Lo stesso punteggio, ma azzerato a ogni confine di fase: è il metro
+      // del bonus di sviluppo, che guarda questo blocco di gare e non l'anno.
+      const scuderia = world.teams[d.teamId];
+      if (scuderia) scuderia.phasePoints += r.points;
     }
 
     d.career.starts += 1;
@@ -186,6 +191,23 @@ export function commitWeekend(
   };
   world.results.push(result);
   world.round += 1;
+
+  // Fine della prima o della seconda fase: si fanno i conti e si paga in
+  // sviluppo. Le scuderie del computer spendono subito; il credito del
+  // giocatore resta in cassa finché non decide dove metterlo.
+  const races = world.schedule.filter((w) => w.trackId).length;
+  const closed = phaseJustClosed(world.round, races);
+  if (closed !== null) {
+    closePhase(world);
+    // `isPlayerTeam` sta in `team.ts`, che importa questo modulo: importarlo
+    // qui chiuderebbe un anello. Il controllo è una riga, l'anello no.
+    const mine = world.seat.mode === 'scuderia' ? world.seat.teamId : null;
+    for (const team of Object.values(world.teams)) {
+      if (team.id !== mine) aiSpendCredit(team);
+    }
+    result.phaseClosed = closed;
+  }
+
   // Le decisioni valgono per un weekend solo: il prossimo si ridecide.
   world.qualifyingPlans = null;
   world.qualifying = null;

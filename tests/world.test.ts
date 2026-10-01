@@ -305,15 +305,24 @@ describe('la scuderia del giocatore', () => {
     return startTeam({ seed, name: 'Prova', short: 'PRV', colour: '#C8102E', budget: 'indipendente' });
   }
 
-  it('entra in griglia come nona, ultima e senza piloti', () => {
+  it("entra in griglia nell'ultima fascia e senza piloti", () => {
     const w = founded(31);
     const team = playerTeam(w)!;
-    expect(Object.keys(w.teams)).toHaveLength(9);
+    expect(Object.keys(w.teams)).toHaveLength(TEAM_SEEDS.length + 1);
     expect(team.driverIds).toHaveLength(0);
     expect(team.cash).toBe(START_CASH.indipendente);
-    // Più lenta di tutte: è il punto di partenza di tutto il resto.
+
+    // Ultima fascia, e nessuno più lento: è il punto di partenza di tutto il
+    // resto. **Non** più lenta di tutte, però — chi è in fascia D ha la stessa
+    // identica macchina, ed è il senso delle fasce: quello che ti separa dalle
+    // altre due di coda sono i piloti e lo staff, non la monoposto.
+    expect(team.tier).toBe('D');
     const others = Object.values(w.teams).filter((t) => t.id !== team.id);
-    for (const t of others) expect(carPace(t.car)).toBeGreaterThan(carPace(team.car));
+    for (const t of others) {
+      expect(carPace(t.car)).toBeGreaterThanOrEqual(carPace(team.car));
+      if (t.tier === 'D') expect(t.car).toEqual(team.car);
+    }
+    expect(others.some((t) => carPace(t.car) > carPace(team.car))).toBe(true);
   });
 
   it('i suoi sedili restano vuoti, quelli delle altre no', () => {

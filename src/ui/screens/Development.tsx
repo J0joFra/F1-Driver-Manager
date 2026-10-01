@@ -4,7 +4,9 @@ import { myTeam } from '../../engine/selectors.js';
 import {
   AREA_LABEL, developmentBurn, PROJECT_SIZE_KEYS, PROJECT_SIZES, startRefusal, weeklyCost,
 } from '../../engine/projects.js';
-import { CAR_KEYS, type CarKey } from '../../engine/types.js';
+import { CAR_KEYS } from '../../engine/types.js';
+import { DEV_BAND, promotionProgress, tierFloor } from '../../engine/tiers.js';
+import { roomFor } from '../../engine/phases.js';
 import { useProfile } from '../../state/useProfile.js';
 import { researchRoom, rushCost, rushRefusal } from '../../engine/boosts.js';
 import { Bar, Btn, Panel } from '../components/kit.js';
@@ -26,10 +28,15 @@ export function Development() {
   const open = useGame((s) => s.openProject);
   const close = useGame((s) => s.closeProject);
   const rush = useGame((s) => s.rush);
+  const spend = useGame((s) => s.spendDevCredit);
   const wallet = useProfile((s) => s.profile.wallet);
 
-  const others = Object.values(world.teams).filter((t) => t.id !== team.id);
-  const fieldMean = (k: CarKey) => others.reduce((s, t) => s + t.car[k], 0) / Math.max(1, others.length);
+  // Il riferimento non è più la media della griglia ma il blocco della fascia:
+  // dentro una fascia le monoposto partono identiche, quindi «sei sopra o sotto
+  // la media» non dice niente — mentre «quanto hai staccato dal blocco» è
+  // esattamente la domanda a cui serve rispondere, ed è anche la condizione per
+  // salire di fascia.
+  const band = promotionProgress(team);
 
   const burn = developmentBurn(team);
   // Quante settimane regge la cassa al ritmo di spesa attuale. È il numero che
@@ -49,6 +56,20 @@ export function Development() {
         />
         <Head label="Reparti al lavoro" value={`${team.projects.length} su 4`} />
         <span className="flex-1" />
+        {/* La fascia è la monoposto. La barra sotto è quanto hai staccato dal
+            blocco: è quello che a fine anno si confronta con la scuderia più
+            debole della fascia sopra, e il posto si prende a lei. */}
+        <div className="shrink-0 text-center px-2">
+          <div className="font-display text-base font-bold leading-none">Fascia {team.tier}</div>
+          <div className="mt-1 w-[72px]">
+            <Bar value={band * 100} colour={band > 0.75 ? '#12A06E' : '#3E86F0'} height={4} />
+          </div>
+        </div>
+        {team.devCredit > 0.01 && (
+          <span className="shrink-0 font-display text-2xs font-bold uppercase tracking-wide text-accent">
+            bonus {team.devCredit.toFixed(2)}
+          </span>
+        )}
         <CurrencyChip currency="research" amount={wallet.research} />
         {burn > 0 && weeksLeft < 6 && (
           <span className="flex items-center gap-1 font-mono text-2xs text-bad">
@@ -62,21 +83,42 @@ export function Development() {
         {CAR_KEYS.map((area) => {
           const project = team.projects.find((p) => p.area === area);
           const mine = team.car[area];
-          const mean = fieldMean(area);
-          const behind = mean - mine;
+          const floor = tierFloor(team.tier, area);
+          const room = roomFor(team, area);
+          // Dove sta il reparto dentro la banda della fascia, da 0 a 1.
+          const fill = (mine - floor) / (DEV_BAND * 2);
+          const credit = Math.min(team.devCredit, room, 0.5);
 
           return (
             <Panel
               key={area}
               title={AREA_LABEL[area]}
-              tag={`${Math.round(mine)} · ${behind >= 0 ? '−' : '+'}${Math.abs(behind).toFixed(1)} sulla griglia`}
+              tag={`${mine.toFixed(1)} · ${room > 0.05 ? `+${room.toFixed(1)} di margine` : 'in cima alla fascia'}`}
               bodyClass="p-2 flex flex-col min-h-0"
             >
               <div className="relative shrink-0">
-                <Bar value={mine} colour={behind > 0 ? '#D4761E' : '#12A06E'} height={6} />
-                {/* Dove sta la griglia: il riferimento che conta. */}
-                <span className="absolute inset-y-0 w-px bg-ink/50" style={{ left: `${mean}%` }} />
+                <Bar value={fill * 100} colour={room > 0.05 ? '#3E86F0' : '#12A06E'} height={6} />
+                {/* Il blocco della fascia: sotto sei sotto la tua categoria,
+                    sopra stai costruendo il sorpasso. */}
+                <span className="absolute inset-y-0 w-px bg-ink/50" style={{ left: '50%' }} />
               </div>
+
+              {/* Il bonus di fase si spende qui, dove si vede quanto margine
+                  resta: versarlo su un reparto già pieno lo brucerebbe. */}
+              {team.devCredit > 0.01 && (
+                <Btn
+                  variant="ghost"
+                  disabled={credit <= 0.01}
+                  title={credit > 0.01
+                    ? `Versa ${credit.toFixed(2)} punti del bonus su ${AREA_LABEL[area].toLowerCase()}`
+                    : 'Questo reparto è in cima alla fascia: il bonus andrebbe perso'}
+                  onClick={() => spend(area, credit)}
+                  className="mt-1.5 py-1 shrink-0"
+                  testId={`bonus-${area}`}
+                >
+                  <Zap className="w-3 h-3" /> bonus +{credit.toFixed(2)}
+                </Btn>
+              )}
 
               {project ? (
                 <div className="mt-2 flex-1 flex flex-col justify-center">

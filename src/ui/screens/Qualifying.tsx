@@ -5,7 +5,7 @@ import { useGame } from '../../state/useGame.js';
 import { nextRace } from '../../engine/selectors.js';
 import {
   affordable, COMPOUNDS, cutAt, currentSegment, DEFAULT_PLAN, isOver, OUT_LAPS,
-  pressureOf, TIMINGS,
+  pressureOf, SOFT_SETS, TIMINGS,
   type Choice, type QualCompound, type QualifyingPlan, type QualiSession,
 } from '../../engine/qualifying.js';
 import {
@@ -273,8 +273,8 @@ function DriverPlan({ session, driverId, plan, locked, onPick }: {
         <span className="flex-1" />
         {/* I treni di morbida che restano: due per tre manche, quindi una la si
             fa comunque di media o su una rimontata. */}
-        <span className="font-mono text-[9px] text-dim tnum">
-          {'●'.repeat(st.softNew)}{'○'.repeat(Math.max(0, 2 - st.softNew))} soft
+        <span className={`font-mono text-[9px] tnum ${st.softNew === 0 ? 'text-bad' : 'text-dim'}`}>
+          {st.softNew}/{SOFT_SETS} soft
         </span>
       </div>
 

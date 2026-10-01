@@ -2,6 +2,7 @@ import type { CarRating, World } from './types.js';
 import { CAR_KEYS } from './types.js';
 export { CAR_KEYS } from './types.js';
 import { carPaceOn, NEUTRAL_MIX } from './layout.js';
+import { clampToTier, reshuffleTiers, TIER_CAR } from './tiers.js';
 import { clamp, type Rng } from './rng.js';
 
 /**
@@ -24,11 +25,6 @@ export function carPace(car: CarRating): number {
   return carPaceOn(car, NEUTRAL_MIX);
 }
 
-function meanCarPace(world: World): number {
-  const teams = Object.values(world.teams);
-  return teams.reduce((s, t) => s + carPace(t.car), 0) / teams.length;
-}
-
 /**
  * La cassa con cui una scuderia gestita dal computer comincia il mondo.
  *
@@ -42,37 +38,44 @@ export function initialCash(prestige: number): number {
 }
 
 /**
- * Il livello assoluto a cui il regolamento riporta le monoposto.
+ * Azzeramento tecnico: le fasce si rimescolano.
  *
- * È l'equivalente di `talentAnchor` per le macchine, e serve allo stesso
- * scopo. Senza, i rating si gonfiano e basta: ogni scuderia sviluppa, nessuna
- * regredisce, e in otto stagioni la media della griglia passava da 82 a 90,
- * schiacciata contro il tetto di 99. L'azzeramento che si limitava a far
- * convergere verso la media di allora non lo impediva — spostava tutti nello
- * stesso punto, sempre più in alto.
+ * ## Cos'era e perché non serve più
  *
- * Il danno peggiore non era l'inflazione in sé ma cosa faceva al gioco: una
- * scuderia nuova insegue un bersaglio che scappa più in fretta di quanto lei
- * possa correre, e non raggiunge mai il gruppo per quanto bene giochi.
- */
-export const CAR_ANCHOR = 78;
-
-/**
- * Azzeramento tecnico: le monoposto tornano al livello di riferimento e si
- * rimescolano.
+ * Qui stava `CAR_ANCHOR`, il livello a cui il regolamento riportava tutte le
+ * monoposto. Esisteva contro l'inflazione: ogni scuderia sviluppava, nessuna
+ * regrediva, e in otto stagioni la media della griglia passava da 82 a 90
+ * schiacciata contro il tetto di 99 — e una scuderia nuova inseguiva un
+ * bersaglio che scappava più in fretta di quanto lei potesse correre.
  *
- * Della gerarchia precedente resta metà: chi era avanti riparte un po' avanti
- * — competenza e struttura non svaniscono con un cambio di regolamento — ma
- * metà del vantaggio sì, ed è quello che rende l'azzeramento un'occasione
- * vera per chi insegue.
+ * Con le fasce quel problema non si pone: i valori non possono uscire dalla
+ * banda, quindi non c'è niente da ancorare. L'azzeramento torna a fare solo
+ * quello che fa in Formula 1, cioè **rimescolare chi sta davanti**.
+ *
+ * ## Come si rimescola
+ *
+ * `reshuffleTiers` ridistribuisce le stesse fasce che ci sono — un regolamento
+ * nuovo non crea scuderie di vertice dal nulla — pesando metà quanto si è
+ * lavorato e metà la sorte. Un azzeramento che fosse puro caso renderebbe
+ * inutile lo sviluppo degli anni precedenti; uno che non fosse affatto caso
+ * non sarebbe un'occasione per nessuno.
  */
 export function applyRegulationReset(world: World, rng: Rng): void {
-  const mean = meanCarPace(world);
-  for (const team of Object.values(world.teams)) {
-    for (const k of CAR_KEYS) {
-      const edge = (team.car[k] - mean) * 0.5;
-      team.car[k] = clamp(CAR_ANCHOR + edge + rng.normal() * 6.5, 45, 97);
-    }
+  const teams = Object.values(world.teams);
+  const moves = reshuffleTiers(teams, () => rng.normal());
+  const to = new Map(moves.map((m) => [m.teamId, m.to]));
+
+  for (const team of teams) {
+    const was = team.tier;
+    const offset: Record<string, number> = {};
+    for (const k of CAR_KEYS) offset[k] = team.car[k] - TIER_CAR[was][k];
+
+    team.tier = to.get(team.id) ?? was;
+    // Della posizione nella banda resta metà: competenza e struttura non
+    // svaniscono con un cambio di regolamento, ma metà del vantaggio sì.
+    for (const k of CAR_KEYS) team.car[k] = TIER_CAR[team.tier][k] + offset[k]! * 0.5;
+    team.car = clampToTier(team.car, team.tier);
+
     // Un regolamento nuovo azzera anche i cantieri: quello che era in
     // costruzione era costruito sulle regole di prima.
     team.projects = [];

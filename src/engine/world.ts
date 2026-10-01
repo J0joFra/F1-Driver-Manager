@@ -1,6 +1,7 @@
 import type { MinigameKind, Seat, TrainingPlan, World } from './types.js';
 import { createRng, hashSeed } from './rng.js';
 import { TEAM_SEEDS } from './data/teams.js';
+import { decayBand, moveToTier, reviewTiers, tierCar, type TierMove } from './tiers.js';
 import { buildCalendar, raceCountOf, WEEK_RECOVERY, type SeasonWeek, type WeekKind } from './calendar.js';
 import { commitDay, DAYS_IN_WEEK, RACE_DAY, type DayActivity, weekActivities } from './days.js';
 import { applyAging, createVeteran, overall, retirementChance } from './driver.js';
@@ -67,7 +68,10 @@ export function createWorld(opts: CreateWorldOptions): World {
       name: seed.name,
       short: seed.short,
       colour: seed.colour,
-      car: { ...seed.car },
+      tier: seed.tier,
+      car: tierCar(seed.tier),
+      phasePoints: 0,
+      devCredit: 0,
       budget: seed.budget,
       prestige: seed.prestige,
       cash: initialCash(seed.prestige),
@@ -364,6 +368,8 @@ export interface SeasonSummary {
   regulationReset: boolean;
   /** come è finita con gli investitori, per scuderia */
   investors: Record<string, InvestorOutcome>;
+  /** chi ha cambiato fascia, e in che direzione */
+  tierMoves: TierMove[];
 }
 
 /**
@@ -433,6 +439,22 @@ export function endSeason(world: World): SeasonSummary {
   // l'ultima stagione di ogni sponsor.
   for (const team of Object.values(world.teams)) ageDeals(team);
 
+  // Chi ha riempito la banda più del più debole della fascia sopra si
+  // scambiano il posto. Prima dell'azzeramento regolamentare, perché il lavoro
+  // dell'anno va riscosso sulle regole con cui è stato fatto.
+  const tierMoves = reviewTiers(Object.values(world.teams));
+  const moved = new Set(tierMoves.map((m) => m.teamId));
+  for (const move of tierMoves) {
+    const team = world.teams[move.teamId];
+    if (team) moveToTier(team, move.to);
+  }
+  // Chi non ha cambiato fascia si tiene metà del vantaggio costruito: l'altra
+  // metà la riassorbe il resto della griglia. Chi l'ha cambiata è già stato
+  // riposizionato ai bordi della fascia nuova.
+  for (const team of Object.values(world.teams)) {
+    if (!moved.has(team.id)) decayBand(team);
+  }
+
   world.year += 1;
   const regulationReset = maybeReset(world, rng);
 
@@ -455,6 +477,7 @@ export function endSeason(world: World): SeasonSummary {
 
   return {
     year: world.year - 1,
+    tierMoves,
     investors,
     championId: championDriver?.id ?? '',
     championTeamId,

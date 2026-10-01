@@ -450,6 +450,7 @@ export function qualifyingGrid(s: QualiSession): QualifyingResult[] {
       lapTime: st.lap ?? 0,
       note: st.note ?? 'Non ha girato',
       startWear: st.startWear,
+      softLeft: st.softNew,
     };
   });
 }

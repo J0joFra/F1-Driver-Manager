@@ -192,7 +192,25 @@ export interface Team {
   name: string;
   short: string;
   colour: string;
+  /**
+   * La fascia della monoposto: A, B, C o D.
+   *
+   * È lei a decidere i quattro valori. Due scuderie della stessa fascia hanno
+   * la stessa macchina, e quello che le separa in pista sono i piloti e lo
+   * staff. `car` resta il valore concreto perché mezzo motore lo legge, ma non
+   * può uscire dalla banda della fascia.
+   */
+  tier: Tier;
   car: CarRating;
+  /**
+   * Punti iridati raccolti nella fase di campionato in corso.
+   *
+   * Si azzera a ogni confine di fase, perché è il metro del bonus di sviluppo:
+   * conta quello che hai fatto in questo blocco di gare, non da gennaio.
+   */
+  phasePoints: number;
+  /** punti sviluppo vinti col bonus di fase e non ancora spesi */
+  devCredit: number;
   /** budget cap annuo in euro */
   budget: number;
   /**
@@ -223,6 +241,7 @@ export interface Team {
 /** Macro-area geografica: decide l'ordine delle tappe nel calendario. */
 export type Region = 'oceania' | 'asia' | 'middleEast' | 'europe' | 'americas';
 
+import type { Tier } from './tiers.js';
 import type { SectorMix } from './layout.js';
 import type { QualifyingPlan } from './qualifying.js';
 
@@ -286,6 +305,14 @@ export interface QualifyingResult {
   note?: string;
   /** usura con cui si parte in gara, lasciata dal giro di lancio */
   startWear?: number;
+  /**
+   * Treni di morbida nuova rimasti a fine qualifica.
+   *
+   * Serve alla griglia di partenza: se il sabato ti è costato un treno, la
+   * domenica devi poterlo vedere prima di scegliere la strategia, non
+   * scoprirlo a metà gara.
+   */
+  softLeft?: number;
   driverId: string;
   position: number;
   lapTime: number;
@@ -298,6 +325,8 @@ export interface WeekendResult {
   race: RaceResult[];
   wet: boolean;
   safetyCars: number;
+  /** la fase di campionato che questa gara ha chiuso, se ne ha chiusa una */
+  phaseClosed?: number;
 }
 
 export interface Regulations {

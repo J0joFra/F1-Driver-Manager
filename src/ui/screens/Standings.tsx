@@ -94,9 +94,12 @@ export function Standings() {
                 </span>
                 <b className="font-display text-base font-bold text-accent tnum shrink-0">{c.points}</b>
               </div>
-              <div className="font-mono text-[8.5px] text-dim mt-1 flex gap-2.5">
-                <span>Passo {Math.round(carPace(t.car))}</span>
-                <span>Aff. {Math.round(t.car.reliability)}</span>
+              <div className="font-mono text-[8.5px] text-dim mt-1 flex gap-2.5 items-center">
+                {/* La fascia prima del passo: è lei a decidere che monoposto
+                    hai, e il passo è solo dove stai dentro la tua banda. */}
+                <span className="font-display font-bold text-ink">Fascia {t.tier}</span>
+                <span>Passo {carPace(t.car).toFixed(1)}</span>
+                <span>Aff. {t.car.reliability.toFixed(1)}</span>
                 <span>Prest. {Math.round(t.prestige)}</span>
               </div>
             </div>
