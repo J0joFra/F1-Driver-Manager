@@ -2,7 +2,8 @@ import type { Driver, QualifyingResult, RaceResult, SeasonTotals, Track, Weekend
 import { clamp, createRng, hashSeed, type Rng } from './rng.js';
 import { getTrack } from './data/tracks.js';
 import { carPaceOn } from './layout.js';
-import { simulateQualifying, simulateRace, type RaceEntry } from './race.js';
+import { simulateRace, type RaceEntry } from './race.js';
+import { simulateQualifying } from './qualifying.js';
 import { RACE_FATIGUE } from './progression.js';
 import { pointsForRace, skillEffects, spendPointsAsAi } from './skills.js';
 import { overall } from './driver.js';
@@ -70,28 +71,48 @@ export interface PreparedWeekend {
 }
 
 /**
+ * Il weekend prima della qualifica: pista, iscritti, meteo e generatore.
+ *
+ * Esiste perché la qualifica si può giocare manche per manche, e la schermata
+ * deve poter costruire la sessione **sugli stessi ingressi** che userà poi
+ * `prepareWeekend`. Il generatore è derivato dal salvataggio e le sue
+ * diramazioni dipendono dal seme, non da quanto è stato consumato: la gara
+ * esce identica che la qualifica sia stata giocata o saltata.
+ */
+export function weekendStage(world: World, trackId: string) {
+  const track = getTrack(trackId);
+  const rng = rngFor(world, `weekend:${trackId}`);
+  const entries = buildEntries(world, track);
+  const wet = rng.chance(track.rain);
+  return { track, entries, rng, wet, qualiWet: wet && rng.chance(0.5) };
+}
+
+/**
  * Prepara il weekend fino alla griglia di partenza, senza correre la gara.
  *
  * Serve a dare all'interfaccia il punto in cui fermarsi: la gara può essere
  * giocata dal vivo oppure simulata, e in entrambi i casi parte da qui.
  */
 export function prepareWeekend(world: World, trackId: string): PreparedWeekend {
-  const track = getTrack(trackId);
-  const rng = rngFor(world, `weekend:${trackId}`);
-  const entries = buildEntries(world, track);
+  const { track, entries, rng, wet, qualiWet } = weekendStage(world, trackId);
 
-  const wet = rng.chance(track.rain);
-  // Le tre decisioni del giocatore entrano da qui, per entrambe le sue
-  // monoposto; per tutti gli altri le sceglie l'IA dentro `simulateQualifying`.
-  const mine = world.seat.mode === 'scuderia'
-    ? world.teams[world.seat.teamId]?.driverIds ?? []
-    : [];
-  const plans = world.qualifyingPlan && mine.length > 0
-    ? new Map(mine.map((id) => [id, world.qualifyingPlan!]))
+  // Le decisioni del giocatore entrano da qui, una per pilota; per tutti gli
+  // altri le sceglie l'IA dentro la sessione.
+  const chosen = world.qualifyingPlans;
+  const plans = chosen && Object.keys(chosen).length > 0
+    ? new Map(Object.entries(chosen))
     : undefined;
-  const qualifying = simulateQualifying(track, entries, rng, wet && rng.chance(0.5), plans);
+  // Se la qualifica è stata giocata manche per manche la griglia è già quella:
+  // rigirarla darebbe al giocatore un risultato diverso da quello che ha visto.
+  const qualifying = world.qualifying
+    ?? simulateQualifying(track, entries, rng, qualiWet, plans);
   const gridById = new Map(qualifying.map((q) => [q.driverId, q.position]));
-  for (const e of entries) e.grid = gridById.get(e.driverId) ?? entries.length;
+  const wearById = new Map(qualifying.map((q) => [q.driverId, q.startWear ?? 0]));
+  for (const e of entries) {
+    e.grid = gridById.get(e.driverId) ?? entries.length;
+    // Si parte sul treno del sabato: la qualifica lascia un conto da pagare.
+    e.startWear = wearById.get(e.driverId) ?? 0;
+  }
 
   return { trackId, track, entries, qualifying, wet, raceRng: rng.fork(`race:${trackId}`) };
 }
@@ -166,7 +187,8 @@ export function commitWeekend(
   world.results.push(result);
   world.round += 1;
   // Le decisioni valgono per un weekend solo: il prossimo si ridecide.
-  world.qualifyingPlan = null;
+  world.qualifyingPlans = null;
+  world.qualifying = null;
   return result;
 }
 

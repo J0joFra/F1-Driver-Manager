@@ -116,7 +116,7 @@ export function App() {
    */
   if (
     !pendingRace && isRaceWeek(world) && world.dayOfWeek === QUALIFYING_DAY
-    && world.qualifyingPlan === null
+    && world.qualifying === null
   ) {
     return (
       <OrientationGate>

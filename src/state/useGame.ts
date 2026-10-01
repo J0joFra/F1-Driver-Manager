@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { CarKey, ProjectSize, RaceResult, TrainingPlan, World } from '../engine/types.js';
+import type {
+  CarKey, ProjectSize, QualifyingResult, RaceResult, TrainingPlan, World,
+} from '../engine/types.js';
 import { unlockSkill as unlock } from '../engine/skills.js';
-import type { QualifyingPlan } from '../engine/qualifying.js';
 import {
   advanceDay, endSeason, finishPendingRace,
   type DayReport, type SeasonSummary, type WeekReport,
@@ -155,7 +156,8 @@ interface GameState {
   rush: (projectId: string, tokens: number) => boolean;
   goTo: (screen: Screen) => void;
   /** fissa le tre decisioni della qualifica di sabato */
-  setQualifyingPlan: (plan: QualifyingPlan) => void;
+  /** registra la griglia uscita dalla qualifica giocata */
+  finishQualifying: (grid: QualifyingResult[]) => void;
   /** spende un punto abilità di un tuo pilota sul nodo scelto */
   unlockSkill: (driverId: string, id: string) => void;
   sign: (driverId: string, terms: Terms) => void;
@@ -186,7 +188,7 @@ interface GameState {
  * Sale a ogni campo nuovo nel mondo. La `migrate` qui sotto riempie ciò che
  * manca: un salvataggio vecchio deve continuare una partita, non cancellarla.
  */
-const SAVE_VERSION = 6;
+const SAVE_VERSION = 7;
 
 export const useGame = create<GameState>()(
   persist(
@@ -295,10 +297,12 @@ export const useGame = create<GameState>()(
 
       goTo: (screen) => set({ screen, refusal: null }),
 
-      setQualifyingPlan: (plan) => {
+      finishQualifying: (grid) => {
         const world = get().world;
         if (!world) return;
-        world.qualifyingPlan = plan;
+        world.qualifying = grid;
+        const slot = get().slot;
+        if (slot !== null) saveSlot(slot, world);
         set({ world: { ...world } });
       },
 
