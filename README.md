@@ -26,6 +26,8 @@ crescere i piloti, e la domenica la gara si corre dal vivo, vista dall'alto in
 - [Architettura: perché il motore viene prima](#architettura-perché-il-motore-viene-prima)
 - [La scuderia: fondarla e tenerla in piedi](#la-scuderia-fondarla-e-tenerla-in-piedi)
 - [Lo sviluppo a progetti di reparto](#lo-sviluppo-a-progetti-di-reparto)
+- [Le fasce: la monoposto la decide la fascia](#le-fasce-la-monoposto-la-decide-la-fascia)
+- [Il campionato in tre fasi](#il-campionato-in-tre-fasi)
 - [Il mondo infinito](#il-mondo-infinito)
 - [Il calendario della stagione](#il-calendario-della-stagione)
 - [La settimana di gioco](#la-settimana-di-gioco)
@@ -65,11 +67,12 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 193 test
+npm test                      # 207 test
 npm run sim -- --seasons 40 --verbose
 npm run check:team            # 10 scuderie fondate da zero × 16 stagioni
 npm run check:strategy        # le tre strategie di gara sono tre scelte, non una risposta
 npm run check:quali           # il sabato si paga la domenica, ma non la decide
+npm run check:phases          # il bonus di fase non congela la griglia
 ```
 
 **Il gioco si tiene in orizzontale.** Se apri l'app su un telefono in verticale
@@ -203,7 +206,7 @@ Tutte le scuderie sviluppano la macchina, firmano piloti e gestiscono il budget.
 
 > **Il giocatore non "gioca il gioco": occupa uno slot e sovrascrive le decisioni di un'IA che saprebbe comunque prenderle.**
 
-Da cui il corollario operativo: **ogni decisione che il giocatore potrà prendere ha un'implementazione IA, e l'IA si scrive prima della schermata.** Se si scrive prima l'interfaccia, ci si ritrova con decisioni che solo un umano sa prendere — e la Modalità Scuderia diventa impossibile, oltre a lasciare le altre nove squadre come manichini.
+Da cui il corollario operativo: **ogni decisione che il giocatore potrà prendere ha un'implementazione IA, e l'IA si scrive prima della schermata.** Se si scrive prima l'interfaccia, ci si ritrova con decisioni che solo un umano sa prendere — e la Modalità Scuderia diventa impossibile, oltre a lasciare le altre dieci squadre come manichini.
 
 ### 2. Nessuna casualità non tracciabile
 
@@ -341,9 +344,13 @@ dicembre: nessuna decisione, nessun rischio, nessun modo di sbagliare.
 
 | Progetto | Durata | Costo | Guadagno atteso |
 |---|---|---|---|
-| Pacchetto | 6 settimane | 1,6 M | +0,27 |
-| Aggiornamento | 12 settimane | 4,0 M | +0,63 |
-| Progetto maggiore | 22 settimane | 8,4 M | +1,38 |
+| Pacchetto | 6 settimane | 1,6 M | +0,11 |
+| Aggiornamento | 12 settimane | 4,0 M | +0,26 |
+| Progetto maggiore | 22 settimane | 8,4 M | +0,56 |
+
+I guadagni sono meno di metà di quelli di prima perché adesso si misurano
+dentro una banda larga quattro punti, non su una scala da 40 a 99 — vedi
+**Le fasce**, qui sotto.
 
 **Tre vincoli, e la decisione sta dove si incrociano.**
 
@@ -380,44 +387,122 @@ moltiplicato per come è andata. La resa si taglia a −0,45, il che vuol dire c
   all'anno contro gli otto di chi stava davanti. Senza recupero, la classifica
   di partenza è la classifica per sempre.
 
-### L'ancora che tiene fermi i numeri
+### Le fasce: la monoposto la decide la fascia
 
-I rating delle monoposto si gonfiavano e basta: ogni scuderia sviluppa, nessuna
-regredisce, e in otto stagioni la media della griglia passava da 82 a 90,
-schiacciata contro il tetto di 99. L'azzeramento regolamentare non lo impediva,
-perché faceva convergere tutti verso la media **di allora** — cioè spostava
-tutti nello stesso punto, sempre più in alto.
+Ogni scuderia aveva i suoi quattro valori, scritti a mano nel seme e poi liberi
+di andare dove lo sviluppo li portava. Funzionava, ma rispondeva alla domanda
+sbagliata: la differenza fra due scuderie era **la macchina**, e il pilota una
+correzione di contorno.
 
-Il danno peggiore non era l'inflazione in sé ma cosa faceva al gioco: **una
-scuderia nuova inseguiva un bersaglio che scappava più in fretta di quanto lei
-potesse correre**, e non raggiungeva mai il gruppo per quanto bene giocasse.
+Adesso la macchina è una proprietà della **fascia**. Undici scuderie, quattro
+fasce, quote fisse:
 
-Adesso l'azzeramento riporta le monoposto a un livello di riferimento fisso
-(`CAR_ANCHOR = 78`) e lascia in piedi **metà** del vantaggio di chi era avanti.
-È l'equivalente di `talentAnchor` per le macchine, ed è quello che rende
-l'azzeramento un'occasione vera per chi insegue — oltre a chiudere i cantieri
-aperti, perché un progetto costruito sulle regole di prima non serve più.
+| Fascia | Scuderie | Aero | Motore | Telaio | Affidabilità |
+|---|---|---|---|---|---|
+| **A** | 2 | 90 | 90 | 89 | 89 |
+| **B** | 3 | 86 | 86 | 86 | 87 |
+| **C** | 3 | 83 | 83 | 82 | 84 |
+| **D** | 3 | 80 | 80 | 79 | 82 |
 
-### `npm run check:team`
+Due squadre in fascia B hanno la **stessa identica monoposto**, e quello che le
+separa in pista sono i piloti — con i loro allenamenti — e lo staff tecnico. La
+macchina decide in che campionato corri; il resto decide dove arrivi dentro
+quel campionato.
 
-Dieci scuderie fondate da zero, sedici stagioni, un giocatore di riferimento
-che gioca in modo **ragionevole** e non ottimo:
+La griglia resta larga come prima: dalla A alla D corrono circa sei decimi al
+giro, gli stessi undici punti di rating di prima, ma a scalini invece che a
+pendenza continua.
 
-```
-st   posizione   passo vs media   piloti
-  1      8.7           −12.8        71.9
-  4      7.3            −7.5        77.4
-  8      6.8            −3.9        75.7
- 12      5.4            −0.7        75.7
- 16      4.3            −1.1        77.1
-```
+#### La banda
 
-Si entra ultimi e si sale, su entrambe le leve: la monoposto arriva alla pari
-attorno alla dodicesima stagione, i piloti crescono di cinque punti. Il
-giocatore di riferimento non arriva al vertice, e deve essere così: se ci
-arrivasse, vorrebbe dire che le decisioni non contano.
+«Stessa monoposto» non vuol dire «sviluppo inutile»: dentro la fascia una
+squadra si stacca di **±2 punti per reparto**, e non di più. È poco — due punti
+valgono poco più di un decimo al giro — ma è abbastanza perché valga la pena
+scegliere *dove* svilupparsi, e soprattutto è la misura che a fine anno decide
+chi sale.
 
----
+#### Salire è un sorpasso, non una soglia
+
+Il primo tentativo promuoveva chiunque riempisse la banda. Misurato:
+**cinquantanove scuderie su sessanta finivano in fascia A in dodici stagioni**.
+Ovvio col senno di poi — tutte sviluppano, tutte riempiono, tutte salgono, e la
+retrocessione non scattava mai perché richiedeva di peggiorare la macchina sul
+serio. Era la vecchia inflazione dei rating, tornata sotto forma di etichette.
+
+Con le quote fisse, su ogni confine fra due fasce si confronta chi ha riempito
+di più la banda sotto con chi l'ha riempita di meno sopra: se lo sfidante ha
+fatto sensibilmente meglio, **si scambiano il posto**. Al massimo tre scambi a
+stagione, e le quote non cambiano mai. Misurato: 1,1 scambi a stagione, e in
+sedici stagioni 6,5 scuderie su 10 passano dalla fascia A.
+
+Il salto non è un salto nei numeri: chi sale atterra vicino al fondo della
+fascia nuova, quindi è il candidato naturale alla retrocessione dell'anno dopo —
+ed è così che la gerarchia non si congela da sola. Il margine di mezzo punto non
+è arrotondamento: atterrando esattamente sul bordo della banda, **la promozione
+faceva perdere due decimi di passo**, perché il tetto della fascia sotto sta più
+in alto del pavimento di quella sopra. Una ricompensa che peggiora la macchina è
+un bug, e un test lo sorveglia.
+
+#### La banda si riassorbe
+
+Senza, si riempiva una volta e restava piena per sempre: dalla seconda stagione
+tutte e dieci le scuderie stavano a banda 1,00, il confronto per la promozione
+era fra numeri identici e la scala si bloccava a 0,06 scambi a stagione. A fine
+anno si torna a metà strada verso il blocco della fascia — gli altri copiano, il
+regolamento si stringe, e quello che l'anno scorso era un'ala speciale
+quest'anno ce l'hanno tutti.
+
+#### Cosa è sparito, e perché
+
+- **`CAR_ANCHOR`**, il livello a cui l'azzeramento riportava le monoposto.
+  Esisteva contro l'inflazione dei rating; con le fasce i valori non possono
+  uscire dalla banda, quindi non c'è più niente da ancorare. L'azzeramento
+  regolamentare torna a fare solo quello che fa in Formula 1: **rimescolare chi
+  occupa i posti di vertice**, a quote invariate, pesando metà il lavoro fatto e
+  metà la sorte.
+- **Il correttivo di recupero** dentro `deliveredGain`, che moltiplicava fino a
+  2,4× la resa di chi era sotto la media della griglia. Con le fasce era un
+  doppio conteggio — la fascia *è* già l'informazione «sei indietro» — e chi era
+  in fascia D si riempiva la banda nella prima stagione. La rimonta adesso la fa
+  la scala delle fasce, non un moltiplicatore nascosto.
+
+### Il campionato in tre fasi
+
+Una stagione di ventiquattro gare è lunga, e per ventiquattro gare non succedeva
+niente fuori dalle gare: i progetti maturavano con i loro tempi e il resto era
+attesa. Adesso l'anno si spezza in tre blocchi; alla fine del primo e del
+secondo il campionato si ferma e chiede conto — hai portato punti? — e paga in
+sviluppo quello che hai portato, da versare sul reparto che preferisci.
+
+L'ultima fase non paga: a dicembre ci sono già i premi del campionato, e un
+bonus di sviluppo consegnato allora sarebbe un bonus per la macchina dell'anno
+dopo.
+
+#### Il rischio, dichiarato
+
+Un bonus proporzionale ai risultati spinge **nella direzione opposta**
+all'handicap che esiste apposta perché la classifica di partenza non sia la
+classifica per sempre. Se la curva fosse ripida, chi vince svilupperebbe di più,
+vincerebbe di più, e in tre stagioni non ci sarebbe più un campionato.
+
+Per questo la curva è piatta: 0,18 punti a chi non segna, 0,40 a chi domina la
+fase. Poco più del doppio, non venti volte.
+
+| | misurato su 8 mondi × 16 stagioni |
+|---|---|
+| scambi di fascia | 1,1 a stagione |
+| scuderie passate per la fascia A | 6,5 su 10 |
+| scuderie campioni | 4,0 su 16 stagioni |
+| chi partiva in D ed è salito almeno una volta | 16 su 16 |
+
+`npm run check:phases` sorveglia tutte e quattro.
+
+#### Un credito versato dove non c'è spazio è perso
+
+Il bonus si spende dalla schermata Sviluppo, dove accanto a ogni reparto c'è
+quanto margine resta nella banda. Versarne su un reparto già in cima lo
+brucerebbe, quindi il pulsante si spegne e lo dice — vale per il giocatore e per
+l'IA, che sceglie il reparto con più spazio e non quello più debole in assoluto.
 
 ## Il menu, il portafoglio e il negozio
 
@@ -1761,6 +1846,8 @@ engine/
   sponsors.ts       sponsor e investitori: offerte, obiettivi, conti di fine anno
   agenda.ts         quali giorni chiedono qualcosa, e quanti saltarne
   projects.ts       progetti di reparto: costi, settimane, resa, rischio
+  tiers.ts          le fasce delle monoposto: blocchi, banda, promozioni
+  phases.ts         le tre fasi di campionato e il bonus di sviluppo
   staff.ts          chi segue i piloti: efficienza dell'entourage
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
   layout.ts         la forma del giro: settori, pesi della monoposto, derivate
@@ -1829,7 +1916,7 @@ categorica. `npm run check:palette` verifica cinque cose:
    le scuderie, sempre nelle quattro visioni.
 
 Il quinto controllo è nato da un difetto: la prima tavolozza di creazione
-offriva le stesse tinte delle otto squadre esistenti, e sette su otto erano
+offriva le stesse tinte delle squadre esistenti, e sette su otto erano
 **copie esatte** — la tua scuderia sarebbe stata indistinguibile da una già in
 griglia, in classifica e sul tracciato.
 

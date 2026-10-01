@@ -1,7 +1,7 @@
 import type { CarKey, Project, ProjectSize, Team, World } from './types.js';
 import { CAR_KEYS } from './types.js';
 import { clamp, type Rng } from './rng.js';
-import { carPace } from './regulations.js';
+import { DEV_BAND, tierCeiling, tierFloor } from './tiers.js';
 
 /**
  * Lo sviluppo della monoposto, a progetti di reparto.
@@ -46,17 +46,17 @@ export const PROJECT_SIZES: Record<ProjectSize, {
 }> = {
   piccolo: {
     label: 'Pacchetto',
-    weeks: 6, cost: 1_600_000, gain: 0.27, spread: 0.30,
+    weeks: 6, cost: 1_600_000, gain: 0.11, spread: 0.30,
     hint: 'Sei settimane. Poco, ma quasi sicuro.',
   },
   medio: {
     label: 'Aggiornamento',
-    weeks: 12, cost: 4_000_000, gain: 0.63, spread: 0.45,
+    weeks: 12, cost: 4_000_000, gain: 0.26, spread: 0.45,
     hint: 'Tre mesi. Il ritmo normale di una scuderia che lavora.',
   },
   grande: {
     label: 'Progetto maggiore',
-    weeks: 22, cost: 8_400_000, gain: 1.38, spread: 0.72,
+    weeks: 22, cost: 8_400_000, gain: 0.56, spread: 0.72,
     hint: 'Mezza stagione e un quinto del bilancio. Può anche andare male.',
   },
 };
@@ -168,12 +168,18 @@ export function deliveredGain(
   const rank = standingOrder.indexOf(team.id);
   const handicap = rank < 0 ? 1.15 : clamp(0.74 + (rank / teamCount) * 0.60, 0.7, 1.4);
 
-  const headroom = clamp((99 - team.car[project.area]) / 30, 0.22, 1.25);
+  // Lo spazio che resta non è più fino a 99 ma fino al tetto della fascia: un
+  // reparto già in cima alla banda rende pochissimo, ed è l'informazione che
+  // dice al giocatore di spostare il cantiere altrove.
+  const room = tierCeiling(team.tier, project.area) - team.car[project.area];
+  const headroom = clamp(0.25 + room / (DEV_BAND * 1.6), 0.22, 1.25);
   const efficiency = 0.55 + (team.crew.technical / 100) * 0.7;
 
-  const teamsList = Object.values(world.teams);
-  const mean = teamsList.reduce((t, x) => t + carPace(x.car), 0) / teamsList.length;
-  const catchUp = clamp(1 + (mean - carPace(team.car)) * 0.18, 0.8, 2.4);
+  // Qui c'era `catchUp`, che moltiplicava la resa di chi era sotto la media
+  // della griglia. Con le fasce è un doppio conteggio: la fascia **è** già
+  // l'informazione «sei indietro», e chi era in fascia D prendeva un
+  // moltiplicatore da 2,4 che gli riempiva la banda nella prima stagione. La
+  // rimonta adesso la fa la scala delle fasce, non un correttivo nascosto.
 
   // La resa. Il taglio a −0.45 è quello che permette a un progetto grande di
   // peggiorare davvero la macchina: senza, «rischio» sarebbe solo una parola
@@ -184,7 +190,7 @@ export function deliveredGain(
     teamId: team.id,
     area: project.area,
     size: project.size,
-    gain: spec.gain * quality * handicap * headroom * efficiency * catchUp,
+    gain: spec.gain * quality * handicap * headroom * efficiency,
     quality,
   };
 }
@@ -211,7 +217,16 @@ export function advanceProjects(world: World, standingOrder: string[], rng: Rng)
       if (project.weeksLeft > 0) continue;
 
       const delivery = deliveredGain(world, team, project, standingOrder, rng);
-      team.car[project.area] = clamp(team.car[project.area] + delivery.gain, 40, 99);
+      // Il muro della fascia: un progetto riuscito benissimo non porta una
+      // scuderia di fascia C dentro i valori della A senza che nessuno
+      // l'abbia promossa. Quello che sfora è progresso perso, ed è il motivo
+      // per cui a banda piena conviene smettere di sviluppare quell'area e
+      // aspettare la promozione.
+      team.car[project.area] = clamp(
+        team.car[project.area] + delivery.gain,
+        tierFloor(team.tier, project.area),
+        tierCeiling(team.tier, project.area),
+      );
       delivered.push(delivery);
       done.push(project.id);
     }

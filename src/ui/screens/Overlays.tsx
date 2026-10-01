@@ -2,6 +2,7 @@ import { PALETTE } from '../palette.js';
 import { useGame } from '../../state/useGame.js';
 import { focusedDriver } from '../../engine/selectors.js';
 import { getTrack } from '../../engine/data/tracks.js';
+import { PHASE_LABEL } from '../../engine/phases.js';
 import { driverStandings } from '../../engine/season.js';
 import { Btn, Stat } from '../components/kit.js';
 import { gap } from '../format.js';
@@ -24,6 +25,7 @@ export function WeekendOverlay() {
   const selected = useGame((s) => s.selected);
   const me = focusedDriver(world, selected)!;
   const weekend = world.results[world.results.length - 1];
+  const myTeam = world.seat.mode === 'scuderia' ? world.teams[world.seat.teamId] : null;
   if (!weekend) return null;
 
   const mine = weekend.race.find((r) => r.driverId === me.id);
@@ -63,6 +65,21 @@ export function WeekendOverlay() {
                 ? `Hai guadagnato ${delta} posizion${delta === 1 ? 'e' : 'i'} rispetto alla griglia. È questo che le altre scuderie guardano.`
                 : 'La gara è finita. Il campionato prosegue.'}
           </div>
+
+          {/* La chiusura di una fase non può passare in sordina: è il momento
+              in cui il campionato paga quello che hai portato, e il credito
+              resta lì finché non decidi dove metterlo. */}
+          {weekend.phaseClosed !== undefined && myTeam && (
+            <div className="rounded border border-accent/50 bg-accent/5 px-3 py-2">
+              <div className="font-display text-2xs font-bold uppercase tracking-wide text-accent">
+                {PHASE_LABEL[weekend.phaseClosed]} chiusa
+              </div>
+              <div className="font-mono text-2xs text-muted mt-1 leading-relaxed">
+                Bonus sviluppo di <b className="text-ink">{myTeam.devCredit.toFixed(2)} punti</b>,
+                da versare su un reparto dalla schermata Sviluppo.
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="panel flex flex-col min-h-0">

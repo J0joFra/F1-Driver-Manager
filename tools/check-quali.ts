@@ -70,9 +70,17 @@ for (const name of Object.keys(PLANS)) {
 const problems: string[] = [];
 const check = (ok: boolean, msg: string) => { if (!ok) problems.push(msg); };
 
-// Osare deve pagare dove si paga: in griglia.
-check(avg(grid.aggressivo!) < avg(grid.prudente!) - 0.8,
-  `in griglia l'aggressivo guadagna solo ${(avg(grid.prudente!) - avg(grid.aggressivo!)).toFixed(2)} posizioni: rischiare non serve`);
+// Le soglie sono rapporti e non posizioni.
+//
+// Erano posizioni assolute — «meno di 1,2 all'arrivo» — tarate su una griglia
+// di diciotto monoposto. Con ventidue le stesse identiche scelte producono
+// scarti più grandi senza che nessuna formula sia cambiata, e la soglia
+// bocciava la crescita del gruppo invece del bilanciamento.
+const gridSpread = Math.max(...names.map((n) => avg(grid[n]!))) - Math.min(...names.map((n) => avg(grid[n]!)));
+
+// Osare deve pagare dove si paga: in griglia, e non per un'inezia.
+check(gridSpread > 2,
+  `fra il piano più prudente e il più aggressivo ci sono ${gridSpread.toFixed(2)} posizioni in griglia: rischiare non serve`);
 
 // E deve costare dove costa: in gara. Nessuno dei due deve vincere su entrambi
 // i tavoli, altrimenti la domanda del sabato ha una risposta sola.
@@ -81,11 +89,13 @@ const bestGrid = names.reduce((a, b) => (avg(grid[a]!) <= avg(grid[b]!) ? a : b)
 check(best !== bestGrid,
   `«${best}» è il migliore sia in griglia sia all'arrivo: non è una scelta, è la risposta`);
 
-// Ma la differenza all'arrivo deve restare contenuta, o la qualifica diventa
-// una tassa e tanto varrebbe non giocarla.
+// Ma la domenica deve disfare la gran parte di quello che il sabato ha deciso,
+// o la qualifica diventa una tassa e tanto varrebbe non giocarla. Il confronto
+// è fra i due scarti, non con un numero di posizioni: così regge su qualunque
+// griglia.
 const spread = Math.max(...names.map((n) => avg(finish[n]!))) - Math.min(...names.map((n) => avg(finish[n]!)));
-check(spread < 1.2,
-  `fra il piano migliore e il peggiore ci sono ${spread.toFixed(2)} posizioni all'arrivo: la qualifica decide la gara da sola`);
+check(spread < gridSpread * 0.45,
+  `all'arrivo resta il ${Math.round(100 * spread / gridSpread)}% di quello che la qualifica aveva deciso (${spread.toFixed(2)} posizioni su ${gridSpread.toFixed(2)}): la qualifica decide la gara da sola`);
 
 if (problems.length === 0) {
   console.log('\nok — il sabato si paga la domenica, ma non la decide');

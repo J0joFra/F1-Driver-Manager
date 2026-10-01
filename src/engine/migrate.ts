@@ -1,7 +1,8 @@
 import type { World } from './types.js';
 import { POTENTIAL_ANCHOR } from './market.js';
-import { initialCash } from './regulations.js';
+import { carPace, initialCash } from './regulations.js';
 import { TEAM_SEEDS } from './data/teams.js';
+import { clampToTier, TIER_CAR, tierCar, TIERS } from './tiers.js';
 import {
   buildCalendar, capacityOf, seasonStartDay, SEASON_WEEKS, type SeasonWeek,
 } from './calendar.js';
@@ -112,6 +113,23 @@ export function migrateWorld(raw: unknown): World | null {
     if (team.sponsor === undefined) team.sponsor = null;
     if (team.investor === undefined) team.investor = null;
     delete (team as unknown as Record<string, unknown>).futureFocus;
+
+    // I contatori delle fasi: senza, il bonus leggerebbe `NaN`.
+    if (typeof team.phasePoints !== 'number') team.phasePoints = 0;
+    if (typeof team.devCredit !== 'number') team.devCredit = 0;
+
+    // La fascia è arrivata con le monoposto a blocchi. Un salvataggio vecchio
+    // porta quattro valori liberi, che possono stare ovunque fra 40 e 99: si
+    // assegna la fascia il cui blocco è più vicino a quello che la macchina
+    // valeva, e poi si riporta la macchina dentro la banda. Così una scuderia
+    // che era forte resta forte, senza trascinarsi dietro numeri che nel
+    // modello nuovo non esistono più.
+    if (!team.tier || !TIERS.includes(team.tier)) {
+      const pace = carPace(team.car ?? tierCar('D'));
+      team.tier = TIERS.reduce((best, t) =>
+        Math.abs(carPace(TIER_CAR[t]) - pace) < Math.abs(carPace(TIER_CAR[best]) - pace) ? t : best);
+    }
+    team.car = clampToTier(team.car ?? tierCar(team.tier), team.tier);
 
     // `short` è arrivato dopo: senza, le colonne strette mostrano "undefined".
     if (!team.short) {

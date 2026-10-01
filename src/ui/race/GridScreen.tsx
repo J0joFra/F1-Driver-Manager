@@ -5,6 +5,7 @@ import { applyStrategy, carOf, fastForward, liveResults } from '../../engine/liv
 import {
   DEFAULT_STRATEGY, STRATEGY_IDS, strategyFor, type StrategyId,
 } from '../../engine/strategy.js';
+import { SOFT_SETS } from '../../engine/qualifying.js';
 import { currentRace } from '../../state/raceSession.js';
 import { useGame } from '../../state/useGame.js';
 import { Btn } from '../components/kit.js';
@@ -129,10 +130,28 @@ export function GridScreen() {
             const pick = picks[id] ?? DEFAULT_STRATEGY;
             const plan = strategyFor(prepared.track, pick, car?.entry.tyres ?? 70);
             const stints: Compound[] = [plan.start, ...plan.fit];
+            // Quello che il sabato ha lasciato: i treni di morbida nuova che
+            // restano e l'usura con cui si va in griglia. Senza, la strategia
+            // si sceglie ignorando metà delle premesse — e l'usura si scopre
+            // in gara, quando non si può più farci niente.
+            const q = prepared.qualifying.find((x) => x.driverId === id);
+            const left = q?.softLeft ?? SOFT_SETS;
+            const wear = Math.round(q?.startWear ?? 0);
             return (
               <div key={id} className="mb-2 last:mb-0">
-                <div className="font-display text-2xs tracking-wide truncate mb-1">
-                  {d?.name ?? id}
+                <div className="flex items-baseline gap-1.5 mb-1">
+                  <span className="font-display text-2xs tracking-wide truncate">
+                    {d?.name ?? id}
+                  </span>
+                  <span className="flex-1" />
+                  {/* A nove pixel due pallini vuoti si leggono come un otto
+                      coricato: i treni vanno scritti in cifre. */}
+                  <span className="font-mono text-[9px] text-dim tnum shrink-0">
+                    <span className={left === 0 ? 'text-bad' : ''}>{left}/{SOFT_SETS} soft</span>
+                    {wear > 0 && (
+                      <span className={wear >= 8 ? 'text-bad ml-1' : 'ml-1'}>· usura {wear}%</span>
+                    )}
+                  </span>
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   {STRATEGY_IDS.map((sid) => (

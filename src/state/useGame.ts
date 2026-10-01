@@ -24,6 +24,7 @@ import {
 import { commitWeekend, SEASON_WEEKS } from '../engine/season.js';
 import { migrateWorld } from '../engine/migrate.js';
 import { beginRace, currentRace, endRace } from './raceSession.js';
+import { spendCredit } from '../engine/phases.js';
 
 /**
  * Lo stato dell'app è il mondo del motore, più una manciata di flag di
@@ -142,6 +143,8 @@ interface GameState {
   startRace: () => void;
   completeRace: (results: RaceResult[], safetyCars: number) => void;
   newGame: (opts: StartTeamOptions & { slot?: number }) => void;
+  /** spende parte del bonus di fase su un reparto */
+  spendDevCredit: (area: CarKey, amount: number) => void;
   /** entra in una partita già caricata */
   openSlot: (slot: number, world: World) => void;
   /** salva e torna al menu */
@@ -188,7 +191,7 @@ interface GameState {
  * Sale a ogni campo nuovo nel mondo. La `migrate` qui sotto riempie ciò che
  * manca: un salvataggio vecchio deve continuare una partita, non cancellarla.
  */
-const SAVE_VERSION = 7;
+const SAVE_VERSION = 8;
 
 export const useGame = create<GameState>()(
   persist(
@@ -296,6 +299,17 @@ export const useGame = create<GameState>()(
       },
 
       goTo: (screen) => set({ screen, refusal: null }),
+
+      spendDevCredit: (area, amount) => {
+        const world = get().world;
+        const team = world && world.seat.mode === 'scuderia'
+          ? world.teams[world.seat.teamId] : null;
+        if (!world || !team) return;
+        if (spendCredit(team, area, amount) <= 0) return;
+        const slot = get().slot;
+        if (slot !== null) saveSlot(slot, world);
+        set({ world: { ...world } });
+      },
 
       finishQualifying: (grid) => {
         const world = get().world;
