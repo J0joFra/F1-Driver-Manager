@@ -23,7 +23,8 @@
     "check:career": "tsx tools/check-career.ts",
     "check:team": "tsx tools/check-team.ts",
     "check:race": "tsx tools/check-race.ts",
-    "check:strategy": "tsx tools/check-strategy.ts"
+    "check:strategy": "tsx tools/check-strategy.ts",
+    "check:quali": "tsx tools/check-quali.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

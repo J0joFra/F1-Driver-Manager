@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../src/engine/rng.js';
-import { launchDelta, simulateRace, simulateQualifying, type RaceEntry } from '../src/engine/race.js';
+import { launchDelta, simulateRace, type RaceEntry } from '../src/engine/race.js';
+import { simulateQualifying } from '../src/engine/qualifying.js';
 import { strategiesFor } from '../src/engine/strategy.js';
 import { getTrack, TRACKS } from '../src/engine/data/tracks.js';
 import { breaksCompoundRule } from '../src/engine/rules.js';

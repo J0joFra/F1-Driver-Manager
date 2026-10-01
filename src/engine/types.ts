@@ -331,8 +331,23 @@ export interface World {
   week: number;
   /** giorno della settimana corrente, 0 = lunedì */
   dayOfWeek: number;
-  /** le tre decisioni scelte dal giocatore per la qualifica di sabato */
-  qualifyingPlan: QualifyingPlan | null;
+  /**
+   * Le decisioni del sabato, **una per pilota**.
+   *
+   * Era un piano solo, applicato a entrambe le monoposto. Ma i due piloti non
+   * sono mai nella stessa situazione: uno può essere sul filo del taglio e
+   * l'altro al sicuro, e la scelta giusta per il primo è spreco per il
+   * secondo. `null` finché il giocatore non ha deciso.
+   */
+  qualifyingPlans: Record<string, QualifyingPlan> | null;
+  /**
+   * La griglia uscita dalla qualifica giocata, manche per manche.
+   *
+   * Sta nel salvataggio e non in una sessione in memoria perché una qualifica
+   * giocata non si può rigirare: chi chiude l'app fra il sabato e la domenica
+   * deve ritrovare la griglia che ha visto, non una nuova.
+   */
+  qualifying: QualifyingResult[] | null;
   /** gare già corse quest'anno */
   round: number;
   drivers: Record<string, Driver>;

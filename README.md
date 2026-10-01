@@ -35,7 +35,7 @@ crescere i piloti, e la domenica la gara si corre dal vivo, vista dall'alto in
 - [La carriera, tarata sui mondiali veri](#la-carriera-tarata-sui-mondiali-veri)
 - [La forma del circuito](#la-forma-del-circuito)
 - [Il regolamento](#il-regolamento)
-- [La qualifica, tre decisioni](#la-qualifica-tre-decisioni)
+- [La qualifica, tre manche e tre decisioni](#la-qualifica-tre-manche-e-tre-decisioni)
 - [Le regole che tengono in piedi il bilanciamento](#le-regole-che-tengono-in-piedi-il-bilanciamento)
 - [Struttura del progetto](#struttura-del-progetto)
 - [Comandi](#comandi)
@@ -65,10 +65,11 @@ La gara è piatta: tracciato dall'alto in SVG, vetture come forme semplici, torr
 ```bash
 npm install
 npm run dev                   # l'app, su http://localhost:5173
-npm test                      # 187 test
+npm test                      # 193 test
 npm run sim -- --seasons 40 --verbose
 npm run check:team            # 10 scuderie fondate da zero × 16 stagioni
 npm run check:strategy        # le tre strategie di gara sono tre scelte, non una risposta
+npm run check:quali           # il sabato si paga la domenica, ma non la decide
 ```
 
 **Il gioco si tiene in orizzontale.** Se apri l'app su un telefono in verticale
@@ -780,7 +781,7 @@ mondo di ventiquattro ore.
 | Mer | **Il minigioco della settimana**, una sola partita | 40 s |
 | Gio | **Trasferta** verso il circuito | — |
 | Ven | **Libere**: scegli una direzione di assetto | 20 s |
-| Sab | **Qualifica**: tre decisioni, poi il giro | 60 s |
+| Sab | **Qualifica**: Q1, Q2, Q3 — tre decisioni per manche, per pilota | 90 s |
 | Dom | **Gara** | 3–5 min |
 
 ### Avanzare salta i giorni vuoti
@@ -1545,45 +1546,110 @@ una punizione.
 
 ---
 
-## La qualifica, tre decisioni
+## La qualifica, tre manche e tre decisioni
 
-### Q1, Q2, Q3
+### Q1, Q2, Q3: scritte prima, costruite dopo
 
-Tre manche con le eliminazioni: Q1 taglia i cinque più lenti, Q2 altri cinque,
-Q3 decide la pole. Non è una formalità, **cambia la natura della decisione**:
-in Q1 basta sopravvivere e rischiare per due decimi che non servono a niente è
-stupido; in Q3 quei due decimi sono la pole. La stessa scelta ha un prezzo
-diverso a seconda di quanto hai da perdere.
+Le manche c'erano nel motore — `SEGMENTS`, `segmentFor`, `pressureOf` — e non
+le chiamava nessuno. Erano state scritte per una qualifica che poi non è mai
+stata costruita: la sessione si risolveva in un passaggio solo, tutti un giro,
+ordinati per tempo. Il README le raccontava lo stesso, che è il modo più
+educato di dire una cosa falsa.
+
+Adesso esistono. La sessione è una macchina a stati — `beginQualifying`,
+`runSegment`, `qualifyingGrid` — e si gioca una manche alla volta: si decide,
+si gira, si vede dove si è finiti e **poi** si decide la manche dopo. È la
+differenza fra scegliere e indovinare: la stessa decisione presa sapendo di
+essere quartultimo non è la stessa decisione.
+
+I tagli si dimensionano sul gruppo che c'è davvero. Erano scritti a mano —
+quindici e dieci superstiti, giusto per i ventidue della Formula 1 — ma qui la
+griglia si svuota quando un pilota si ritira e nessuno prende il sedile: con
+diciotto iscritti un taglio a quindici avrebbe eliminato tre vetture in Q1 e
+cinque in Q2, e la manche più dura sarebbe stata la seconda. Ora sono quote,
+tre quarti e metà, e i due tagli restano uguali su qualsiasi griglia.
 
 Due dettagli che fanno la differenza fra una simulazione e una lista di tempi:
-la **pista si gomma** manche dopo manche, quindi in Q3 si gira più forte che
-in Q1 anche con la stessa macchina; e le **gomme non si azzerano**, quindi chi
-passa il taglio col cuore in gola arriva in Q3 con la gomma segnata.
+la **pista si gomma** di due decimi a manche, quindi in Q3 si gira più forte
+che in Q1 anche con la stessa macchina; e i **treni non si azzerano**, quindi
+chi passa il taglio col cuore in gola arriva in Q3 con un treno in meno.
 
-L'IA lo sa: `pressureOf` dice quanto è avventato rischiare, e un pilota al
-sicuro in Q1 non esce all'ultimo momento mentre uno sul filo del taglio sì.
+Chi esce prima parte dietro a chi esce dopo, ordinato per il proprio tempo
+dentro al gruppo degli eliminati — come in Formula 1, e con la conseguenza che
+una manche storta manda un pilota forte in fondo alla griglia invece che a
+metà.
+
+### Due treni per tre manche
+
+È il numero che rende la mescola una decisione invece di una preferenza. Con
+**tre** treni per tre manche il vincolo non si sarebbe mai fatto sentire — si
+chiede la morbida ogni volta e c'è sempre — e i treni finiti sarebbero stati
+una regola scritta e mai applicata, come le manche di prima. Con due, una
+delle tre manche va fatta di media o su una gomma rimontata, e l'unica domanda
+che conta diventa **quale**.
+
+Chiedere una morbida che non c'è non dà errore e non dà nemmeno la morbida:
+`affordable` racconta su cosa si finirebbe davvero, e il tasto nella schermata
+si spegne. Un'interfaccia che offre un treno inesistente è un modo elegante di
+mentire.
 
 ### Le tre decisioni
 
 Un giro secco non si guida a comandi: si prepara. Quello che un pilota decide
 davvero è **quando uscire**, **su che gomma** e **come scaldarla**, e poi il
-giro è la conseguenza di quelle tre scelte più il talento.
+giro è la conseguenza di quelle tre scelte più il talento. Si decidono **per
+pilota, non per scuderia**: i due non sono mai nella stessa situazione, e la
+scelta giusta per chi è sul filo del taglio è spreco per chi è al sicuro.
 
 | Decisione | Il guadagno | Il prezzo |
 |---|---|---|
-| **Ultimo momento** | pista gommata al massimo | traffico e bandiere, e non dipende da te |
-| **Soft** | mezzo secondo | una sola occasione buona, e usura in gara |
+| **Tardi** | pista gommata al massimo | traffico e bandiere, e non dipende da te |
+| **Soft nuova** | il massimo passo | un treno in meno per le manche dopo |
+| **Soft usata** | due decimi in meno della nuova | ci vai in gara, e si vede |
 | **Lancio spinto** | gomme nella finestra perfetta | le paghi nel primo stint |
 
 Nessuna ha una risposta giusta, e quanto rischio convenga dipende da dove si
 corre: la schermata mostra la difficoltà dei sorpassi di quel tracciato,
 perché su un cittadino la pole vale una gara e su una pista di potenza molto
-meno.
+meno. L'IA lo sa a sua volta: `pressureOf` dice quanto è avventato rischiare, e
+un pilota al sicuro in Q1 non esce all'ultimo momento mentre uno sul filo del
+taglio sì.
 
 Gli attributi non spostano il giro qui — quello lo fa già il modello di gara —
 ma decidono **quanto bene riesce ogni scelta**: la sensibilità tecnica serve a
 scaldare le gomme, la freddezza a non buttare il giro quando la pista è
 affollata.
+
+### «Le paghi in gara» non le pagava nessuno
+
+La qualifica calcolava `startWear`, l'interfaccia prometteva che il lancio
+spinto si sarebbe pagato nel primo stint, e in gara non lo leggeva nessuno: la
+monoposto partiva sempre su gomma nuova. Adesso si va in griglia sul treno
+dell'ultimo tentativo del sabato — non sulla somma della sessione, che sarebbe
+mezza gara di usura — e lo leggono entrambe le cadenze, perché è un campo
+dell'iscrizione e non un ramo in più dentro al modello.
+
+La prima taratura rendeva la qualifica una tassa:
+
+| piano | griglia | arrivo | usura al via |
+|---|---|---|---|
+| prudente | P17,13 | **P11,97** | 3 |
+| equilibrato | P15,11 | P12,66 | 6 |
+| aggressivo | **P12,48** | P14,44 | 18 |
+
+Quattro file e mezzo guadagnate il sabato, due posizioni e mezza perse la
+domenica: qualificarsi bene faceva male, il che è un modo complicato di dire
+che la decisione era finta al contrario. Dimezzata l'usura di ogni opzione, il
+conto torna:
+
+| piano | griglia | arrivo | usura al via |
+|---|---|---|---|
+| prudente | P17,13 | P12,71 | 1 |
+| equilibrato | P15,12 | **P12,56** | 3 |
+| aggressivo | **P12,53** | P13,64 | 10 |
+
+`npm run check:quali` sorveglia le due condizioni insieme: che osare paghi in
+griglia, e che nessun piano sia il migliore su entrambi i tavoli.
 
 ### Rischiare deve convenire
 
@@ -1597,6 +1663,16 @@ Ora perdere il giro costa tre-nove decimi, non un secondo, e ogni opzione
 rischiosa ha valore atteso migliore della prudenza. Un test lo verifica
 mediando quattromila estrazioni per ciascuna delle tre decisioni — perché una
 scelta si giudica sul valore atteso, non su un tiro.
+
+### Quello che è costato
+
+Una manche storta manda un pilota forte in fondo alla griglia invece che a
+metà: le carriere divergono di più, e con loro i mondi. Misurata su diciotto
+semi, la deriva del potenziale medio su trent'anni ha la stessa mediana di
+prima (2,0 contro 2,1) e una coda più lunga: il massimo passa da 5,1 a 7,8. Il
+test anti-inflazione dice adesso quello che davvero garantisce — la mediana — e
+ammette un mondo su dodici nella coda, invece di fingere un limite duro che
+teneva solo finché la qualifica era una lotteria più piatta.
 
 ---
 
@@ -1688,7 +1764,7 @@ engine/
   staff.ts          chi segue i piloti: efficienza dell'entourage
   calendar.ts       calendario della stagione: date vere, gare, pause, capienza
   layout.ts         la forma del giro: settori, pesi della monoposto, derivate
-  qualifying.ts     le tre decisioni del sabato, le manche, il loro prezzo
+  qualifying.ts     la sessione a tre manche, le tre decisioni e il loro prezzo
   rules.ts          distanza di gara, punti, regola delle due mescole
   roles.ts          quanto un pilota vale in ciascun mestiere del weekend
   skills.ts         l'albero delle abilità: nodi, punti, effetti
@@ -1701,7 +1777,7 @@ engine/
   incidents.ts      errore del pilota e guasto meccanico
   balance.ts        metriche di bilanciamento con bande obiettivo
   migrate.ts        recupera i salvataggi scritti da versioni precedenti
-  race.ts           il modello: formule di gara, gara veloce, qualifica
+  race.ts           il modello: formule di gara, gara veloce
   liveRace.ts       la stessa gara avanzata a passi, con i comandi del giocatore
   regulations.ts    budget cap, prestigio, azzeramento regolamentare e ancora
   market.ts         valore di mercato, scala comune, mercato delle altre otto
@@ -1822,7 +1898,7 @@ ingaggia, si sviluppa, si corre, si chiude l'anno e si ricomincia.
 - [x] Calendario ricalcato su quello vero: date reali, giro del mondo per regioni, triple header, pausa d'agosto, orari locali e italiani
 - [x] Vista gara a diciotto monoposto, con le tue due comandabili entrambe
 - [x] HUD di gara sul modello di F1 Clash: passo a livelli, gomme in giri, batteria ERS
-- [x] Qualifica giocabile: le tre decisioni del sabato
+- [x] Qualifica giocabile: Q1, Q2 e Q3 una manche alla volta, due treni di morbida
 - [x] Forma dei circuiti misurata sulla geometria reale
 - [x] Salvataggio automatico, con recupero dei salvataggi della vecchia Modalità Pilota
 - [x] Menu iniziale, tre slot di salvataggio, premi giornalieri, obiettivi

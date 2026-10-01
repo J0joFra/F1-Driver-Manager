@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../src/engine/rng.js';
 import { getTrack } from '../src/engine/data/tracks.js';
-import { simulateQualifying, simulateRace, type RaceEntry } from '../src/engine/race.js';
+import { simulateRace, type RaceEntry } from '../src/engine/race.js';
+import { simulateQualifying } from '../src/engine/qualifying.js';
 import { TRACKS } from '../src/engine/data/tracks.js';
 import { MAX_RACE_LAPS, breaksCompoundRule, raceLaps } from '../src/engine/rules.js';
 import {
-  COMPOUNDS, DEFAULT_PLAN, OUT_LAPS, TIMINGS, aiQualifyingPlan, qualifyingOutcome,
-  type QualifyingPlan,
+  COMPOUNDS, DEFAULT_PLAN, OUT_LAPS, SOFT_SETS, TIMINGS, affordable, aiQualifyingPlan,
+  beginQualifying, currentSegment, cutAt, isOver, qualifyingGrid, qualifyingOutcome,
+  runSegment, segmentsFor, type QualifyingPlan,
 } from '../src/engine/qualifying.js';
 
 const track = getTrack('lario');
@@ -83,6 +85,100 @@ describe('qualifica', () => {
       if (aiQualifyingPlan(entry({ carPace: 92 }), createRng(i)).timing === 'tardi') velociTardi++;
     }
     expect(lentiTardi).toBeGreaterThan(velociTardi);
+  });
+});
+
+describe('la sessione a tre manche', () => {
+  const field = (n = 18) => Array.from({ length: n }, (_, i) =>
+    entry({ driverId: `d${i}`, carPace: 92 - i * 0.9, speed: 90 - i * 0.7 }));
+
+  it('elimina a ogni manche e arriva a una griglia completa', () => {
+    const s = beginQualifying(track, field(), createRng(3));
+    const sizes: number[] = [];
+    while (!isOver(s)) { sizes.push(s.alive.length); runSegment(s); }
+    expect(sizes).toHaveLength(3);
+    expect(sizes[1]).toBeLessThan(sizes[0]!);
+    expect(sizes[2]).toBeLessThan(sizes[1]!);
+
+    const grid = qualifyingGrid(s);
+    expect(grid).toHaveLength(18);
+    expect(new Set(grid.map((q) => q.position)).size).toBe(18);
+    expect(grid.every((q) => q.lapTime > 0)).toBe(true);
+  });
+
+  it('chi esce prima parte dietro a chi esce dopo', () => {
+    const s = beginQualifying(track, field(), createRng(4));
+    runSegment(s);
+    // Chi è uscito in Q1 sta in fondo alla coda, e in fondo deve restare.
+    const q1Out = [...s.tail];
+    while (!isOver(s)) runSegment(s);
+    const grid = qualifyingGrid(s);
+    const posOf = (id: string) => grid.find((q) => q.driverId === id)!.position;
+    const worstSurvivor = Math.max(...s.alive.map(posOf));
+    for (const id of q1Out) expect(posOf(id)).toBeGreaterThan(worstSurvivor);
+  });
+
+  it('il taglio si dimensiona sul gruppo che c’è davvero', () => {
+    // Era scritto a mano — quindici e dieci superstiti — e con diciotto
+    // iscritti la manche più dura sarebbe stata la seconda.
+    for (const n of [12, 18, 20, 22]) {
+      const segs = segmentsFor(n);
+      const outQ1 = n - segs[0]!.survivors;
+      const outQ2 = segs[0]!.survivors - segs[1]!.survivors;
+      expect(outQ1).toBeGreaterThan(0);
+      expect(Math.abs(outQ1 - outQ2)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('i treni di morbida finiscono, e quando finiscono si rimonta un usato', () => {
+    const s = beginQualifying(track, field(), createRng(5));
+    const sempreSoft = new Map(
+      s.alive.map((id) => [id, { ...DEFAULT_PLAN, compound: 'S' } as QualifyingPlan]),
+    );
+    const id = s.alive[0]!;
+    runSegment(s, sempreSoft);
+    expect(s.state[id]!.softNew).toBe(SOFT_SETS - 1);
+    runSegment(s, sempreSoft);
+    expect(s.state[id]!.softNew).toBe(0);
+    // In Q3 la morbida nuova non c'è più: si va su quella già usata, non su
+    // una gomma che non esiste.
+    expect(affordable('S', s.state[id]!)).toBe('Su');
+    runSegment(s, sempreSoft);
+    expect(s.state[id]!.compound).toBe('Su');
+  });
+
+  it('la linea del taglio cade dove la schermata la disegna', () => {
+    const s = beginQualifying(track, field(), createRng(6));
+    const atteso = currentSegment(s)!.survivors;
+    expect(cutAt(s)).toBe(atteso);
+    runSegment(s);
+    expect(s.alive).toHaveLength(atteso);
+  });
+
+  it('la pista si gomma: in Q3 si gira più forte che in Q1', () => {
+    // A parità di tutto il resto — stesso gruppo, stesso seme — il tempo che
+    // vince Q3 deve battere quello che vinceva Q1 di più di quanto spieghi
+    // l'aver tolto gli otto più lenti.
+    const s = beginQualifying(track, field(), createRng(8));
+    runSegment(s);
+    const poleQ1 = s.state[s.alive[0]!]!.lap!;
+    runSegment(s);
+    runSegment(s);
+    const grid = qualifyingGrid(s);
+    expect(grid[0]!.lapTime).toBeLessThan(poleQ1);
+  });
+
+  it('si va in gara sul treno del sabato, non su gomma nuova', () => {
+    const s = beginQualifying(track, field(), createRng(7));
+    const prudente = new Map(s.alive.map((id) =>
+      [id, { timing: 'meta', compound: 'M', outLap: 'scarico' } as QualifyingPlan]));
+    const spinto = new Map(s.alive.map((id) =>
+      [id, { timing: 'meta', compound: 'S', outLap: 'spinto' } as QualifyingPlan]));
+    runSegment(s, prudente);
+    const dolce = s.state[s.alive[0]!]!.startWear;
+    const t = beginQualifying(track, field(), createRng(7));
+    runSegment(t, spinto);
+    expect(t.state[t.alive[0]!]!.startWear).toBeGreaterThan(dolce);
   });
 });
 

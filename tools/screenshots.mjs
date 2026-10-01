@@ -195,12 +195,26 @@ if (await page.locator('[data-testid=open-profile]').count()) {
 
 // Avanza fino alla prima gara. Il tempo scorre a giorni, quindi si usa il
 // salto al weekend finché c'è, e gli ultimi giorni uno alla volta. Sabato la
-// qualifica prende lo schermo: si decide e si va avanti.
-for (let i = 0; i < 40; i++) {
+// qualifica prende lo schermo: si gioca una manche alla volta — si decide, si
+// gira, si guarda l'esito — finché non si arriva alla griglia.
+let qualShots = 0;
+for (let i = 0; i < 60; i++) {
   if (await page.locator('[data-testid=go-qualifying]').count()) {
-    await shot('10-qualifica');
-    await noVerticalScroll('qualifica');
+    if (qualShots === 0) {
+      await shot('10-qualifica');
+      await noVerticalScroll('qualifica decisioni');
+    }
     await page.click('[data-testid=go-qualifying]');
+    await page.waitForTimeout(250);
+    if (qualShots === 0) {
+      await shot('10b-qualifica-esito');
+      await noVerticalScroll('qualifica esito');
+    }
+    qualShots += 1;
+    continue;
+  }
+  if (await page.locator('[data-testid=qual-next]').count()) {
+    await page.click('[data-testid=qual-next]');
     await page.waitForTimeout(250);
     continue;
   }

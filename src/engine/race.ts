@@ -1,6 +1,5 @@
-import type { Compound, EngineMode, QualifyingResult, RaceResult, Track } from './types.js';
+import type { Compound, EngineMode, RaceResult, Track } from './types.js';
 import { type Rng } from './rng.js';
-import { clamp } from './curves.js';
 import {
   CLIFF, COMPOUND_PACE, freshTyre, tyreLapPenalty, updateTemperature,
   wearPerLap as tyreWearPerLap, type TyreState,
@@ -8,7 +7,6 @@ import {
 import { DRS_RANGE, overtakeChance as overtakeProbability } from './overtaking.js';
 import { breaksCompoundRule, COMPOUND_RULE_PENALTY, POINTS } from './rules.js';
 import { driverInfluence, driverSkillOn, NEUTRAL_MIX } from './layout.js';
-import { aiQualifyingPlan, qualifyingOutcome, type QualifyingPlan } from './qualifying.js';
 import { driverErrorChance, mechanicalFailureChance, safetyCarChancePerLap } from './incidents.js';
 
 export { COMPOUND_PACE, COMPOUND_WEAR } from './tyres.js';
@@ -49,6 +47,16 @@ export interface RaceEntry {
   overtakeMod?: number;
   /** abilità sbloccate: moltiplicatore del degrado, sotto 1 è un guadagno */
   tyreWearMod?: number;
+  /**
+   * L'usura con cui si parte, lasciata dalla qualifica.
+   *
+   * Si va in griglia sul treno dell'ultimo tentativo del sabato: chi ha
+   * spinto nel giro di lancio e rimontato una morbida già usata parte con
+   * trenta punti di usura addosso, chi è uscito in Q1 e non ha più girato con
+   * quasi niente. È la riga «le paghi in gara» che l'interfaccia prometteva e
+   * che prima non leggeva nessuno.
+   */
+  startWear?: number;
 }
 
 export { POINTS } from './rules.js';
@@ -179,6 +187,13 @@ export function pitLossFor(e: RaceEntry, underSafetyCar: boolean): number {
  */
 export const PIT_WEAR = 82;
 
+/** Un treno nuovo, meno quello che la qualifica si è già preso. */
+export function usedTyre(compound: Compound, startWear = 0): TyreState {
+  const t = freshTyre(compound);
+  t.wear = Math.max(0, startWear);
+  return t;
+}
+
 /**
  * Quanti giri regge una mescola su questo tracciato, per un pilota medio.
  *
@@ -296,8 +311,8 @@ export function simulateRace(
       time: e.grid * 0.28,
       lastLap: track.baseLap,
       // La gomma di partenza guarda già alla prima finestra di sosta, non al
-      // solo degrado del tracciato.
-      tyre: freshTyre(compoundFor(track, plan[0] ?? track.laps, e.tyres, [])),
+      // solo degrado del tracciato, e porta l'usura lasciata dalla qualifica.
+      tyre: usedTyre(compoundFor(track, plan[0] ?? track.laps, e.tyres, []), e.startWear),
       compounds: [] as Compound[],
       stops: 0,
       plan,
@@ -455,30 +470,3 @@ function penalty(used: readonly Compound[], current: Compound, wet: boolean): nu
   return breaksCompoundRule([...used, current], wet) ? COMPOUND_RULE_PENALTY : 0;
 }
 
-export function simulateQualifying(
-  track: Track,
-  entries: readonly RaceEntry[],
-  rng: Rng,
-  wet = false,
-  /** le tre decisioni di ciascuno: senza, le sceglie l'IA */
-  plans?: ReadonlyMap<string, QualifyingPlan>,
-): QualifyingResult[] {
-  const laps = entries.map((e) => {
-    const plan = plans?.get(e.driverId) ?? aiQualifyingPlan(e, rng.fork(`plan:${e.driverId}`));
-    const outcome = qualifyingOutcome(plan, e, track, rng.fork(`qual:${e.driverId}`));
-    const skill = e.speed * 0.6 + e.composure * 0.2 + (wet ? e.wet * 0.2 : e.consistency * 0.2);
-    let t = track.baseLap * 0.965;
-    t += (100 - e.carPace) * CAR_PACE_PER_POINT;
-    t += (100 - skill) * 0.032;
-    if (wet) t += 6.8 + (100 - e.wet) * 0.06;
-    t += rng.normal() * (0.30 - e.consistency * 0.0014);
-    // Errore o traffico: il giro salta e resti col tempo peggiore.
-    if (rng.chance(clamp(0.1 - e.composure * 0.0008, 0.015, 0.1))) t += rng.range(0.4, 1.4);
-    // Le tre decisioni della qualifica: dove uscire, che gomma, come scaldarla.
-    t += outcome.delta;
-    return { driverId: e.driverId, lapTime: t, note: outcome.note, startWear: outcome.startWear };
-  });
-
-  laps.sort((a, b) => a.lapTime - b.lapTime);
-  return laps.map((l, i) => ({ ...l, position: i + 1 }));
-}

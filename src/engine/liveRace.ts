@@ -2,7 +2,7 @@ import type { Compound, EngineMode, RaceResult, Track } from './types.js';
 import { clamp, type Rng } from './rng.js';
 import {
   MIN_GAP, POINTS, compoundFor, launchDelta, lapTimeFor, overtakeChance, pitLossFor,
-  pitStrategy, PIT_WEAR, retirementChancePerLap, wearPerLap, type RaceEntry,
+  pitStrategy, PIT_WEAR, retirementChancePerLap, usedTyre, wearPerLap, type RaceEntry,
 } from './race.js';
 import { DEFAULT_STRATEGY, strategyFor, type RaceStrategy } from './strategy.js';
 import { DRS_RANGE } from './overtaking.js';
@@ -188,7 +188,7 @@ export function createLiveRace(
       lap: 1,
       lastLap: track.baseLap,
       bestLap: Infinity,
-      tyre: freshTyre(startCompound),
+      tyre: usedTyre(startCompound, entry.startWear),
       stops: 0,
       mode: 'normal',
       pitArmed: null,

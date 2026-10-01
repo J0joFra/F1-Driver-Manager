@@ -75,7 +75,11 @@ export function migrateWorld(raw: unknown): World | null {
   if (typeof w.week !== 'number') w.week = 0;
   // Il tempo scorreva a settimane: un salvataggio vecchio riparte dal lunedì.
   if (typeof w.dayOfWeek !== 'number') w.dayOfWeek = 0;
-  if (w.qualifyingPlan === undefined) w.qualifyingPlan = null;
+  // Il piano della qualifica era uno per la scuderia; adesso è uno per pilota.
+  // Un salvataggio vecchio riparte senza piano: lo rifà il sabato.
+  if (w.qualifyingPlans === undefined) w.qualifyingPlans = null;
+  if (!Array.isArray(w.qualifying)) w.qualifying = null;
+  delete w.qualifyingPlan;
   if (typeof w.round !== 'number') w.round = 0;
   if (!w.seat) w.seat = { mode: 'osservatore' };
   // C'era una Modalità Pilota, e i salvataggi che la usavano esistono ancora.
